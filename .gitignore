@@ -25,6 +25,3 @@ Thumbs.db
 # SQLite runtime artifacts
 *.db-shm
 *.db-wal
-
-# Installer output
-Installer/Output/
