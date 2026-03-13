@@ -1,0 +1,52 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Color x:Key="WindowBackgroundColor">#FF202020</Color>
+    <SolidColorBrush x:Key="WindowBackgroundBrush" Color="{StaticResource WindowBackgroundColor}"/>
+
+    <Color x:Key="WindowForegroundColor">#FFF0F0F0</Color>
+    <SolidColorBrush x:Key="WindowForegroundBrush" Color="{StaticResource WindowForegroundColor}"/>
+
+    <Color x:Key="ControlBackgroundColor">#FF2A2A2A</Color>
+    <SolidColorBrush x:Key="ControlBackgroundBrush" Color="{StaticResource ControlBackgroundColor}"/>
+
+    <Color x:Key="ControlForegroundColor">#FFF0F0F0</Color>
+    <SolidColorBrush x:Key="ControlForegroundBrush" Color="{StaticResource ControlForegroundColor}"/>
+
+    <Color x:Key="PanelBackgroundColor">#FF262626</Color>
+    <SolidColorBrush x:Key="PanelBackgroundBrush" Color="{StaticResource PanelBackgroundColor}"/>
+
+    <Color x:Key="PanelBorderColor">#FF3C3C3C</Color>
+    <SolidColorBrush x:Key="PanelBorderBrush" Color="{StaticResource PanelBorderColor}"/>
+
+    <Color x:Key="HintForegroundColor">#FF9A9A9A</Color>
+    <SolidColorBrush x:Key="HintForegroundBrush" Color="{StaticResource HintForegroundColor}"/>
+
+    <Color x:Key="AccentColor">#FF6CC644</Color>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+
+    <SolidColorBrush x:Key="ExpenseBarBrush" Color="#FF6CC644"/>
+
+    <Style TargetType="Window">
+        <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource WindowForegroundBrush}"/>
+    </Style>
+
+    <!-- Basic control defaults to match the theme -->
+    <Style TargetType="TextBox">
+        <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource ControlForegroundBrush}"/>
+    </Style>
+    <Style TargetType="ComboBox">
+        <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource ControlForegroundBrush}"/>
+    </Style>
+
+    <!-- DataGrid defaults -->
+    <Style TargetType="DataGrid">
+        <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource ControlForegroundBrush}"/>
+        <Setter Property="RowBackground" Value="#FF2A2A2A"/>
+        <Setter Property="AlternatingRowBackground" Value="#FF303030"/>
+        <Setter Property="GridLinesVisibility" Value="None"/>
+    </Style>
+</ResourceDictionary>

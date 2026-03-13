@@ -1,0 +1,30 @@
+# Build outputs
+bin/
+obj/
+publish/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Logs / temp
+*.log
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# SQLite runtime artifacts
+*.db-shm
+*.db-wal
+
+# Installer output
+Installer/Output/

@@ -1,0 +1,333 @@
+<Window x:Class="CrispyBills.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Crispy Bills" Height="920" Width="1460" MinWidth="1240" MinHeight="760"
+        SizeToContent="Manual"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource WindowForegroundBrush}"
+        KeyDown="Window_KeyDown"
+        Loaded="Window_Loaded"
+        PreviewMouseDown="Window_PreviewMouseDown"
+        Deactivated="Window_Deactivated">
+
+    <!-- Command &amp; Input bindings for common keyboard shortcuts -->
+    <Window.CommandBindings>
+        <CommandBinding Command="ApplicationCommands.Save" Executed="SaveCommand_Executed" />
+        <CommandBinding Command="ApplicationCommands.Undo" Executed="UndoCommand_Executed" CanExecute="UndoCommand_CanExecute" />
+        <CommandBinding Command="ApplicationCommands.Redo" Executed="RedoCommand_Executed" CanExecute="RedoCommand_CanExecute" />
+    </Window.CommandBindings>
+    <Window.InputBindings>
+        <KeyBinding Command="ApplicationCommands.Save" Gesture="Ctrl+S"/>
+        <KeyBinding Command="ApplicationCommands.Undo" Gesture="Ctrl+Z"/>
+        <KeyBinding Command="ApplicationCommands.Redo" Gesture="Ctrl+Y"/>
+    </Window.InputBindings>
+
+    <Window.Resources>
+        <!-- Common spacing -->
+        <Thickness x:Key="ControlMargin">0,0,8,0</Thickness>
+        <Style x:Key="RightAlignedCell" TargetType="TextBlock">
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="Padding" Value="0,0,6,0"/>
+        </Style>
+
+        <!-- Simple flat button style -->
+        <Style x:Key="ToolbarButton" TargetType="Button">
+            <Setter Property="Margin" Value="{StaticResource ControlMargin}"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="MinWidth" Value="72"/>
+            <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+            <Setter Property="Foreground" Value="{DynamicResource WindowForegroundBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <!-- subtle hover that works on both light/dark -->
+                    <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+                    <Setter Property="Opacity" Value="0.95"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Small search watermark overlay — non-invasive to TextBox text or undo stack -->
+        <Style x:Key="SearchBoxContainer" TargetType="Grid">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+
+        <!-- Small section header -->
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel LastChildFill="True">
+        <!-- Main Menu -->
+        <Menu DockPanel.Dock="Top" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,0,0,1">
+            <MenuItem Header="_File">
+                <MenuItem Header="_New Year" Click="NewYear_Click"/>
+                <MenuItem Header="_Save" Click="Save_Click" InputGestureText="Ctrl+S"/>
+                <Separator/>
+                <MenuItem Header="_Import CSV..." Click="ImportCsv_Click"/>
+                <MenuItem Header="Export _CSV (Year)..." Click="ExportCsv_Click"/>
+                <Separator/>
+                <MenuItem Header="E_xit" Click="Exit_Click"/>
+            </MenuItem>
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Undo" Click="Undo_Click" InputGestureText="Ctrl+Z"/>
+                <MenuItem Header="_Redo" Click="Redo_Click" InputGestureText="Ctrl+Y"/>
+                <Separator/>
+                <MenuItem Header="_Add Bill..." Click="OpenAddDialog_Click"/>
+                <MenuItem Header="_Rollover Unpaid..." Click="Rollover_Click"/>
+            </MenuItem>
+            <MenuItem Header="_View">
+                <MenuItem Header="Toggle _Theme" Click="ToggleTheme_Click"/>
+                <MenuItem Header="_Monthly Summary" Click="SendSummary_Click"/>
+                <Separator/>
+                <MenuItem Header="Text _Size">
+                    <MenuItem Header="_Small" Click="SetFontSize_Small" />
+                    <MenuItem Header="_Medium" Click="SetFontSize_Medium" />
+                    <MenuItem Header="_Large" Click="SetFontSize_Large" />
+                </MenuItem>
+            </MenuItem>
+        </Menu>
+
+        <!-- Top toolbar -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource PanelBackgroundBrush}" Padding="8" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: year controls + month + search -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Grid.Column="0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="Year:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox x:Name="YearSelector" Width="80" SelectionChanged="YearSelector_SelectionChanged" VerticalAlignment="Center" IsEditable="False"/>
+                        <Button x:Name="NewYearBtn" Content="＋ New" Click="NewYear_Click" Style="{StaticResource ToolbarButton}" Margin="6,0,0,0" ToolTip="Create the next year (copies recurring December bills)"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="Month:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox x:Name="MonthSelector"
+                                  Width="140"
+                                  VerticalAlignment="Center"
+                                  AutomationProperties.Name="Month selector"
+                                  IsEditable="False"
+                                  SelectionChanged="MonthSelector_SelectionChanged"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="Category:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox x:Name="CategoryFilter"
+                                  Width="140"
+                                  VerticalAlignment="Center"
+                                  AutomationProperties.Name="Category filter"
+                                  IsEditable="False"
+                                  SelectionChanged="CategoryFilter_SelectionChanged"/>
+                    </StackPanel>
+
+                    <Grid x:Name="SearchBoxContainerGrid" Style="{StaticResource SearchBoxContainer}" VerticalAlignment="Center" Width="278" Height="28">
+                        <TextBox x:Name="SearchBox"
+                                 Width="278"
+                                 Margin="0"
+                                 TextChanged="SearchBox_TextChanged"
+                                 VerticalContentAlignment="Center"
+                                 Padding="6,2,28,2"
+                                 AutomationProperties.Name="Search bills"
+                                 Background="{DynamicResource ControlBackgroundBrush}"
+                                 Foreground="{DynamicResource ControlForegroundBrush}"/>
+                        <TextBlock Text="Search bills..."
+                                   Foreground="{DynamicResource HintForegroundBrush}"
+                                   Margin="10,0,8,0"
+                                   VerticalAlignment="Center"
+                                   IsHitTestVisible="False">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <!-- Clear search button -->
+                        <Button x:Name="ClearSearchBtn"
+                            Width="20" Height="20"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                            Margin="0,0,4,0"
+                                ToolTip="Clear search"
+                                Click="ClearSearch_Click"
+                                Content="✕"
+                            FontSize="11"
+                            Padding="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                Foreground="{DynamicResource HintForegroundBrush}" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- Right: controls -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Grid.Column="2" VerticalAlignment="Center">
+                    <Button Content="Export CSV" Click="ExportCsv_Click" Style="{StaticResource ToolbarButton}" ToolTip="Export the entire current year to a single CSV file" />
+                    <Button Content="Import CSV" Click="ImportCsv_Click" Style="{StaticResource ToolbarButton}" ToolTip="Import CSV into current month" />
+                    <Button Content="Summary" Click="SendSummary_Click" Style="{StaticResource ToolbarButton}" ToolTip="View monthly summary report" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Status bar -->
+        <StatusBar DockPanel.Dock="Bottom" Background="{DynamicResource PanelBackgroundBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1,0,0,0" Padding="6">
+            <TextBlock x:Name="StatusText" Foreground="{DynamicResource HintForegroundBrush}" Text="Ready" />
+        </StatusBar>
+
+        <!-- Main content: two columns (bills area, right chart) -->
+        <Grid Margin="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="320"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Center area: income + grid (left/large) -->
+            <Grid Grid.Column="0" Margin="0,0,12,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+                    <TextBlock Text="Income:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox x:Name="IncomeBox"
+                             Width="140"
+                             KeyDown="IncomeBox_KeyDown"
+                             LostFocus="IncomeBox_LostFocus"
+                             VerticalContentAlignment="Center"
+                             Padding="6,2"
+                             Background="{DynamicResource ControlBackgroundBrush}"
+                             Foreground="{DynamicResource ControlForegroundBrush}"/>
+                    <Button Content="Rollover" Click="Rollover_Click" Margin="8,0,0,0" ToolTip="Roll unpaid bills forward" />
+                    <Button Content="Add" Click="OpenAddDialog_Click" Margin="8,0,0,0" ToolTip="Add new bill" />
+                    <Button Content="Edit" Click="EditBill_Click" Margin="8,0,0,0" ToolTip="Edit selected bill" />
+                    <Button Content="Delete" Click="DeleteBill_Click" Margin="8,0,0,0" ToolTip="Delete selected bill" />
+                </StackPanel>
+
+                <Border Grid.Row="1" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" Padding="6" Background="{DynamicResource PanelBackgroundBrush}">
+                    <DataGrid x:Name="BillsGrid"
+                              AutoGenerateColumns="False"
+                              MinHeight="200"
+                              CanUserAddRows="False"
+                              SelectionMode="Single"
+                              IsReadOnly="True"
+                              MouseDoubleClick="BillsGrid_MouseDoubleClick"
+                              EnableRowVirtualization="True"
+                              EnableColumnVirtualization="True"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              Margin="0,0,0,0"
+                              Background="{DynamicResource ControlBackgroundBrush}"
+                              Foreground="{DynamicResource ControlForegroundBrush}"
+                              CanUserSortColumns="True"
+                              AlternationCount="2">
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="#554C8DFF"/>
+                                    </Trigger>
+                                    <DataTrigger Binding="{Binding IsPaid}" Value="True">
+                                        <Setter Property="Background" Value="#5532CD32"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsPastDue}" Value="True">
+                                        <Setter Property="Background" Value="#55FF6B6B"/>
+                                    </DataTrigger>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding IsPaid}" Value="True"/>
+                                            <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected}" Value="True"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Background" Value="#8832CD32"/>
+                                    </MultiDataTrigger>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding IsPastDue}" Value="True"/>
+                                            <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected}" Value="True"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Background" Value="#88FF6B6B"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGrid.RowStyle>
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Edit" Click="EditBill_Click"/>
+                                <MenuItem Header="Delete" Click="DeleteBill_Click"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat=N2}" Width="110" ElementStyle="{StaticResource RightAlignedCell}"/>
+                            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="140"/>
+                            <DataGridTextColumn Header="Due" Binding="{Binding DueDate, StringFormat=d}" Width="110"/>
+                            <DataGridTemplateColumn Header="Status" Width="90" SortMemberPath="IsPaid">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock x:Name="StatusTxt" Text="Due" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource HintForegroundBrush}"/>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsPastDue}" Value="True">
+                                                <Setter TargetName="StatusTxt" Property="Text" Value="PAST DUE"/>
+                                                <Setter TargetName="StatusTxt" Property="Foreground" Value="#CC4444"/>
+                                                <Setter TargetName="StatusTxt" Property="FontWeight" Value="Bold"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsPaid}" Value="True">
+                                                <Setter TargetName="StatusTxt" Property="Text" Value="PAID"/>
+                                                <Setter TargetName="StatusTxt" Property="Foreground" Value="MediumSeaGreen"/>
+                                                <Setter TargetName="StatusTxt" Property="FontWeight" Value="Bold"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Border>
+
+            </Grid>
+
+            <!-- Right area: pie chart and legend -->
+            <StackPanel Grid.Column="1" Margin="0">
+                <TextBlock Text="Expenses" Style="{StaticResource SectionHeader}"/>
+                <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" Padding="8" CornerRadius="4" Background="{DynamicResource PanelBackgroundBrush}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,6,0,0">
+                            <Canvas x:Name="PieChartCanvas" Width="300" Height="300" Background="Transparent" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0" Grid.Row="1" VerticalAlignment="Center">
+                            <Border Background="{DynamicResource ControlBackgroundBrush}" Width="160" Height="18" CornerRadius="3">
+                                <Rectangle x:Name="ExpenseBar" Height="18" Fill="{DynamicResource ExpenseBarBrush}" HorizontalAlignment="Left"/>
+                            </Border>
+                            <TextBlock Text="  Usage" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource HintForegroundBrush}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <Button x:Name="BackButton" Content="← Back to Categories" Click="BackButton_Click" Style="{StaticResource ToolbarButton}" Margin="0,10,0,0" Visibility="Collapsed"/>
+                <TextBlock Text="Tip: Select a bill and use Edit/Delete for quick changes." Foreground="{DynamicResource HintForegroundBrush}" Margin="0,10,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Grid>
+    </DockPanel>
+</Window>

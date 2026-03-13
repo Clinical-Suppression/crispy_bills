@@ -1,0 +1,15 @@
+<Application x:Class="CrispyBills.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Load the Light theme by default so resources like
+                     ControlBackgroundBrush are available during InitializeComponent -->
+                <ResourceDictionary Source="Light.xaml"/>
+                <ResourceDictionary Source="FontSizes.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
