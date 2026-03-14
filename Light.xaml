@@ -26,6 +26,36 @@
 
     <SolidColorBrush x:Key="ExpenseBarBrush" Color="#FF2E8AE6"/>
 
+    <!-- Notes area colors -->
+    <SolidColorBrush x:Key="NotesAreaBackgroundBrush" Color="#CCF6EDD0"/>
+    <SolidColorBrush x:Key="NotesAreaBorderBrush" Color="#B8D2C39C"/>
+    <SolidColorBrush x:Key="NotesHeaderBrush" Color="#FF4F442A"/>
+    <SolidColorBrush x:Key="NotesTextBrush" Color="#FF3E341D"/>
+    <SolidColorBrush x:Key="NotebookPaperBrush" Color="#DDFDF9EA"/>
+
+    <!-- System menu brush overrides for submenu popup readability -->
+    <SolidColorBrush x:Key="{x:Static SystemColors.MenuBrushKey}" Color="#FFF7F7F7"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.MenuTextBrushKey}" Color="#FF111111"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#FF2E8AE6"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.ControlTextBrushKey}" Color="#FF111111"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#FF111111"/>
+
+    <!-- WPF default menu template keys used by submenu popups -->
+    <SolidColorBrush x:Key="Menu.Static.Background" Color="#FFF7F7F7"/>
+    <SolidColorBrush x:Key="Menu.Static.Border" Color="#FFDDDDDD"/>
+    <SolidColorBrush x:Key="Menu.Static.Foreground" Color="#FF111111"/>
+    <SolidColorBrush x:Key="MenuItem.Highlight.Background" Color="#FF2E8AE6"/>
+    <SolidColorBrush x:Key="MenuItem.Highlight.Border" Color="#FF2E8AE6"/>
+    <SolidColorBrush x:Key="MenuItem.Selected.Background" Color="#FFE6F1FC"/>
+    <SolidColorBrush x:Key="MenuItem.Selected.Border" Color="#FF2E8AE6"/>
+    <SolidColorBrush x:Key="MenuItem.Disabled.Foreground" Color="#FF8E8E8E"/>
+    <SolidColorBrush x:Key="MenuItem.Submenu.Background" Color="#FFF7F7F7"/>
+    <SolidColorBrush x:Key="MenuItem.Submenu.Border" Color="#FFDDDDDD"/>
+    <SolidColorBrush x:Key="MenuItem.Separator.Background" Color="#FFE2E2E2"/>
+
     <Style TargetType="Window">
         <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource WindowForegroundBrush}"/>
@@ -34,6 +64,12 @@
     <Style TargetType="TextBox">
         <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource ControlForegroundBrush}"/>
+    </Style>
+    <Style TargetType="Button">
+        <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource ControlForegroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
     </Style>
     <Style TargetType="ComboBox">
         <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
@@ -46,5 +82,28 @@
         <Setter Property="RowBackground" Value="#FFFFFFFF"/>
         <Setter Property="AlternatingRowBackground" Value="#FFF8F8F8"/>
         <Setter Property="GridLinesVisibility" Value="None"/>
+    </Style>
+
+    <Style TargetType="Menu">
+        <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource WindowForegroundBrush}"/>
+    </Style>
+
+    <Style TargetType="ContextMenu">
+        <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource WindowForegroundBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
+    <Style TargetType="MenuItem">
+        <Setter Property="Background" Value="{StaticResource PanelBackgroundBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource WindowForegroundBrush}"/>
+        <Style.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+                <Setter Property="Foreground" Value="White"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 </ResourceDictionary>

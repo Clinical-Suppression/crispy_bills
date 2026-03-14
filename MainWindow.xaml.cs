@@ -17,6 +17,10 @@ using System.Diagnostics;
 
 namespace CrispyBills
 {
+    /// <summary>
+    /// Main application window that orchestrates data loading, editing workflows,
+    /// visualization, theming, and persistence for the selected year/month.
+    /// </summary>
     public partial class MainWindow : Window
     {
         private readonly string dataRoot = Path.Combine(
@@ -29,6 +33,7 @@ namespace CrispyBills
 
         // Backups base folder
         private readonly string backupsRoot;
+        private readonly string globalNotesPath;
 
         public Dictionary<string, ObservableCollection<Bill>> AnnualData { get; set; } = new();
         public Dictionary<string, decimal> MonthlyIncome { get; set; } = new();
@@ -49,12 +54,24 @@ namespace CrispyBills
 
         // Pie chart drill-down state
         private string? _detailedCategory = null;
+        private const int MaxNoteLines = 500;
+        private const string NotesLineLimitMessage = "Notes are limited to 500 lines.";
+        private bool _isUpdatingNotesText;
+        private GridEditSnapshot? _pendingGridEdit;
 
+        // Captures original values before inline grid edits so confirmation, undo, and redo can be applied safely.
+        private sealed record GridEditSnapshot(Bill Bill, string Month, string Name, decimal Amount, DateTime DueDate, string Category);
+
+        /// <summary>
+        /// Initializes UI state, ensures database storage exists, loads the current year,
+        /// and restores global notes.
+        /// </summary>
         public MainWindow()
         {
             InitializeComponent();
 
             backupsRoot = Path.Combine(dataRoot, "db_backups");
+            globalNotesPath = Path.Combine(dataRoot, "GlobalNotes.txt");
 
             EnsureDataRoot();
             MigrateLegacyDatabases();
@@ -77,6 +94,7 @@ namespace CrispyBills
             UpdateYearSelector();
 
             LoadData();
+            LoadGlobalNotes();
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -179,9 +197,21 @@ namespace CrispyBills
                 PRAGMA synchronous = NORMAL;
                 PRAGMA busy_timeout = 5000;
                 PRAGMA foreign_keys = ON;
-                CREATE TABLE IF NOT EXISTS Bills (Id TEXT, Month TEXT, Year TEXT, Name TEXT, Amount REAL, DueDate TEXT, Paid INT, Category TEXT);
+                CREATE TABLE IF NOT EXISTS Bills (Id TEXT, Month TEXT, Year TEXT, Name TEXT, Amount REAL, DueDate TEXT, Paid INT, Category TEXT, Recurring INT NOT NULL DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS Income (Month TEXT, Year TEXT, Amount REAL, PRIMARY KEY(Month, Year));";
             cmd.ExecuteNonQuery();
+
+            // Backward-compatible schema migration for existing databases.
+            try
+            {
+                using var alter = conn.CreateCommand();
+                alter.CommandText = "ALTER TABLE Bills ADD COLUMN Recurring INT NOT NULL DEFAULT 0";
+                alter.ExecuteNonQuery();
+            }
+            catch
+            {
+                // Column already exists or db engine rejected no-op migration; safe to ignore.
+            }
         }
 
         private List<string> GetAvailableYears()
@@ -210,6 +240,10 @@ namespace CrispyBills
             if (years.Contains(CurrentYear)) YearSelector.SelectedItem = CurrentYear;
         }
 
+        /// <summary>
+        /// Loads all bill and income records for the active year from SQLite into memory,
+        /// then refreshes the dashboard and clears undo/redo history.
+        /// </summary>
         private void LoadData()
         {
             // Clear structures
@@ -242,7 +276,8 @@ namespace CrispyBills
                             Amount = r.GetDecimal(4),
                             DueDate = DateTime.ParseExact(r.GetString(5), "yyyy-MM-dd", CultureInfo.InvariantCulture),
                             IsPaid = r.GetInt32(6) == 1,
-                            Category = r.GetString(7)
+                            Category = r.GetString(7),
+                            IsRecurring = r.FieldCount > 8 && r.GetInt32(8) == 1
                         });
                 }
             }
@@ -288,9 +323,54 @@ namespace CrispyBills
             catch { /* non-fatal */ }
         }
 
+        private void LoadGlobalNotes()
+        {
+            if (NotesBox == null) return;
+
+            try
+            {
+                if (File.Exists(globalNotesPath))
+                {
+                    NotesBox.Text = File.ReadAllText(globalNotesPath);
+                }
+                else
+                {
+                    NotesBox.Text = string.Empty;
+                }
+            }
+            catch
+            {
+                NotesBox.Text = string.Empty;
+            }
+        }
+
+        private void SaveGlobalNotes()
+        {
+            if (NotesBox == null) return;
+
+            try
+            {
+                Directory.CreateDirectory(dataRoot);
+                File.WriteAllText(globalNotesPath, NotesBox?.Text ?? string.Empty);
+            }
+            catch
+            {
+                // Non-fatal: notes save failure should not break app workflows.
+            }
+        }
+
         #endregion
 
         #region UI updates
+        private void SetStatus(string message)
+        {
+            StatusText?.SetCurrentValue(TextBlock.TextProperty, message);
+        }
+
+        /// <summary>
+        /// Updates summary fields, chart visuals, and filters for the currently selected month.
+        /// This method is the central UI refresh point after most data mutations.
+        /// </summary>
         private void UpdateDashboard()
         {
             var selected = MonthSelector?.SelectedItem;
@@ -309,7 +389,7 @@ namespace CrispyBills
                 : 0;
 
             // Footer summary
-            try { StatusText.Text = $"{CurrentYear} • {cur} • Bills: {bills.Count} • Remaining: {unpaid:C} • Net: {(inc - exp):C}"; } catch { }
+            SetStatus($"{CurrentYear} • {cur} • Bills: {bills.Count} • Remaining: {unpaid:C} • Net: {(inc - exp):C}");
 
             UpdateCategoryFilter();
             DrawPieChart(bills, inc - exp);
@@ -337,6 +417,9 @@ namespace CrispyBills
                 CategoryFilter.SelectedIndex = 0;
         }
 
+        /// <summary>
+        /// Draws either category-level or bill-level pie slices depending on drill-down state.
+        /// </summary>
         private void DrawPieChart(IEnumerable<Bill> bills, decimal remaining)
         {
             PieChartCanvas.Children.Clear();
@@ -507,33 +590,65 @@ namespace CrispyBills
         }
         private void NewYear_Click(object sender, RoutedEventArgs e)
         {
+            if (MessageBox.Show(
+                    this,
+                    "Create a new year and carry over recurring bills/income settings?",
+                    "Confirm New Year",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question) != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
             if (int.TryParse(_currentYear, out int cur))
             {
-                // Carry forward December bills using year-start rules:
-                // - recurring bills always carry
-                // - non-recurring bills carry only if unpaid
-                var templates = AnnualData["December"]
-                    .Where(t =>
-                    {
-                        bool isRecurring = months.Take(11).Any(m => AnnualData[m].Any(b => b.Id == t.Id));
-                        return isRecurring || !t.IsPaid;
-                    })
+                // New year carryover is sourced from December only.
+                var decemberBills = AnnualData["December"].ToList();
+
+                var recurringTemplates = decemberBills
+                    .Where(t => t.IsRecurring)
                     .ToList();
 
-                _currentYear = (cur + 1).ToString();
+                // Unpaid recurring December bills get an extra January carryover copy
+                // that keeps the original due date (old year) so it remains visibly past due.
+                var unpaidRecurringDecember = recurringTemplates
+                    .Where(t => !t.IsPaid)
+                    .ToList();
+
+                // Unpaid non-recurring December bills go to January only.
+                var unpaidDecemberOneTime = decemberBills
+                    .Where(t => !t.IsRecurring && !t.IsPaid)
+                    .ToList();
+
+                // Copy December income amount to every month in the new year.
+                decimal decemberIncome = MonthlyIncome.GetValueOrDefault("December", 0m);
+
+                int newYearVal = cur + 1;
+                string newYear = newYearVal.ToString();
+                bool yearAlreadyExists = File.Exists(GetDbPath(newYear));
+
+                _currentYear = newYear;
                 LoadData();
 
-                // If the new year is empty (checked via January), populate it with templates
-                if (templates.Count > 0 && AnnualData["January"].Count == 0)
+                // Carry income to every month only when this year is newly created.
+                if (!yearAlreadyExists)
                 {
-                    // Generate a shared ID for each template to maintain the recurring link across the new year
-                    var templateIds = templates.Select(t => new { Template = t, NewId = Guid.NewGuid() }).ToList();
+                    foreach (var m in months)
+                    {
+                        MonthlyIncome[m] = decemberIncome;
+                    }
+                }
 
-                    int newYearVal = cur + 1;
+                // If the target year is empty (checked via January), populate carryover bills.
+                if ((recurringTemplates.Count > 0 || unpaidDecemberOneTime.Count > 0 || unpaidRecurringDecember.Count > 0) && AnnualData["January"].Count == 0)
+                {
+                    // Generate a shared ID per recurring template to maintain recurring linkage across the new year.
+                    var recurringIds = recurringTemplates.Select(t => new { Template = t, NewId = Guid.NewGuid() }).ToList();
+
                     for (int i = 0; i < months.Length; i++)
                     {
                         int daysInMonth = DateTime.DaysInMonth(newYearVal, i + 1);
-                        foreach (var item in templateIds)
+                        foreach (var item in recurringIds)
                         {
                             var t = item.Template;
                             // Create new bill copy, handling month-end days (e.g. Feb 28)
@@ -545,11 +660,46 @@ namespace CrispyBills
                                 Amount = t.Amount,
                                 Category = t.Category,
                                 DueDate = new DateTime(newYearVal, i + 1, day),
-                                IsPaid = false
+                                IsPaid = false,
+                                IsRecurring = true
                             });
                         }
                     }
-                    MessageBox.Show($"Welcome to {newYearVal}! Eligible bills from December {cur} have been copied to the new year.");
+
+                    // Add unpaid, non-recurring December bills to January only.
+                    int januaryDays = DateTime.DaysInMonth(newYearVal, 1);
+                    foreach (var t in unpaidDecemberOneTime)
+                    {
+                        int day = Math.Min(t.DueDate.Day, januaryDays);
+                        AnnualData["January"].Add(new Bill
+                        {
+                            Id = Guid.NewGuid(),
+                            Name = t.Name,
+                            Amount = t.Amount,
+                            Category = t.Category,
+                            DueDate = new DateTime(newYearVal, 1, day),
+                            IsPaid = false,
+                            IsRecurring = false
+                        });
+                    }
+
+                    // Add one extra January carryover entry for unpaid recurring December bills
+                    // while keeping the normal recurring January copy above.
+                    foreach (var t in unpaidRecurringDecember)
+                    {
+                        AnnualData["January"].Add(new Bill
+                        {
+                            Id = Guid.NewGuid(),
+                            Name = t.Name,
+                            Amount = t.Amount,
+                            Category = t.Category,
+                            DueDate = t.DueDate,
+                            IsPaid = false,
+                            IsRecurring = false
+                        });
+                    }
+
+                    MessageBox.Show($"Welcome to {newYearVal}! December {cur} carryover applied: {recurringTemplates.Count} recurring template(s) to all months, {unpaidDecemberOneTime.Count} unpaid one-time bill(s) to January, and {unpaidRecurringDecember.Count} extra unpaid recurring carryover bill(s) to January.");
                 }
 
                 AutoSave();
@@ -608,10 +758,15 @@ namespace CrispyBills
             AutoSave();
         }
 
+        /// <summary>
+        /// Switches between light and dark dictionaries while preserving merged dictionary order,
+        /// ensuring font-size resources continue to override theme defaults.
+        /// </summary>
         private void ToggleTheme_Click(object sender, RoutedEventArgs e)
         {
             isDarkMode = !isDarkMode;
             var dictUri = new Uri(isDarkMode ? "Dark.xaml" : "Light.xaml", UriKind.Relative);
+            var newTheme = new ResourceDictionary { Source = dictUri };
 
             // Replace only existing theme dictionaries (Light/Dark) so we don't clear unrelated merged dictionaries
             var toRemove = Application.Current.Resources.MergedDictionaries
@@ -621,12 +776,31 @@ namespace CrispyBills
                 .ToList();
             foreach (var d in toRemove) Application.Current.Resources.MergedDictionaries.Remove(d);
 
-            Application.Current.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = dictUri });
+            // Keep FontSizes.xaml and other shared dictionaries after the theme dictionary
+            // so shared font-size styles are not overridden when theme changes.
+            var dictionaries = Application.Current.Resources.MergedDictionaries;
+            int insertIndex = 0;
+            for (int i = 0; i < dictionaries.Count; i++)
+            {
+                var src = dictionaries[i].Source?.OriginalString;
+                if (!string.IsNullOrEmpty(src) &&
+                    src.EndsWith("FontSizes.xaml", StringComparison.OrdinalIgnoreCase))
+                {
+                    insertIndex = i;
+                    break;
+                }
+            }
+
+            dictionaries.Insert(insertIndex, newTheme);
 
             UpdateDashboard();
-            try { StatusText.Text = isDarkMode ? "Dark theme activated" : "Light theme activated"; } catch { }
+            SetStatus(isDarkMode ? "Dark theme activated" : "Light theme activated");
         }
 
+        /// <summary>
+        /// Rolls unpaid bills from the selected month into the next month and annotates names
+        /// to show rollover direction. Supports undo/redo for all generated changes.
+        /// </summary>
         private void Rollover_Click(object sender, RoutedEventArgs e)
         {
             int curIdx = MonthSelector.SelectedIndex;
@@ -642,20 +816,35 @@ namespace CrispyBills
             var unpaidBills = AnnualData[curMonth].Where(x => !x.IsPaid).ToList();
             int count = 0;
             var copies = new List<Bill>();
+            var renamedOriginals = new List<(Bill bill, string oldName, string newName)>();
 
             foreach (var b in unpaidBills)
             {
+                string fromSuffix = $" - Rolled over from {curMonth}";
+                string suffix = $" - Rolled over to {nextMonth}";
+                string oldName = b.Name;
+                string newName = oldName.EndsWith(suffix, StringComparison.Ordinal) ? oldName : oldName + suffix;
+                string copyName = oldName.EndsWith(fromSuffix, StringComparison.Ordinal) ? oldName : oldName + fromSuffix;
+
                 var copy = new Bill
                 {
                     Id = Guid.NewGuid(),
-                    Name = b.Name,
+                    Name = copyName,
                     Amount = b.Amount,
                     Category = b.Category,
-                    DueDate = b.DueDate.AddMonths(1),
-                    IsPaid = false
+                    DueDate = b.DueDate,
+                    IsPaid = false,
+                    IsRecurring = false
                 };
                 AnnualData[nextMonth].Add(copy);
                 copies.Add(copy);
+
+                if (!string.Equals(oldName, newName, StringComparison.Ordinal))
+                {
+                    b.Name = newName;
+                    renamedOriginals.Add((b, oldName, newName));
+                }
+
                 count++;
             }
 
@@ -664,11 +853,13 @@ namespace CrispyBills
             PushUndo(() =>
             {
                 foreach (var c in copies) AnnualData[nextMonth].Remove(c);
+                foreach (var (bill, oldName, _) in renamedOriginals) bill.Name = oldName;
                 UpdateDashboard();
             },
             () =>
             {
                 foreach (var c in copies) AnnualData[nextMonth].Add(c);
+                foreach (var (bill, _, newName) in renamedOriginals) bill.Name = newName;
                 UpdateDashboard();
             });
 
@@ -681,6 +872,9 @@ namespace CrispyBills
             PersistData(createBackup: true, showSuccessMessage: sender is Button);
         }
 
+        /// <summary>
+        /// Persists all in-memory data for the active year, optionally creating backups and user feedback.
+        /// </summary>
         private void PersistData(bool createBackup, bool showSuccessMessage)
         {
             var dbFile = GetDbPath(CurrentYear);
@@ -690,69 +884,104 @@ namespace CrispyBills
                 Directory.CreateDirectory(dbDir);
             }
 
-            // Scope the connection to ensure it closes (and checkpoints WAL) before backup
-            using (var conn = new SqliteConnection($"Data Source={dbFile}"))
-            {
-                conn.Open();
-                using var tx = conn.BeginTransaction();
-
-                // Delete old data
-                var delB = conn.CreateCommand();
-                delB.Transaction = tx;
-                delB.CommandText = "DELETE FROM Bills WHERE Year = $y";
-                delB.Parameters.AddWithValue("$y", CurrentYear);
-                delB.ExecuteNonQuery();
-
-                var delI = conn.CreateCommand();
-                delI.Transaction = tx;
-                delI.CommandText = "DELETE FROM Income WHERE Year = $y";
-                delI.Parameters.AddWithValue("$y", CurrentYear);
-                delI.ExecuteNonQuery();
-
-                // Insert new data
-                foreach (var m in months)
-                {
-                    foreach (var b in AnnualData[m])
-                    {
-                        var ins = conn.CreateCommand();
-                        ins.Transaction = tx;
-                        ins.CommandText =
-                            "INSERT INTO Bills VALUES ($id, $m, $y, $n, $a, $d, $p, $c)";
-                        ins.Parameters.AddWithValue("$id", b.Id.ToString());
-                        ins.Parameters.AddWithValue("$m", m);
-                        ins.Parameters.AddWithValue("$y", CurrentYear);
-                        ins.Parameters.AddWithValue("$n", b.Name);
-                        ins.Parameters.AddWithValue("$a", b.Amount);
-                        ins.Parameters.AddWithValue("$d",
-                            b.DueDate.ToString("yyyy-MM-dd"));
-                        ins.Parameters.AddWithValue("$p", b.IsPaid ? 1 : 0);
-                        ins.Parameters.AddWithValue("$c", b.Category);
-                        ins.ExecuteNonQuery();
-                    }
-
-                    var insI = conn.CreateCommand();
-                    insI.Transaction = tx;
-                    insI.CommandText = "INSERT INTO Income VALUES ($m, $y, $a)";
-                    insI.Parameters.AddWithValue("$m", m);
-                    insI.Parameters.AddWithValue("$y", CurrentYear);
-                    insI.Parameters.AddWithValue("$a", MonthlyIncome.GetValueOrDefault(m, 0));
-                    insI.ExecuteNonQuery();
-                }
-
-                tx.Commit();
-            }
+            PersistYearDataToDatabase(dbFile);
 
             if (createBackup)
             {
                 BackupDatabase(CurrentYear);
             }
 
+            SaveGlobalNotes();
+
             if (showSuccessMessage)
             {
                 MessageBox.Show(createBackup ? "Data saved and backed up!" : "Data saved!");
             }
 
-            try { StatusText.Text = $"Auto-saved {CurrentYear} at {DateTime.Now:hh:mm:ss tt}"; } catch { }
+            SetStatus($"Auto-saved {CurrentYear} at {DateTime.Now:hh:mm:ss tt}");
+        }
+
+        /// <summary>
+        /// Performs a transactional rewrite of Bills and Income tables for the active year.
+        /// </summary>
+    #pragma warning disable CS8602 // False positive from analyzer for Sqlite command dereference in this method.
+        private void PersistYearDataToDatabase(string dbFile)
+        {
+            // Scope the connection to ensure it closes (and checkpoints WAL) before backup
+            using var conn = new SqliteConnection($"Data Source={dbFile}");
+            conn.Open();
+            using var tx = conn.BeginTransaction();
+
+            var delB = conn.CreateCommand() ?? throw new InvalidOperationException("Unable to create delete-bills command.");
+            delB!.Transaction = tx;
+            delB.CommandText = "DELETE FROM Bills WHERE Year = $y";
+            delB.Parameters.AddWithValue("$y", CurrentYear);
+            delB.ExecuteNonQuery();
+
+            var delI = conn.CreateCommand() ?? throw new InvalidOperationException("Unable to create delete-income command.");
+            delI!.Transaction = tx;
+            delI.CommandText = "DELETE FROM Income WHERE Year = $y";
+            delI.Parameters.AddWithValue("$y", CurrentYear);
+            delI.ExecuteNonQuery();
+
+            foreach (var m in months)
+            {
+                InsertMonthBills(conn, tx, m);
+                InsertMonthIncome(conn, tx, m);
+            }
+
+            tx.Commit();
+        }
+#pragma warning restore CS8602
+
+        /// <summary>
+        /// Writes all bills for a single month to the current transaction.
+        /// </summary>
+        private void InsertMonthBills(SqliteConnection conn, SqliteTransaction tx, string month)
+        {
+            if (!AnnualData.TryGetValue(month, out var billsForMonth) || billsForMonth == null)
+                return;
+
+            foreach (var b in billsForMonth)
+            {
+                var ins = conn.CreateCommand();
+                ins.Transaction = tx;
+                ins.CommandText = "INSERT INTO Bills VALUES ($id, $m, $y, $n, $a, $d, $p, $c)";
+                ins.CommandText = "INSERT INTO Bills (Id, Month, Year, Name, Amount, DueDate, Paid, Category, Recurring) VALUES ($id, $m, $y, $n, $a, $d, $p, $c, $r)";
+                ins.Parameters.AddWithValue("$id", b.Id.ToString());
+                ins.Parameters.AddWithValue("$m", month);
+                ins.Parameters.AddWithValue("$y", CurrentYear);
+                ins.Parameters.AddWithValue("$n", b.Name);
+                ins.Parameters.AddWithValue("$a", b.Amount);
+                ins.Parameters.AddWithValue("$d", b.DueDate.ToString("yyyy-MM-dd"));
+                ins.Parameters.AddWithValue("$p", b.IsPaid ? 1 : 0);
+                ins.Parameters.AddWithValue("$c", b.Category);
+                ins.Parameters.AddWithValue("$r", b.IsRecurring ? 1 : 0);
+                ins.ExecuteNonQuery();
+            }
+        }
+
+        /// <summary>
+        /// Writes income for a single month to the current transaction.
+        /// </summary>
+        private void InsertMonthIncome(SqliteConnection conn, SqliteTransaction tx, string month)
+        {
+            ArgumentNullException.ThrowIfNull(conn);
+            ArgumentNullException.ThrowIfNull(tx);
+
+            decimal incomeValue = 0m;
+            if (MonthlyIncome.TryGetValue(month, out var storedAmount))
+            {
+                incomeValue = storedAmount;
+            }
+
+            var insI = conn.CreateCommand();
+            insI.Transaction = tx;
+            insI.CommandText = "INSERT INTO Income VALUES ($m, $y, $a)";
+            insI.Parameters.AddWithValue("$m", month);
+            insI.Parameters.AddWithValue("$y", CurrentYear);
+            insI.Parameters.AddWithValue("$a", incomeValue);
+            insI.ExecuteNonQuery();
         }
 
         private void AutoSave()
@@ -763,13 +992,229 @@ namespace CrispyBills
             }
             catch
             {
-                try { StatusText.Text = "Auto-save failed. Use File > Save to retry."; } catch { }
+                SetStatus("Auto-save failed. Use File > Save to retry.");
             }
         }
 
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             ApplyFilters();
+        }
+
+        private void NotesBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_isUpdatingNotesText) return;
+            if (NotesBox is not TextBox notesBox) return;
+
+            var text = notesBox.Text ?? string.Empty;
+
+            var normalized = text.Replace("\r\n", "\n").Replace('\r', '\n');
+            var lines = normalized.Split('\n');
+
+            if (lines.Length > MaxNoteLines)
+            {
+                _isUpdatingNotesText = true;
+                try
+                {
+                    notesBox.Text = string.Join(Environment.NewLine, lines.Take(MaxNoteLines));
+                    notesBox.CaretIndex = notesBox.Text?.Length ?? 0;
+                }
+                finally
+                {
+                    _isUpdatingNotesText = false;
+                }
+
+                SetStatus(NotesLineLimitMessage);
+            }
+
+            SaveGlobalNotes();
+        }
+
+        private void NotesBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            SaveGlobalNotes();
+        }
+
+        /// <summary>
+        /// Creates a pre-edit snapshot when inline DataGrid editing begins.
+        /// </summary>
+        private void BillsGrid_BeginningEdit(object sender, DataGridBeginningEditEventArgs e)
+        {
+            if (MonthSelector.SelectedIndex < 0) return;
+            if (e.Row.Item is not Bill b) return;
+
+            _pendingGridEdit = new GridEditSnapshot(
+                b,
+                months[MonthSelector.SelectedIndex],
+                b.Name,
+                b.Amount,
+                b.DueDate,
+                b.Category);
+        }
+
+        /// <summary>
+        /// Defers post-edit processing until WPF commits the current edit transaction.
+        /// </summary>
+        private void BillsGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+        {
+            if (e.EditAction != DataGridEditAction.Commit || _pendingGridEdit == null)
+            {
+                _pendingGridEdit = null;
+                return;
+            }
+
+            var snapshot = _pendingGridEdit;
+            _pendingGridEdit = null;
+
+            Dispatcher.BeginInvoke(new Action(() => ApplyGridEditWithConfirmation(snapshot)));
+        }
+
+        /// <summary>
+        /// Applies inline grid edits after confirmation with scoped propagation rules:
+        /// Name/Category for current month, Amount/Due Date for current+future recurring copies.
+        /// </summary>
+        private void ApplyGridEditWithConfirmation(GridEditSnapshot snapshot)
+        {
+            var bill = snapshot.Bill;
+            bool nameChanged = !string.Equals(bill.Name, snapshot.Name, StringComparison.Ordinal);
+            bool amountChanged = bill.Amount != snapshot.Amount;
+            bool dueDateChanged = bill.DueDate.Date != snapshot.DueDate.Date;
+            bool categoryChanged = !string.Equals(bill.Category, snapshot.Category, StringComparison.Ordinal);
+
+            if (!nameChanged && !amountChanged && !dueDateChanged && !categoryChanged)
+                return;
+
+            string scopeDescription =
+                (amountChanged || dueDateChanged)
+                ? "Amount and Due Date changes will apply to this month and all following months for this recurring bill."
+                : "This change applies only to this month.";
+
+            string changes = string.Join(", ",
+                new[]
+                {
+                    nameChanged ? "Name" : null,
+                    amountChanged ? "Amount" : null,
+                    dueDateChanged ? "Due Date" : null,
+                    categoryChanged ? "Category" : null
+                }.Where(x => x != null));
+
+            var confirm = MessageBox.Show(
+                this,
+                $"Apply change to {changes}?\n\n{scopeDescription}",
+                "Confirm Bill Edit",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (confirm != MessageBoxResult.Yes)
+            {
+                bill.Name = snapshot.Name;
+                bill.Amount = snapshot.Amount;
+                bill.DueDate = snapshot.DueDate;
+                bill.Category = snapshot.Category;
+                UpdateDashboard();
+                return;
+            }
+
+            var editedState = new Bill
+            {
+                Id = bill.Id,
+                Name = bill.Name,
+                Amount = bill.Amount,
+                DueDate = bill.DueDate,
+                Category = bill.Category,
+                IsPaid = bill.IsPaid
+            };
+
+            var futureSnapshots = new List<(Bill bill, decimal amount, DateTime dueDate)>();
+            if ((amountChanged || dueDateChanged) && MonthSelector.SelectedIndex >= 0)
+            {
+                int selectedIdx = MonthSelector.SelectedIndex;
+                for (int i = selectedIdx + 1; i < months.Length; i++)
+                {
+                    foreach (var futureBill in AnnualData[months[i]].Where(x => x.Id == bill.Id))
+                    {
+                        futureSnapshots.Add((futureBill, futureBill.Amount, futureBill.DueDate));
+
+                        if (amountChanged)
+                            futureBill.Amount = bill.Amount;
+
+                        if (dueDateChanged)
+                        {
+                            int daysInMonth = DateTime.DaysInMonth(futureBill.DueDate.Year, futureBill.DueDate.Month);
+                            int day = Math.Min(bill.DueDate.Day, daysInMonth);
+                            futureBill.DueDate = new DateTime(futureBill.DueDate.Year, futureBill.DueDate.Month, day);
+                        }
+                    }
+                }
+            }
+
+            PushUndo(() =>
+            {
+                bill.Name = snapshot.Name;
+                bill.Amount = snapshot.Amount;
+                bill.DueDate = snapshot.DueDate;
+                bill.Category = snapshot.Category;
+
+                foreach (var (futureBill, oldAmount, oldDueDate) in futureSnapshots)
+                {
+                    futureBill.Amount = oldAmount;
+                    futureBill.DueDate = oldDueDate;
+                }
+
+                UpdateDashboard();
+            },
+            () =>
+            {
+                bill.Name = editedState.Name;
+                bill.Amount = editedState.Amount;
+                bill.DueDate = editedState.DueDate;
+                bill.Category = editedState.Category;
+
+                if (amountChanged || dueDateChanged)
+                {
+                    foreach (var (futureBill, _, _) in futureSnapshots)
+                    {
+                        if (amountChanged)
+                            futureBill.Amount = editedState.Amount;
+
+                        if (dueDateChanged)
+                        {
+                            int daysInMonth = DateTime.DaysInMonth(futureBill.DueDate.Year, futureBill.DueDate.Month);
+                            int day = Math.Min(editedState.DueDate.Day, daysInMonth);
+                            futureBill.DueDate = new DateTime(futureBill.DueDate.Year, futureBill.DueDate.Month, day);
+                        }
+                    }
+                }
+
+                UpdateDashboard();
+            });
+
+            UpdateDashboard();
+            AutoSave();
+        }
+
+        private void StatusCell_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement fe || fe.DataContext is not Bill b)
+                return;
+
+            try
+            {
+                bool oldVal = b.IsPaid;
+                b.IsPaid = !b.IsPaid;
+                System.Windows.Data.CollectionViewSource.GetDefaultView(BillsGrid.ItemsSource)?.Refresh();
+                UpdateDashboard();
+
+                PushUndo(() => { b.IsPaid = oldVal; UpdateDashboard(); },
+                         () => { b.IsPaid = !oldVal; UpdateDashboard(); });
+
+                AutoSave();
+                e.Handled = true;
+            }
+            catch
+            {
+                SetStatus("Unable to update bill status.");
+            }
         }
 
         private void ClearSearch_Click(object sender, RoutedEventArgs e)
@@ -784,21 +1229,15 @@ namespace CrispyBills
 
         private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (BillsGrid?.SelectedItem == null) return;
+            CommitGridEditOnOutsideClick(e.OriginalSource as DependencyObject);
 
-            var source = e.OriginalSource as DependencyObject;
-            while (source != null)
-            {
-                if (ReferenceEquals(source, BillsGrid)) return;
-                source = VisualTreeHelper.GetParent(source);
-            }
-
-            ClearBillSelection();
+            // Keep selection when interacting with controls outside the grid
+            // (e.g. Edit/Delete toolbar buttons) so commands can use the selected row.
         }
 
         private void Window_Deactivated(object? sender, EventArgs e)
         {
-            ClearBillSelection();
+            // Preserve selection when the window loses focus.
         }
 
         private void ClearBillSelection()
@@ -809,6 +1248,36 @@ namespace CrispyBills
             BillsGrid.SelectedItem = null;
             System.Windows.Data.CollectionViewSource.GetDefaultView(BillsGrid.ItemsSource)?.Refresh();
             UpdateDashboard();
+        }
+
+        /// <summary>
+        /// Commits inline edits when the user clicks anywhere outside the currently edited cell.
+        /// This mirrors spreadsheet-style UX and avoids leaving values in an in-progress state.
+        /// </summary>
+        private void CommitGridEditOnOutsideClick(DependencyObject? source)
+        {
+            if (BillsGrid == null || !BillsGrid.CurrentCell.IsValid || source == null) return;
+
+            var clickedCell = FindVisualParent<DataGridCell>(source);
+            bool clickedCurrentCell = clickedCell != null
+                && Equals(clickedCell.DataContext, BillsGrid.CurrentItem)
+                && Equals(clickedCell.Column, BillsGrid.CurrentColumn);
+
+            if (clickedCurrentCell) return;
+
+            // Commit the cell first, then row-level edits (if any) to fully finalize the edit transaction.
+            BillsGrid.CommitEdit(DataGridEditingUnit.Cell, true);
+            BillsGrid.CommitEdit(DataGridEditingUnit.Row, true);
+        }
+
+        private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
+        {
+            while (child != null)
+            {
+                if (child is T typed) return typed;
+                child = VisualTreeHelper.GetParent(child);
+            }
+            return null;
         }
 
         private void MonthSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -826,6 +1295,10 @@ namespace CrispyBills
             ApplyFilters();
         }
 
+        /// <summary>
+        /// Applies category/search filtering to the month view, with transaction-safe deferral
+        /// when WPF is in AddNew/EditItem mode.
+        /// </summary>
         private void ApplyFilters()
         {
             if (BillsGrid == null || MonthSelector.SelectedIndex < 0) return;
@@ -833,18 +1306,33 @@ namespace CrispyBills
                 AnnualData[months[MonthSelector.SelectedIndex]]);
             if (view == null) return;
 
+            if (view is System.Windows.Data.ListCollectionView lcv &&
+                (lcv.IsAddingNew || lcv.IsEditingItem))
+            {
+                // ListCollectionView blocks Filter changes during edit/add transactions.
+                Dispatcher.BeginInvoke(new Action(ApplyFilters), System.Windows.Threading.DispatcherPriority.Background);
+                return;
+            }
+
             string search = SearchBox.Text.ToLower();
             string? selectedCategory = CategoryFilter.SelectedItem as string;
 
-            view.Filter = item =>
+            try
             {
-                if (item is not Bill b) return false;
+                view.Filter = item =>
+                {
+                    if (item is not Bill b) return false;
 
-                bool categoryMatch = string.IsNullOrEmpty(selectedCategory) || selectedCategory == "All Categories" || b.Category == selectedCategory;
-                bool searchMatch = string.IsNullOrEmpty(search) || b.Name.ToLower().Contains(search) || b.Category.ToLower().Contains(search);
+                    bool categoryMatch = string.IsNullOrEmpty(selectedCategory) || selectedCategory == "All Categories" || b.Category == selectedCategory;
+                    bool searchMatch = string.IsNullOrEmpty(search) || b.Name.ToLower().Contains(search) || b.Category.ToLower().Contains(search);
 
-                return categoryMatch && searchMatch;
-            };
+                    return categoryMatch && searchMatch;
+                };
+            }
+            catch (InvalidOperationException)
+            {
+                Dispatcher.BeginInvoke(new Action(ApplyFilters), System.Windows.Threading.DispatcherPriority.Background);
+            }
         }
 
         private void OpenAddDialog_Click(object sender, RoutedEventArgs e)
@@ -861,6 +1349,7 @@ namespace CrispyBills
                 // Add the bill to the selected month
                 string curMonth = months[MonthSelector.SelectedIndex];
                 var baseBill = diag.ResultBill;
+                baseBill.IsRecurring = diag.IsRecurring;
                 AnnualData[curMonth].Add(baseBill);
                 UpdateDashboard();
 
@@ -880,7 +1369,8 @@ namespace CrispyBills
                             Amount = baseBill.Amount,
                             Category = baseBill.Category,
                             DueDate = baseBill.DueDate.AddMonths(i - MonthSelector.SelectedIndex),
-                            IsPaid = false
+                            IsPaid = false,
+                            IsRecurring = true
                         };
                         AnnualData[monthKey].Add(copy);
                         addedCopies.Add((monthKey, copy));
@@ -999,6 +1489,9 @@ namespace CrispyBills
             }
         }
 
+        /// <summary>
+        /// Opens the add/edit dialog and applies recurring/non-recurring behavior based on dialog state.
+        /// </summary>
         private void EditBill_Click(object sender, RoutedEventArgs e)
         {
             if (BillsGrid.SelectedItem is not Bill b)
@@ -1013,7 +1506,8 @@ namespace CrispyBills
                 return;
             }
 
-            var diag = new BillDialog(b) { Owner = this };
+            int selectedMonthIndex = MonthSelector.SelectedIndex;
+            var diag = new BillDialog(b, b.IsRecurring) { Owner = this };
             if (diag.ShowDialog() == true && diag.ResultBill != null)
             {
                 if (MessageBox.Show("Are you sure you want to apply these changes?", "Confirm Edit", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
@@ -1026,7 +1520,8 @@ namespace CrispyBills
                         Amount = b.Amount,
                         Category = b.Category,
                         DueDate = b.DueDate,
-                        IsPaid = b.IsPaid
+                        IsPaid = b.IsPaid,
+                        IsRecurring = b.IsRecurring
                     };
 
                     // Apply changes
@@ -1035,15 +1530,17 @@ namespace CrispyBills
                     b.Category = diag.ResultBill.Category;
                     b.DueDate = diag.ResultBill.DueDate;
                     b.IsPaid = diag.ResultBill.IsPaid;
+                    b.IsRecurring = diag.ResultBill.IsRecurring;
                     UpdateDashboard();
 
                     // If user set recurring during edit, propagate to future months
                     var addedCopies = new List<(string month, Bill bill)>();
                     var modifiedCopies = new List<(string month, Bill originalState, Bill currentObj)>();
+                    var removedFutureCopies = new List<(string month, Bill bill)>();
 
                     if (diag.IsRecurring)
                     {
-                        int selectedIdx = MonthSelector.SelectedIndex;
+                        int selectedIdx = selectedMonthIndex;
                         for (int i = selectedIdx + 1; i < months.Length; i++)
                         {
                             var monthKey = months[i];
@@ -1055,13 +1552,14 @@ namespace CrispyBills
                                 modifiedCopies.Add((monthKey, new Bill
                                 {
                                     Id = existing.Id, Name = existing.Name, Amount = existing.Amount,
-                                    Category = existing.Category, DueDate = existing.DueDate, IsPaid = existing.IsPaid
+                                    Category = existing.Category, DueDate = existing.DueDate, IsPaid = existing.IsPaid, IsRecurring = existing.IsRecurring
                                 }, existing));
 
                                 // Update existing bill
                                 existing.Name = b.Name;
                                 existing.Amount = b.Amount;
                                 existing.Category = b.Category;
+                                existing.IsRecurring = true;
                                 // Update day of month, handling shorter months
                                 int daysInMonth = DateTime.DaysInMonth(existing.DueDate.Year, existing.DueDate.Month);
                                 int newDay = Math.Min(b.DueDate.Day, daysInMonth);
@@ -1077,13 +1575,31 @@ namespace CrispyBills
                                     Amount = b.Amount,
                                     Category = b.Category,
                                     DueDate = b.DueDate.AddMonths(i - selectedIdx),
-                                    IsPaid = false
+                                    IsPaid = false,
+                                    IsRecurring = true
                                 };
                                 AnnualData[monthKey].Add(copy);
                                 addedCopies.Add((monthKey, copy));
                             }
                         }
                         if (addedCopies.Count > 0 || modifiedCopies.Count > 0) UpdateDashboard();
+                    }
+                    else
+                    {
+                        // If recurring is unchecked, remove this bill from future months only.
+                        int selectedIdx = selectedMonthIndex;
+                        for (int i = selectedIdx + 1; i < months.Length; i++)
+                        {
+                            var monthKey = months[i];
+                            var toRemove = AnnualData[monthKey].Where(x => x.Id == b.Id).ToList();
+                            foreach (var futureBill in toRemove)
+                            {
+                                AnnualData[monthKey].Remove(futureBill);
+                                removedFutureCopies.Add((monthKey, futureBill));
+                            }
+                        }
+
+                        if (removedFutureCopies.Count > 0) UpdateDashboard();
                     }
 
                 PushUndo(() =>
@@ -1094,7 +1610,9 @@ namespace CrispyBills
                     b.Category = old.Category;
                     b.DueDate = old.DueDate;
                     b.IsPaid = old.IsPaid;
+                    b.IsRecurring = old.IsRecurring;
                     foreach (var (m, c) in addedCopies) AnnualData[m].Remove(c);
+                    foreach (var (m, c) in removedFutureCopies) AnnualData[m].Add(c);
                     foreach (var (m, state, obj) in modifiedCopies)
                     {
                         obj.Name = state.Name;
@@ -1102,6 +1620,7 @@ namespace CrispyBills
                         obj.Category = state.Category;
                         obj.DueDate = state.DueDate;
                         obj.IsPaid = state.IsPaid;
+                        obj.IsRecurring = state.IsRecurring;
                     }
                     UpdateDashboard();
                 },
@@ -1113,7 +1632,9 @@ namespace CrispyBills
                     b.Category = diag.ResultBill.Category;
                     b.DueDate = diag.ResultBill.DueDate;
                     b.IsPaid = diag.ResultBill.IsPaid;
+                    b.IsRecurring = diag.ResultBill.IsRecurring;
                     foreach (var (m, c) in addedCopies) AnnualData[m].Add(c);
+                    foreach (var (m, c) in removedFutureCopies) AnnualData[m].Remove(c);
                     foreach (var (m, state, obj) in modifiedCopies)
                     {
                         obj.Name = diag.ResultBill.Name;
@@ -1123,6 +1644,7 @@ namespace CrispyBills
                         int newDay = Math.Min(diag.ResultBill.DueDate.Day, daysInMonth);
                         obj.DueDate = new DateTime(obj.DueDate.Year, obj.DueDate.Month, newDay);
                         obj.IsPaid = state.IsPaid;
+                        obj.IsRecurring = true;
                     }
                     UpdateDashboard();
                 });
@@ -1180,6 +1702,9 @@ namespace CrispyBills
             }
         }
 
+        /// <summary>
+        /// Imports either month-scoped CSV or year-export CSV and maps valid rows into the selected month.
+        /// </summary>
         private void ImportCsv_Click(object sender, RoutedEventArgs e)
         {
             if (MonthSelector.SelectedIndex < 0) return;
@@ -1300,6 +1825,9 @@ namespace CrispyBills
             return field;
         }
 
+        /// <summary>
+        /// Parses one CSV line with support for quoted fields and escaped quotes.
+        /// </summary>
         private static List<string> ParseCsvLine(string line)
         {
             var fields = new List<string>();
@@ -1385,6 +1913,7 @@ namespace CrispyBills
 
         private void Exit_Click(object sender, RoutedEventArgs e)
         {
+            SaveGlobalNotes();
             Application.Current.Shutdown();
         }
         #endregion
@@ -1401,16 +1930,22 @@ namespace CrispyBills
         private void SetFontSize_Small(object sender, RoutedEventArgs e)
         {
             Application.Current.Resources["BaseFontSize"] = 14.0;
+            Application.Current.Resources["DataGridRowMinHeight"] = 24.0;
+            Application.Current.Resources["DataGridHeaderHeight"] = 28.0;
         }
 
         private void SetFontSize_Medium(object sender, RoutedEventArgs e)
         {
             Application.Current.Resources["BaseFontSize"] = 18.0;
+            Application.Current.Resources["DataGridRowMinHeight"] = 30.0;
+            Application.Current.Resources["DataGridHeaderHeight"] = 34.0;
         }
 
         private void SetFontSize_Large(object sender, RoutedEventArgs e)
         {
             Application.Current.Resources["BaseFontSize"] = 22.0;
+            Application.Current.Resources["DataGridRowMinHeight"] = 36.0;
+            Application.Current.Resources["DataGridHeaderHeight"] = 40.0;
         }
     }
 
@@ -1454,6 +1989,20 @@ namespace CrispyBills
                     _isPaid = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsPastDue));
+                }
+            }
+        }
+
+        private bool _isRecurring;
+        public bool IsRecurring
+        {
+            get => _isRecurring;
+            set
+            {
+                if (_isRecurring != value)
+                {
+                    _isRecurring = value;
+                    OnPropertyChanged();
                 }
             }
         }

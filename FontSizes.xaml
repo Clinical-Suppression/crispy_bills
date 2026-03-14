@@ -4,27 +4,38 @@
 
     <!-- Base Font Size -->
     <system:Double x:Key="BaseFontSize">18</system:Double>
+    <system:Double x:Key="DataGridRowMinHeight">30</system:Double>
+    <system:Double x:Key="DataGridHeaderHeight">34</system:Double>
 
-    <!-- Styles for controls -->
-    <Style TargetType="Control">
-        <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
-    </Style>
     <Style TargetType="TextBlock">
         <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
     </Style>
-    <Style TargetType="TextBox">
+    <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
         <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
     </Style>
-    <Style TargetType="Button">
+    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
         <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
     </Style>
-    <Style TargetType="ComboBox">
+    <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
         <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
     </Style>
-    <Style TargetType="MenuItem">
+    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
         <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
     </Style>
-    <Style TargetType="DataGrid">
+    <Style TargetType="Menu" BasedOn="{StaticResource {x:Type Menu}}">
+        <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
+    </Style>
+    <Style TargetType="ContextMenu" BasedOn="{StaticResource {x:Type ContextMenu}}">
+        <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
+    </Style>
+    <Style TargetType="DataGrid" BasedOn="{StaticResource {x:Type DataGrid}}">
+        <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
+    </Style>
+    <Style TargetType="DataGridRow">
+        <Setter Property="MinHeight" Value="{DynamicResource DataGridRowMinHeight}" />
+    </Style>
+    <Style TargetType="DataGridColumnHeader">
+        <Setter Property="Height" Value="{DynamicResource DataGridHeaderHeight}" />
         <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
     </Style>
 </ResourceDictionary>

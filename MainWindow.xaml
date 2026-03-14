@@ -1,6 +1,7 @@
 <Window x:Class="CrispyBills.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:sys="clr-namespace:System;assembly=mscorlib"
         Title="Crispy Bills" Height="920" Width="1460" MinWidth="1240" MinHeight="760"
         SizeToContent="Manual"
         Background="{DynamicResource WindowBackgroundBrush}"
@@ -25,6 +26,22 @@
     <Window.Resources>
         <!-- Common spacing -->
         <Thickness x:Key="ControlMargin">0,0,8,0</Thickness>
+        <x:Array x:Key="BillCategories" Type="{x:Type sys:String}">
+            <sys:String>General</sys:String>
+            <sys:String>Housing</sys:String>
+            <sys:String>Utilities</sys:String>
+            <sys:String>Groceries</sys:String>
+            <sys:String>Transportation</sys:String>
+            <sys:String>Insurance</sys:String>
+            <sys:String>Healthcare</sys:String>
+            <sys:String>Entertainment</sys:String>
+            <sys:String>Subscriptions</sys:String>
+            <sys:String>Savings</sys:String>
+            <sys:String>Debt</sys:String>
+            <sys:String>Education</sys:String>
+            <sys:String>Personal Care</sys:String>
+            <sys:String>Miscellaneous</sys:String>
+        </x:Array>
         <Style x:Key="RightAlignedCell" TargetType="TextBlock">
             <Setter Property="TextAlignment" Value="Right"/>
             <Setter Property="Padding" Value="0,0,6,0"/>
@@ -62,6 +79,111 @@
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Margin" Value="0,0,0,6"/>
         </Style>
+
+        <!-- Force themed submenu popups instead of OS default colors -->
+        <Style x:Key="AppMenuItemStyle" TargetType="{x:Type MenuItem}">
+            <Setter Property="Background" Value="{DynamicResource PanelBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource WindowForegroundBrush}"/>
+            <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,3"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type MenuItem}">
+                        <Border x:Name="OuterBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <ContentPresenter x:Name="HeaderHost"
+                                                  Grid.Column="0"
+                                                  ContentSource="Header"
+                                                  RecognizesAccessKey="True"
+                                                  Margin="8,2,8,2"
+                                                  VerticalAlignment="Center"/>
+
+                                <TextBlock x:Name="GestureText"
+                                           Grid.Column="1"
+                                           Margin="12,2,8,2"
+                                           VerticalAlignment="Center"
+                                           FontSize="{TemplateBinding FontSize}"
+                                           Text="{TemplateBinding InputGestureText}"
+                                           Foreground="{TemplateBinding Foreground}"/>
+
+                                <Path x:Name="Arrow"
+                                      Grid.Column="2"
+                                      Margin="8,0,8,0"
+                                      VerticalAlignment="Center"
+                                      Fill="{TemplateBinding Foreground}"
+                                      Data="M 0 0 L 4 3.5 L 0 7 Z"
+                                      Visibility="Collapsed"/>
+
+                                <Popup x:Name="SubMenuPopup"
+                                       Placement="Right"
+                                       AllowsTransparency="True"
+                                       Focusable="False"
+                                       IsOpen="{TemplateBinding IsSubmenuOpen}"
+                                       PopupAnimation="Fade">
+                                    <Border Background="{DynamicResource PanelBackgroundBrush}"
+                                            BorderBrush="{DynamicResource PanelBorderBrush}"
+                                            BorderThickness="1"
+                                            Padding="2">
+                                        <ScrollViewer CanContentScroll="True"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Auto">
+                                            <StackPanel IsItemsHost="True"
+                                                        KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Role" Value="TopLevelHeader">
+                                <Setter TargetName="OuterBorder" Property="Background" Value="Transparent"/>
+                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="Transparent"/>
+                                <Setter TargetName="GestureText" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="Arrow" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="SubMenuPopup" Property="Placement" Value="Bottom"/>
+                            </Trigger>
+
+                            <Trigger Property="Role" Value="TopLevelItem">
+                                <Setter TargetName="GestureText" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="Arrow" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+
+                            <Trigger Property="Role" Value="SubmenuHeader">
+                                <Setter TargetName="Arrow" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+
+                            <Trigger Property="Role" Value="SubmenuItem">
+                                <Setter TargetName="Arrow" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="{DynamicResource HintForegroundBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type MenuItem}" BasedOn="{StaticResource AppMenuItemStyle}"/>
+
     </Window.Resources>
 
     <DockPanel LastChildFill="True">
@@ -109,7 +231,7 @@
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
                         <TextBlock Text="Year:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <ComboBox x:Name="YearSelector" Width="80" SelectionChanged="YearSelector_SelectionChanged" VerticalAlignment="Center" IsEditable="False"/>
-                        <Button x:Name="NewYearBtn" Content="＋ New" Click="NewYear_Click" Style="{StaticResource ToolbarButton}" Margin="6,0,0,0" ToolTip="Create the next year (copies recurring December bills)"/>
+                        <Button x:Name="NewYearBtn" Content="New Year" Click="NewYear_Click" Style="{StaticResource ToolbarButton}" Margin="6,0,0,0" ToolTip="Create the next year (copies recurring December bills)"/>
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
@@ -204,6 +326,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
                     <TextBlock Text="Income:" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -227,8 +350,9 @@
                               MinHeight="200"
                               CanUserAddRows="False"
                               SelectionMode="Single"
-                              IsReadOnly="True"
-                              MouseDoubleClick="BillsGrid_MouseDoubleClick"
+                              IsReadOnly="False"
+                              BeginningEdit="BillsGrid_BeginningEdit"
+                              CellEditEnding="BillsGrid_CellEditEnding"
                               EnableRowVirtualization="True"
                               EnableColumnVirtualization="True"
                               VirtualizingPanel.IsVirtualizing="True"
@@ -275,14 +399,31 @@
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
-                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat=N2}" Width="110" ElementStyle="{StaticResource RightAlignedCell}"/>
-                            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="140"/>
-                            <DataGridTextColumn Header="Due" Binding="{Binding DueDate, StringFormat=d}" Width="110"/>
-                            <DataGridTemplateColumn Header="Status" Width="90" SortMemberPath="IsPaid">
+                            <DataGridTextColumn Header="Name" SortMemberPath="Name" Binding="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                            <DataGridTextColumn Header="Amount" SortMemberPath="Amount" Binding="{Binding Amount, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat=N2}" Width="110" ElementStyle="{StaticResource RightAlignedCell}"/>
+                            <DataGridComboBoxColumn Header="Category"
+                                                    SortMemberPath="Category"
+                                                    Width="140"
+                                                    ItemsSource="{StaticResource BillCategories}"
+                                                    SelectedItemBinding="{Binding Category, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <DataGridTemplateColumn Header="Due Date" SortMemberPath="DueDate" Width="130">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <TextBlock x:Name="StatusTxt" Text="Due" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource HintForegroundBrush}"/>
+                                        <TextBlock Text="{Binding DueDate, StringFormat=d}" VerticalAlignment="Center"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                                <DataGridTemplateColumn.CellEditingTemplate>
+                                    <DataTemplate>
+                                        <DatePicker SelectedDate="{Binding DueDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellEditingTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Status" Width="90" SortMemberPath="IsPaid" IsReadOnly="True">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Background="Transparent" Cursor="Hand" MouseLeftButtonUp="StatusCell_MouseLeftButtonUp">
+                                            <TextBlock x:Name="StatusTxt" Text="Due" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource HintForegroundBrush}"/>
+                                        </Border>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding IsPastDue}" Value="True">
                                                 <Setter TargetName="StatusTxt" Property="Text" Value="PAST DUE"/>
@@ -300,6 +441,25 @@
                             </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
+                </Border>
+
+                <Border Grid.Row="2" Margin="0,10,0,0" BorderBrush="{DynamicResource NotesAreaBorderBrush}" BorderThickness="1" CornerRadius="4" Background="{DynamicResource NotesAreaBackgroundBrush}" Padding="8">
+                    <StackPanel>
+                        <TextBlock Text="Notes" FontWeight="Bold" Margin="0,0,0,6" Foreground="{DynamicResource NotesHeaderBrush}"/>
+                        <TextBox x:Name="NotesBox"
+                                 AcceptsReturn="True"
+                                 Height="220"
+                                 TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 Background="{StaticResource NotebookPaperBrush}"
+                                 BorderBrush="{DynamicResource NotesAreaBorderBrush}"
+                                 Foreground="{DynamicResource NotesTextBrush}"
+                                 SnapsToDevicePixels="True"
+                                 UseLayoutRounding="True"
+                                 Padding="8,2,8,2"
+                                 TextChanged="NotesBox_TextChanged"
+                                 LostFocus="NotesBox_LostFocus"/>
+                    </StackPanel>
                 </Border>
 
             </Grid>

@@ -4,6 +4,9 @@ using System.Windows;
 
 namespace CrispyBills
 {
+    /// <summary>
+    /// Modal add/edit dialog for bill fields, including paid/recurring flags used by month propagation logic.
+    /// </summary>
     public partial class BillDialog : Window
     {
         // Common household categories - used to populate the category dropdown
@@ -28,6 +31,9 @@ namespace CrispyBills
         public Bill? ResultBill { get; private set; }
         public bool IsRecurring => RecurringCheck.IsChecked == true;
 
+        /// <summary>
+        /// Initializes the dialog with default category and current date.
+        /// </summary>
         public BillDialog()
         {
             InitializeComponent();
@@ -41,6 +47,22 @@ namespace CrispyBills
         }
 
         public BillDialog(Bill existing) : this()
+        {
+            InitializeFromExisting(existing, existing.IsRecurring);
+        }
+
+        /// <summary>
+        /// Initializes the dialog with an existing bill and explicit recurring state.
+        /// </summary>
+        public BillDialog(Bill existing, bool isRecurring) : this()
+        {
+            InitializeFromExisting(existing, isRecurring);
+        }
+
+        /// <summary>
+        /// Copies existing bill values into dialog controls while preserving custom categories.
+        /// </summary>
+        private void InitializeFromExisting(Bill existing, bool isRecurring)
         {
             ResultBill = existing;
             NameBox.Text = existing.Name;
@@ -63,8 +85,12 @@ namespace CrispyBills
 
             DueCalendar.SelectedDate = existing.DueDate;
             IsPaidCheck.IsChecked = existing.IsPaid;
+            RecurringCheck.IsChecked = isRecurring;
         }
 
+        /// <summary>
+        /// Validates user input and emits a normalized bill payload through <see cref="ResultBill"/>.
+        /// </summary>
         private void Ok_Click(object sender, RoutedEventArgs e)
         {
             var name = (NameBox.Text ?? "").Trim();
@@ -108,7 +134,8 @@ namespace CrispyBills
                 Amount = amt,
                 Category = selectedCategory,
                 DueDate = selectedDate,
-                IsPaid = paid
+                IsPaid = paid,
+                IsRecurring = IsRecurring
             };
 
             ResultBill = bill;
