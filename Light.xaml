@@ -23,6 +23,7 @@
 
     <Color x:Key="AccentColor">#FF2E8AE6</Color>
     <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="InvalidBorderBrush" Color="#FFD64545"/>
 
     <SolidColorBrush x:Key="ExpenseBarBrush" Color="#FF2E8AE6"/>
 

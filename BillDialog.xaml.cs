@@ -44,6 +44,7 @@ namespace CrispyBills
 
             // Default calendar selection
             DueCalendar.SelectedDate = DateTime.Now;
+            DueCalendar.DisplayDate = DateTime.Today;
         }
 
         public BillDialog(Bill existing) : this()
@@ -84,6 +85,8 @@ namespace CrispyBills
             }
 
             DueCalendar.SelectedDate = existing.DueDate;
+            // Keep the selected due date and open the calendar on the bill's context month from the main app.
+            DueCalendar.DisplayDate = existing.ContextPeriodStart;
             IsPaidCheck.IsChecked = existing.IsPaid;
             RecurringCheck.IsChecked = isRecurring;
         }

@@ -8,6 +8,7 @@
         Foreground="{DynamicResource WindowForegroundBrush}"
         KeyDown="Window_KeyDown"
         Loaded="Window_Loaded"
+        Closing="Window_Closing"
         PreviewMouseDown="Window_PreviewMouseDown"
         Deactivated="Window_Deactivated">
 
@@ -45,6 +46,23 @@
         <Style x:Key="RightAlignedCell" TargetType="TextBlock">
             <Setter Property="TextAlignment" Value="Right"/>
             <Setter Property="Padding" Value="0,0,6,0"/>
+        </Style>
+
+        <Style x:Key="GridTextEditStyle" TargetType="TextBox">
+            <EventSetter Event="KeyDown" Handler="GridTextEditBox_KeyDown"/>
+        </Style>
+
+        <Style x:Key="GridDueDateEditStyle" TargetType="TextBox">
+            <EventSetter Event="PreviewKeyDown" Handler="DueDateTextBox_KeyDown"/>
+            <EventSetter Event="PreviewTextInput" Handler="DueDateTextBox_PreviewTextInput"/>
+            <EventSetter Event="DataObject.Pasting" Handler="DueDateTextBox_Pasting"/>
+        </Style>
+
+        <Style x:Key="GridComboEditStyle" TargetType="ComboBox">
+            <EventSetter Event="GotKeyboardFocus" Handler="GridComboEdit_GotKeyboardFocus"/>
+            <EventSetter Event="LostKeyboardFocus" Handler="GridComboEdit_LostKeyboardFocus"/>
+            <EventSetter Event="KeyDown" Handler="GridComboEdit_KeyDown"/>
+            <EventSetter Event="SelectionChanged" Handler="GridComboEdit_SelectionChanged"/>
         </Style>
 
         <!-- Simple flat button style -->
@@ -194,7 +212,7 @@
                 <MenuItem Header="_Save" Click="Save_Click" InputGestureText="Ctrl+S"/>
                 <Separator/>
                 <MenuItem Header="_Import CSV..." Click="ImportCsv_Click"/>
-                <MenuItem Header="Export _CSV (Year)..." Click="ExportCsv_Click"/>
+                <MenuItem Header="Export _CSV..." Click="ExportCsv_Click"/>
                 <Separator/>
                 <MenuItem Header="E_xit" Click="Exit_Click"/>
             </MenuItem>
@@ -204,16 +222,21 @@
                 <Separator/>
                 <MenuItem Header="_Add Bill..." Click="OpenAddDialog_Click"/>
                 <MenuItem Header="_Rollover Unpaid..." Click="Rollover_Click"/>
+                <Separator/>
+                <MenuItem Header="_Fix Due Dates (Current Year)..." Click="FixDueDatesCurrentYear_Click"/>
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="Toggle _Theme" Click="ToggleTheme_Click"/>
                 <MenuItem Header="_Monthly Summary" Click="SendSummary_Click"/>
+                <MenuItem Header="_Enter Moves Down" IsCheckable="True" Click="EnterMovesDown_Click"/>
                 <Separator/>
                 <MenuItem Header="Text _Size">
                     <MenuItem Header="_Small" Click="SetFontSize_Small" />
                     <MenuItem Header="_Medium" Click="SetFontSize_Medium" />
                     <MenuItem Header="_Large" Click="SetFontSize_Large" />
                 </MenuItem>
+                <Separator/>
+                <MenuItem Header="Grid Edit _Checklist" Click="GridEditChecklist_Click"/>
             </MenuItem>
         </Menu>
 
@@ -352,7 +375,6 @@
                               SelectionMode="Single"
                               IsReadOnly="False"
                               BeginningEdit="BillsGrid_BeginningEdit"
-                              CellEditEnding="BillsGrid_CellEditEnding"
                               EnableRowVirtualization="True"
                               EnableColumnVirtualization="True"
                               VirtualizingPanel.IsVirtualizing="True"
@@ -399,22 +421,27 @@
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" SortMemberPath="Name" Binding="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Width="*"/>
-                            <DataGridTextColumn Header="Amount" SortMemberPath="Amount" Binding="{Binding Amount, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat=N2}" Width="110" ElementStyle="{StaticResource RightAlignedCell}"/>
+                            <DataGridTextColumn Header="Name" SortMemberPath="Name" Binding="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=Explicit}" Width="*" EditingElementStyle="{StaticResource GridTextEditStyle}"/>
+                            <DataGridTextColumn Header="Amount" SortMemberPath="Amount" Binding="{Binding Amount, Mode=TwoWay, UpdateSourceTrigger=Explicit, StringFormat=N2}" Width="110" ElementStyle="{StaticResource RightAlignedCell}" EditingElementStyle="{StaticResource GridTextEditStyle}"/>
                             <DataGridComboBoxColumn Header="Category"
                                                     SortMemberPath="Category"
                                                     Width="140"
                                                     ItemsSource="{StaticResource BillCategories}"
-                                                    SelectedItemBinding="{Binding Category, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                                    SelectedItemBinding="{Binding Category, Mode=TwoWay, UpdateSourceTrigger=Explicit}"
+                                                    EditingElementStyle="{StaticResource GridComboEditStyle}"/>
                             <DataGridTemplateColumn Header="Due Date" SortMemberPath="DueDate" Width="130">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <TextBlock Text="{Binding DueDate, StringFormat=d}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding DueDate, StringFormat=MM/dd/yyyy}" VerticalAlignment="Center"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                                 <DataGridTemplateColumn.CellEditingTemplate>
                                     <DataTemplate>
-                                        <DatePicker SelectedDate="{Binding DueDate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBox Text="{Binding DueDate, Mode=OneWay, StringFormat=MM/dd/yyyy}"
+                                                 VerticalContentAlignment="Center"
+                                                 Padding="4,2"
+                                                 ToolTip="Use MM/DD/YYYY"
+                                                 Style="{StaticResource GridDueDateEditStyle}"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellEditingTemplate>
                             </DataGridTemplateColumn>
@@ -472,6 +499,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,6,0,0">
                             <Canvas x:Name="PieChartCanvas" Width="300" Height="300" Background="Transparent" HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -483,6 +511,8 @@
                             </Border>
                             <TextBlock Text="  Usage" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="{DynamicResource HintForegroundBrush}"/>
                         </StackPanel>
+
+                        <StackPanel x:Name="PieLegendPanel" Grid.Row="2" Margin="0,10,0,0"/>
                     </Grid>
                 </Border>
                 <Button x:Name="BackButton" Content="← Back to Categories" Click="BackButton_Click" Style="{StaticResource ToolbarButton}" Margin="0,10,0,0" Visibility="Collapsed"/>
