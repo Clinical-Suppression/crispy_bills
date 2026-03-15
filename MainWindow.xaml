@@ -116,19 +116,28 @@
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
+                                <Path x:Name="CheckGlyph"
+                                      Grid.Column="0"
+                                      Margin="8,0,6,0"
+                                      VerticalAlignment="Center"
+                                      Fill="{TemplateBinding Foreground}"
+                                      Data="M 0 4 L 2.2 6.2 L 7 1.4 L 8.2 2.6 L 2.2 8.6 L -1.2 5.2 Z"
+                                      Visibility="Collapsed"/>
+
                                 <ContentPresenter x:Name="HeaderHost"
-                                                  Grid.Column="0"
+                                                  Grid.Column="1"
                                                   ContentSource="Header"
                                                   RecognizesAccessKey="True"
                                                   Margin="8,2,8,2"
                                                   VerticalAlignment="Center"/>
 
                                 <TextBlock x:Name="GestureText"
-                                           Grid.Column="1"
+                                           Grid.Column="2"
                                            Margin="12,2,8,2"
                                            VerticalAlignment="Center"
                                            FontSize="{TemplateBinding FontSize}"
@@ -136,7 +145,7 @@
                                            Foreground="{TemplateBinding Foreground}"/>
 
                                 <Path x:Name="Arrow"
-                                      Grid.Column="2"
+                                      Grid.Column="3"
                                       Margin="8,0,8,0"
                                       VerticalAlignment="Center"
                                       Fill="{TemplateBinding Foreground}"
@@ -168,23 +177,34 @@
                             <Trigger Property="Role" Value="TopLevelHeader">
                                 <Setter TargetName="OuterBorder" Property="Background" Value="Transparent"/>
                                 <Setter TargetName="OuterBorder" Property="BorderBrush" Value="Transparent"/>
+                                <Setter TargetName="CheckGlyph" Property="Visibility" Value="Collapsed"/>
                                 <Setter TargetName="GestureText" Property="Visibility" Value="Collapsed"/>
                                 <Setter TargetName="Arrow" Property="Visibility" Value="Collapsed"/>
                                 <Setter TargetName="SubMenuPopup" Property="Placement" Value="Bottom"/>
                             </Trigger>
 
                             <Trigger Property="Role" Value="TopLevelItem">
+                                <Setter TargetName="CheckGlyph" Property="Visibility" Value="Collapsed"/>
                                 <Setter TargetName="GestureText" Property="Visibility" Value="Collapsed"/>
                                 <Setter TargetName="Arrow" Property="Visibility" Value="Collapsed"/>
                             </Trigger>
 
                             <Trigger Property="Role" Value="SubmenuHeader">
+                                <Setter TargetName="CheckGlyph" Property="Visibility" Value="Collapsed"/>
                                 <Setter TargetName="Arrow" Property="Visibility" Value="Visible"/>
                             </Trigger>
 
                             <Trigger Property="Role" Value="SubmenuItem">
                                 <Setter TargetName="Arrow" Property="Visibility" Value="Collapsed"/>
                             </Trigger>
+
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsCheckable" Value="True"/>
+                                    <Condition Property="IsChecked" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible"/>
+                            </MultiTrigger>
 
                             <Trigger Property="IsHighlighted" Value="True">
                                 <Setter TargetName="OuterBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
@@ -416,6 +436,8 @@
                         </DataGrid.RowStyle>
                         <DataGrid.ContextMenu>
                             <ContextMenu>
+                                <MenuItem Header="Add Bill" Click="OpenAddDialog_Click"/>
+                                <Separator/>
                                 <MenuItem Header="Edit" Click="EditBill_Click"/>
                                 <MenuItem Header="Delete" Click="DeleteBill_Click"/>
                             </ContextMenu>

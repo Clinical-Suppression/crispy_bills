@@ -150,19 +150,26 @@ def row_exists(cur: sqlite3.Cursor, row: dict):
     return cur.fetchone() is not None
 
 
+def default_data_root() -> str:
+    home = os.path.expanduser("~")
+    docs = os.path.join(home, "Documents")
+    return os.path.join(docs, "CrispyBills")
+
+
 def main():
-    default_root = r"C:\Users\Chris\Documents\CrispyBills"
-    default_csv = os.path.join(default_root, "db_backups", "auto_tests", "auto_export_20260315_041536.csv")
-    default_test_db_dir = os.path.join(default_root, "db_backups", "auto_tests", "test_dbs")
+    root = default_data_root()
 
     parser = argparse.ArgumentParser(description="Compare exported CSV rows against test DB rows.")
-    parser.add_argument("--csv-path", default=default_csv, help="Path to auto_export_*.csv")
-    parser.add_argument("--test-db-dir", default=default_test_db_dir, help="Directory containing CrispyBills_<year>_test.db files")
+    parser.add_argument("--root", default=root, help="Base CrispyBills data directory (default: ~/Documents/CrispyBills)")
+    parser.add_argument("--csv-path", default="", help="Path to auto_export_*.csv (defaults to latest under --root)")
+    parser.add_argument("--test-db-dir", default="", help="Directory containing CrispyBills_<year>_test.db files (defaults to --root/db_backups/auto_tests/test_dbs)")
     args = parser.parse_args()
 
+    root = args.root
     csv_path = args.csv_path
+    test_db_dir = args.test_db_dir or os.path.join(root, "db_backups", "auto_tests", "test_dbs")
     if not os.path.exists(csv_path):
-        auto_test_dir = os.path.join(default_root, "db_backups", "auto_tests")
+        auto_test_dir = os.path.join(root, "db_backups", "auto_tests")
         candidates = []
         if os.path.isdir(auto_test_dir):
             for name in os.listdir(auto_test_dir):
@@ -177,10 +184,10 @@ def main():
         else:
             raise FileNotFoundError(f"CSV not found: {args.csv_path}")
 
-    os.makedirs(args.test_db_dir, exist_ok=True)
+    os.makedirs(test_db_dir, exist_ok=True)
     tag = derive_tag_from_csv(csv_path)
-    output_path = os.path.join(args.test_db_dir, f"per_row_diff_{tag}.txt")
-    preview_path = os.path.join(args.test_db_dir, f"parsed_rows_preview_{tag}.txt")
+    output_path = os.path.join(test_db_dir, f"per_row_diff_{tag}.txt")
+    preview_path = os.path.join(test_db_dir, f"parsed_rows_preview_{tag}.txt")
 
     rows = parse_csv_rows(csv_path)
     missing = []
@@ -190,7 +197,7 @@ def main():
     try:
         for row in rows:
             year = row["year"]
-            db_file = os.path.join(args.test_db_dir, f"CrispyBills_{year}_test.db")
+            db_file = os.path.join(test_db_dir, f"CrispyBills_{year}_test.db")
             if not os.path.exists(db_file):
                 missing.append((row, f"DB missing: {db_file}"))
                 continue

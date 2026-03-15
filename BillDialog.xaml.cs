@@ -43,8 +43,15 @@ namespace CrispyBills
             CategoryBox.SelectedItem = "General";
 
             // Default calendar selection
-            DueCalendar.SelectedDate = DateTime.Now;
-            DueCalendar.DisplayDate = DateTime.Today;
+            InitializeCalendarDefaults(DateTime.Today);
+        }
+
+        /// <summary>
+        /// Initializes the dialog with a target period so the calendar opens on that year/month.
+        /// </summary>
+        public BillDialog(DateTime contextPeriodStart) : this()
+        {
+            InitializeCalendarDefaults(contextPeriodStart);
         }
 
         public BillDialog(Bill existing) : this()
@@ -89,6 +96,15 @@ namespace CrispyBills
             DueCalendar.DisplayDate = existing.ContextPeriodStart;
             IsPaidCheck.IsChecked = existing.IsPaid;
             RecurringCheck.IsChecked = isRecurring;
+        }
+
+        private void InitializeCalendarDefaults(DateTime contextPeriodStart)
+        {
+            var monthStart = new DateTime(contextPeriodStart.Year, contextPeriodStart.Month, 1);
+            int day = Math.Min(DateTime.Today.Day, DateTime.DaysInMonth(monthStart.Year, monthStart.Month));
+
+            DueCalendar.DisplayDate = monthStart;
+            DueCalendar.SelectedDate = new DateTime(monthStart.Year, monthStart.Month, day);
         }
 
         /// <summary>

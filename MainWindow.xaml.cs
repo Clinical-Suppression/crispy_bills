@@ -11,6 +11,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using Microsoft.Data.Sqlite;
 using Microsoft.Win32;
 using System.Diagnostics;
@@ -2718,7 +2719,7 @@ namespace CrispyBills
             while (current != null)
             {
                 if (ReferenceEquals(current, ancestor)) return true;
-                current = VisualTreeHelper.GetParent(current);
+                current = GetParentObject(current);
             }
 
             return false;
@@ -2729,9 +2730,24 @@ namespace CrispyBills
             while (child != null)
             {
                 if (child is T typed) return typed;
-                child = VisualTreeHelper.GetParent(child);
+                child = GetParentObject(child);
             }
             return null;
+        }
+
+        private static DependencyObject? GetParentObject(DependencyObject child)
+        {
+            if (child is Visual || child is Visual3D)
+            {
+                return VisualTreeHelper.GetParent(child);
+            }
+
+            if (child is FrameworkContentElement frameworkContent)
+            {
+                return frameworkContent.Parent;
+            }
+
+            return LogicalTreeHelper.GetParent(child);
         }
 
         private static T? FindVisualChild<T>(DependencyObject? parent) where T : DependencyObject
@@ -2817,23 +2833,27 @@ namespace CrispyBills
                 return;
             }
 
-            var diag = new BillDialog { Owner = this };
+            int selectedMonthIndex = MonthSelector.SelectedIndex;
+            int targetYear = int.TryParse(CurrentYear, out var parsedYear) ? parsedYear : DateTime.Today.Year;
+            var targetPeriod = new DateTime(targetYear, selectedMonthIndex + 1, 1);
+
+            var diag = new BillDialog(targetPeriod) { Owner = this };
             if (diag.ShowDialog() == true && diag.ResultBill != null)
             {
                 // Add the bill to the selected month
-                string curMonth = months[MonthSelector.SelectedIndex];
+                string curMonth = months[selectedMonthIndex];
                 var baseBill = diag.ResultBill;
                 baseBill.IsRecurring = diag.IsRecurring;
                 AssignBillContext(baseBill, curMonth);
                 AnnualData[curMonth].Add(baseBill);
                 UpdateDashboard();
 
-                bool recurring = diag.IsRecurring && MonthSelector.SelectedIndex < 11;
+                bool recurring = diag.IsRecurring && selectedMonthIndex < 11;
 
                 var addedCopies = new List<(string month, Bill bill)>();
                 if (recurring)
                 {
-                    int startIdx = MonthSelector.SelectedIndex + 1;
+                    int startIdx = selectedMonthIndex + 1;
                     for (int i = startIdx; i < months.Length; i++)
                     {
                         var monthKey = months[i];
@@ -2843,7 +2863,7 @@ namespace CrispyBills
                             Name = baseBill.Name,
                             Amount = baseBill.Amount,
                             Category = baseBill.Category,
-                            DueDate = baseBill.DueDate.AddMonths(i - MonthSelector.SelectedIndex),
+                            DueDate = baseBill.DueDate.AddMonths(i - selectedMonthIndex),
                             IsPaid = false,
                             IsRecurring = true
                         };
