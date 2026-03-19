@@ -12,3 +12,8 @@ All notable changes to this project will be documented in this file.
 ### Documentation
 - docs: update documentation (873b257)
 
+## 1.2.3 - 2026-03-18
+
+### Chores
+- chore: update build and release automation (29efb84)
+
