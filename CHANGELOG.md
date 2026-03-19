@@ -48,3 +48,8 @@ All notable changes to this project will be documented in this file.
 - chore: update README.md (ec7ba07)
 - chore: update README.md (cebe195)
 
+## 1.3.0 - 2026-03-18
+
+### Features
+- feat: harden publish flow and document release recovery (11ad341)
+
