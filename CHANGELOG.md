@@ -76,4 +76,8 @@ All notable changes to this project will be documented in this file.
 - chore: update build and release automation (7f6131f)
 - chore: update build and release automation (4935430)
 
+## 1.3.4 - 2026-03-19
+
+### CI
+- ci: update ci workflows (726e2ca)
 
