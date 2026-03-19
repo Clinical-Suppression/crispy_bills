@@ -7,3 +7,8 @@ All notable changes to this project will be documented in this file.
 ### CI
 - ci: update ci workflows (051e462)
 
+## 1.2.2 - 2026-03-18
+
+### Documentation
+- docs: update documentation (873b257)
+
