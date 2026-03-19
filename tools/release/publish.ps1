@@ -89,6 +89,81 @@ function New-ArtifactManifest {
     return $manifest
 }
 
+function Test-GhReleaseExists {
+    param(
+        [Parameter(Mandatory = $true)][string]$GhCommand,
+        [Parameter(Mandatory = $true)][string]$Tag,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+    )
+
+    Push-Location $WorkingDirectory
+    try {
+        & $GhCommand 'release' 'view' $Tag *> $null
+        return ($LASTEXITCODE -eq 0)
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Invoke-GhReleaseCreateAndUpload {
+    param(
+        [Parameter(Mandatory = $true)][string]$GhCommand,
+        [Parameter(Mandatory = $true)][string]$Tag,
+        [Parameter(Mandatory = $true)][string]$NotesPath,
+        [Parameter(Mandatory = $true)][string[]]$Artifacts,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory
+    )
+
+    $maxAttempts = 3
+    $releaseReady = $false
+
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            Invoke-LoggedCommand -Command $GhCommand -Arguments @('release', 'create', $Tag, '--title', $Tag, '--notes-file', $NotesPath) -WorkingDirectory $WorkingDirectory
+            $releaseReady = $true
+            break
+        }
+        catch {
+            if (Test-GhReleaseExists -GhCommand $GhCommand -Tag $Tag -WorkingDirectory $WorkingDirectory) {
+                Write-Warning "GitHub release $Tag already exists after create attempt; continuing with asset uploads."
+                $releaseReady = $true
+                break
+            }
+
+            if ($attempt -ge $maxAttempts) {
+                throw
+            }
+
+            $sleepSeconds = 2 * $attempt
+            Write-Warning "GitHub release create attempt $attempt/$maxAttempts failed. Retrying in $sleepSeconds seconds..."
+            Start-Sleep -Seconds $sleepSeconds
+        }
+    }
+
+    if (-not $releaseReady) {
+        throw "Unable to create GitHub release $Tag after $maxAttempts attempts."
+    }
+
+    foreach ($artifact in $Artifacts) {
+        for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+                Invoke-LoggedCommand -Command $GhCommand -Arguments @('release', 'upload', $Tag, $artifact, '--clobber') -WorkingDirectory $WorkingDirectory
+                break
+            }
+            catch {
+                if ($attempt -ge $maxAttempts) {
+                    throw
+                }
+
+                $sleepSeconds = 2 * $attempt
+                Write-Warning "Asset upload failed for $(Split-Path -Leaf $artifact) attempt $attempt/$maxAttempts. Retrying in $sleepSeconds seconds..."
+                Start-Sleep -Seconds $sleepSeconds
+            }
+        }
+    }
+}
+
 function Get-WorkingTreeStatus {
     $status = (& git status --porcelain | Out-String).Trim()
     return $status
@@ -393,11 +468,6 @@ $branchPushed = $false
 $tagPushed = $false
 $githubReleaseCreated = $false
 
-$releaseArgs = @('release', 'create', $tag, '--title', $tag, '--notes-file', $notesPath)
-foreach ($artifact in $artifacts) {
-    $releaseArgs += $artifact
-}
-
 try {
     Invoke-LoggedCommand -Command 'git' -Arguments @('commit', '-m', "release: $tag") -WorkingDirectory $root
     $releaseCommitCreated = $true
@@ -422,7 +492,7 @@ try {
             throw 'GitHub CLI not found. Cannot create GitHub release.'
         }
 
-        Invoke-LoggedCommand -Command $gh.Source -Arguments $releaseArgs -WorkingDirectory $root
+        Invoke-GhReleaseCreateAndUpload -GhCommand $gh.Source -Tag $tag -NotesPath $notesPath -Artifacts $artifacts -WorkingDirectory $root
         $githubReleaseCreated = $true
     }
 }
