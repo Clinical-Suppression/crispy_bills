@@ -17,13 +17,17 @@ function Test-GhReleaseExists {
 
     Push-Location $WorkingDirectory
     try {
-        try {
-            & $GhCommand 'release' 'view' $ReleaseTag 2>$null *> $null
-            return ($LASTEXITCODE -eq 0)
+        $output = & $GhCommand 'release' 'view' $ReleaseTag 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            return $true
         }
-        catch {
+
+        $outputText = ($output | Out-String).Trim()
+        if ($outputText -match '(?i)release not found|not found') {
             return $false
         }
+
+        throw "gh release view $ReleaseTag failed: $outputText"
     }
     finally {
         Pop-Location

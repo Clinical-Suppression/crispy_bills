@@ -159,7 +159,7 @@ public sealed class BillingService
     {
         return _currentData.BillsByMonth[month]
             .GroupBy(x => string.IsNullOrWhiteSpace(x.Category) ? "General" : x.Category.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Select(g => (g.First().Category, g.Sum(x => x.Amount)))
+            .Select(g => (string.IsNullOrWhiteSpace(g.Key) ? "General" : g.Key, g.Sum(x => x.Amount)))
             .OrderByDescending(x => x.Item2)
             .ToList();
     }

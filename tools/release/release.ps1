@@ -37,8 +37,40 @@ function Release-Windows {
 function Release-Mobile {
     $outDir = Join-Path $paths.ReleaseRoot 'mobile'
     Ensure-Directory -Path $outDir
-
+    # Validate JDK and Android SDK (throws with actionable message if missing)
     $sdk = Get-JavaAndAndroidSdk
+
+    # Attempt to auto-accept SDK licenses non-interactively by piping 'y' repeatedly.
+    # This may succeed on developer machines; if it fails, we emit a clear instruction.
+    # Coerce SdkPath to a single string in case callers returned an array
+    $sdkPath = $sdk.SdkPath
+    if ($sdkPath -is [System.Array]) { $sdkPath = $sdkPath | Select-Object -First 1 }
+
+    $sdkmanagerPaths = @(
+        Join-Path $sdkPath 'cmdline-tools\latest\bin\sdkmanager.bat'
+        Join-Path $sdkPath 'cmdline-tools\latest\bin\sdkmanager.cmd'
+        Join-Path $sdkPath 'cmdline-tools\bin\sdkmanager.bat'
+        Join-Path $sdkPath 'cmdline-tools\bin\sdkmanager.cmd'
+        Join-Path $sdkPath 'tools\bin\sdkmanager.bat'
+        Join-Path $sdkPath 'tools\bin\sdkmanager.cmd'
+    )
+    $sdkmanager = $sdkmanagerPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($sdkmanager) {
+        try {
+            Write-Host "Attempting to accept Android SDK licenses via: $sdkmanager"
+            # Pipe many 'y' responses to cover multiple license prompts.
+            1..100 | ForEach-Object { 'y' } | & $sdkmanager --sdk_root=$($sdk.SdkPath) --licenses | Out-Null
+            Write-Host 'Android SDK licenses accepted (or were already accepted).'
+        }
+        catch {
+            Write-Host 'Could not auto-accept Android SDK licenses. Run manually:'
+            Write-Host "  $sdkmanager --sdk_root=$($sdk.SdkPath) --licenses"
+            Write-Host 'Then re-run the release.'
+        }
+    }
+    else {
+        Write-Host 'sdkmanager not found; ensure Android cmdline-tools are installed and on disk.'
+    }
     Invoke-LoggedCommand -Command 'dotnet' -Arguments @('publish', $androidProject, '-f', 'net9.0-android', '-c', 'Release', '-o', $outDir, '-p:AndroidPackageFormats=apk', "-p:JavaSdkDirectory=$($sdk.JdkPath)", "-p:AndroidSdkDirectory=$($sdk.SdkPath)") -WorkingDirectory $root
 
     $apk = Get-ChildItem -Path $outDir -Recurse -Filter '*.apk' -File | Select-Object -First 1

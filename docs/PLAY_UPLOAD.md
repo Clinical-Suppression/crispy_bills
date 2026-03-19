@@ -18,7 +18,7 @@ It is safe by default:
 1. ANDROID_KEY_PASSWORD
 
 1. You have a Google Play Console app created with package name:
-1. `com.companyname.crispybills.mobile.android` (or your chosen package)
+1. `com.crispybills.mobile.android` (or your chosen package)
 
 ## 2. Create Google Service Account For Play API
 

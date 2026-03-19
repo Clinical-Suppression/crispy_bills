@@ -258,7 +258,10 @@ namespace CrispyBills
                     var err = Path.Combine(testDbFolder, $"testdb_error_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
                     File.WriteAllText(err, ex.ToString());
                 }
-                catch { }
+                catch (Exception writeEx)
+                {
+                    LogNonFatal("ApplyPackageToTestDbs error file write", writeEx);
+                }
             }
         }
 
@@ -347,7 +350,9 @@ namespace CrispyBills
                     else
                     {
                         LogNonFatal($"RunClosingBackupSequenceAsync timeout after {closeBackupTimeout.TotalSeconds:0} seconds");
-                        statusText.Text = "Backup timed out. Closing app to avoid hanging...";
+                        statusText.Text = "Backup is taking longer than expected. Waiting for it to finish before closing...";
+                        await persistTask;
+                        statusText.Text = "Backup complete. Closing app...";
                     }
                 }
                 catch (Exception ex)
@@ -964,9 +969,9 @@ namespace CrispyBills
 
                 NotesBox.Text = string.Empty;
             }
-            catch
+            catch (Exception ex)
             {
-                NotesBox.Text = string.Empty;
+                LogNonFatal("LoadGlobalNotes", ex);
             }
         }
 

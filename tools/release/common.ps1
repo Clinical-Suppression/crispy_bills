@@ -55,7 +55,35 @@ function Write-TaskDiagnostics {
 }
 
 function Get-WorkspaceRoot {
-    return (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+    $resolved = Resolve-Path (Join-Path $PSScriptRoot '..\..')
+    if ($resolved -is [System.Array]) {
+        $resolved = $resolved[0]
+    }
+    return $resolved.Path
+}
+
+function Get-FirstPathValue {
+    param([Parameter(Mandatory = $true)]$Value)
+
+    if ($Value -is [System.Array]) {
+        foreach ($item in $Value) {
+            if ($null -ne $item -and -not [string]::IsNullOrWhiteSpace([string]$item)) {
+                return [string]$item
+            }
+        }
+
+        return $null
+    }
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$Value)) {
+        return $null
+    }
+
+    return [string]$Value
 }
 
 function ConvertTo-CommandLineArgument {
@@ -93,30 +121,35 @@ function Invoke-LoggedCommand {
     Write-Host "==> $display"
 
     Push-Location $WorkingDirectory
-    try {
-        $stdoutPath = [System.IO.Path]::GetTempFileName()
-        $stderrPath = [System.IO.Path]::GetTempFileName()
+
         try {
-            $quotedArguments = @($Arguments | ForEach-Object { ConvertTo-CommandLineArgument -Value $_ }) -join ' '
-            $process = Start-Process -FilePath $Command -ArgumentList $quotedArguments -WorkingDirectory $WorkingDirectory -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+            $stdoutPath = [System.IO.Path]::GetTempFileName()
+            $stderrPath = [System.IO.Path]::GetTempFileName()
+            try {
+                # Build a properly quoted argument string so that arguments containing
+                # spaces are preserved when passed to the child process. Start-Process
+                # does not reliably quote complex arguments when given an array,
+                # so we compose a single string using ConvertTo-CommandLineArgument.
+                $quotedArguments = @($Arguments | ForEach-Object { ConvertTo-CommandLineArgument -Value $_ }) -join ' '
+                $process = Start-Process -FilePath $Command -ArgumentList $quotedArguments -WorkingDirectory $WorkingDirectory -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
 
-            $stdoutText = if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath -Raw } else { '' }
-            $stderrText = if (Test-Path $stderrPath) { Get-Content -Path $stderrPath -Raw } else { '' }
+                $stdoutText = if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath -Raw } else { '' }
+                $stderrText = if (Test-Path $stderrPath) { Get-Content -Path $stderrPath -Raw } else { '' }
 
-            $commandOutput = @()
-            if (-not [string]::IsNullOrWhiteSpace($stdoutText)) {
-                $commandOutput += $stdoutText.TrimEnd("`r", "`n")
+                $commandOutput = @()
+                if (-not [string]::IsNullOrWhiteSpace($stdoutText)) {
+                    $commandOutput += $stdoutText.TrimEnd("`r", "`n")
+                }
+                if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+                    $commandOutput += $stderrText.TrimEnd("`r", "`n")
+                }
+
+                $global:LASTEXITCODE = $process.ExitCode
             }
-            if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
-                $commandOutput += $stderrText.TrimEnd("`r", "`n")
+            finally {
+                if (Test-Path $stdoutPath) { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue }
+                if (Test-Path $stderrPath) { Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue }
             }
-
-            $global:LASTEXITCODE = $process.ExitCode
-        }
-        finally {
-            if (Test-Path $stdoutPath) { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $stderrPath) { Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue }
-        }
 
         if ($null -ne $commandOutput) {
             $commandOutput | Out-Host
@@ -139,24 +172,71 @@ function Invoke-LoggedCommand {
 }
 
 function Get-JavaAndAndroidSdk {
-    $jdkRoot = Join-Path $env:LOCALAPPDATA 'Programs\OpenJDK'
-    if (-not (Test-Path $jdkRoot)) {
-        throw "OpenJDK directory not found: $jdkRoot"
+    # Prefer explicit environment variables when provided
+    $jdkCandidates = @()
+    if ($env:JAVA_HOME) { $jdkCandidates += $env:JAVA_HOME }
+
+    $localJdkRoot = Join-Path $env:LOCALAPPDATA 'Programs\OpenJDK'
+    if (Test-Path $localJdkRoot) {
+        $localJdks = Get-ChildItem $localJdkRoot -Directory | ForEach-Object { $_.FullName }
+        $jdkCandidates += $localJdks
     }
 
-    $jdkPath = (Get-ChildItem $jdkRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
-    if (-not $jdkPath) {
-        throw 'No OpenJDK installation found under LOCALAPPDATA.'
+    $validJdk = $null
+    foreach ($c in $jdkCandidates | Sort-Object -Unique -Descending) {
+        $c = Get-FirstPathValue -Value $c
+        if (-not $c) { continue }
+        $jarExe = Join-Path $c 'bin\jar.exe'
+        $jar = $jarExe
+        if (-not (Test-Path $jar)) { $jar = Join-Path $c 'bin\jar' }
+        if (Test-Path $jar) {
+            $validJdk = $c
+            break
+        }
     }
 
-    $sdkPath = Join-Path $env:LOCALAPPDATA 'Android\Sdk'
-    if (-not (Test-Path $sdkPath)) {
-        throw "Android SDK directory not found: $sdkPath"
+    if (-not $validJdk) {
+        throw "No valid JDK found. Set `JAVA_HOME` to a JDK 17+ installation (containing `bin\\jar.exe`) or install OpenJDK under `$env:LOCALAPPDATA\\Programs\\OpenJDK`."
+    }
+
+    # Android SDK detection
+    $sdkCandidates = @()
+    if ($env:ANDROID_SDK_ROOT) { $sdkCandidates += $env:ANDROID_SDK_ROOT }
+    if ($env:ANDROID_HOME) { $sdkCandidates += $env:ANDROID_HOME }
+    $localSdk = Join-Path $env:LOCALAPPDATA 'Android\Sdk'
+    if (Test-Path $localSdk) { $sdkCandidates += $localSdk }
+
+    $validSdk = $null
+    foreach ($s in $sdkCandidates | Sort-Object -Unique -Descending) {
+        $s = Get-FirstPathValue -Value $s
+        if (-not $s) { continue }
+        if (-not (Test-Path $s)) { continue }
+
+        $sdkManagerPaths = @(
+            Join-Path $s 'cmdline-tools\latest\bin\sdkmanager.bat'
+            Join-Path $s 'cmdline-tools\latest\bin\sdkmanager.cmd'
+            Join-Path $s 'cmdline-tools\bin\sdkmanager.bat'
+            Join-Path $s 'cmdline-tools\bin\sdkmanager.cmd'
+            Join-Path $s 'tools\bin\sdkmanager.bat'
+            Join-Path $s 'tools\bin\sdkmanager.cmd'
+        )
+
+        foreach ($p in $sdkManagerPaths) {
+            if (Test-Path $p) {
+                $validSdk = $s
+                break
+            }
+        }
+        if ($validSdk) { break }
+    }
+
+    if (-not $validSdk) {
+        throw "Android SDK not found. Install Android SDK and set `ANDROID_SDK_ROOT` (or install under `%LOCALAPPDATA%\\Android\\Sdk`)."
     }
 
     return @{
-        JdkPath = $jdkPath
-        SdkPath = $sdkPath
+        JdkPath = $validJdk
+        SdkPath = $validSdk
     }
 }
 

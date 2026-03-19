@@ -24,6 +24,7 @@ Crispy Bills is a local-first bill manager with a Windows desktop app (WPF) and 
 - For Android build/publish:
 	- OpenJDK under `%LOCALAPPDATA%\Programs\OpenJDK`
 	- Android SDK under `%LOCALAPPDATA%\Android\Sdk`
+	- Android application ID: `com.crispybills.mobile.android`
 - For publish-to-GitHub flow:
 	- Git
 	- GitHub CLI (`gh`) authenticated with `repo` scope

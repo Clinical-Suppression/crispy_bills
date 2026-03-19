@@ -11,7 +11,7 @@ on:
       package_name:
         description: Android application ID (package name)
         required: true
-        default: com.companyname.crispybills.mobile.android
+        default: com.crispybills.mobile.android
         type: string
       track:
         description: Google Play track

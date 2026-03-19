@@ -6,6 +6,17 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Defensive: ensure $Configuration is a single string (not an array) so Join-Path
+# and other callers that expect a scalar don't fail with "System.Object[]".
+if ($Configuration -is [System.Array]) {
+    if ($Configuration.Count -gt 0) {
+        $Configuration = $Configuration[0]
+    }
+    else {
+        $Configuration = 'Debug'
+    }
+}
+
 . (Join-Path $PSScriptRoot 'common.ps1')
 
 Reset-TaskDiagnostics
@@ -25,8 +36,21 @@ function Acquire-BuildLock {
     }
     catch {
         $holder = ''
+        $holderPid = $null
         if (Test-Path $buildLockPath) {
             $holder = (Get-Content -Path $buildLockPath -Raw -ErrorAction SilentlyContinue).Trim()
+            if ($holder -match '(?m)^pid=(\d+)\s*$') {
+                $holderPid = [int]$Matches[1]
+            }
+        }
+
+        if ($holderPid) {
+            $isAlive = $null -ne (Get-Process -Id $holderPid -ErrorAction SilentlyContinue)
+            if (-not $isAlive) {
+                Remove-Item -Path $buildLockPath -Force -ErrorAction SilentlyContinue
+                New-Item -ItemType File -Path $buildLockPath -Force:$false -Value $lockContent -ErrorAction Stop | Out-Null
+                return
+            }
         }
 
         if ([string]::IsNullOrWhiteSpace($holder)) {
