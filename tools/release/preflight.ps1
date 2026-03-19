@@ -47,8 +47,12 @@ if ($branchSyncParts.Count -lt 2) {
 $aheadCount = [int]$branchSyncParts[0]
 $behindCount = [int]$branchSyncParts[1]
 Write-Host "Preflight branch sync: ahead=$aheadCount behind=$behindCount"
-if ($aheadCount -ne 0 -or $behindCount -ne 0) {
-    throw "Local branch is not synchronized with origin/$Branch (ahead=$aheadCount, behind=$behindCount). Pull/rebase/push before publishing."
+if ($behindCount -ne 0) {
+    throw "Local branch is behind origin/$Branch (ahead=$aheadCount, behind=$behindCount). Pull/rebase before publishing."
+}
+
+if ($aheadCount -ne 0) {
+    Write-Host 'Preflight branch sync: ahead-only state detected; publish will push local commits.'
 }
 
 if (-not $AllowDirty) {
