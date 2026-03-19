@@ -27,3 +27,8 @@ All notable changes to this project will be documented in this file.
 ### Chores
 - chore: update build and release automation (10af77c)
 
+## 1.2.6 - 2026-03-18
+
+### Chores
+- chore: update build and release automation (6fcb869)
+
