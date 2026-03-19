@@ -528,11 +528,32 @@ catch {
 
     $remoteContainsReleaseCommit = $false
     if ($releaseCommitCreated -and -not [string]::IsNullOrWhiteSpace($releaseCommitSha)) {
-        & git fetch origin $Branch *> $null
-        & git merge-base --is-ancestor $releaseCommitSha ("origin/" + $Branch) *> $null
-        if ($LASTEXITCODE -eq 0) {
-            $remoteContainsReleaseCommit = $true
-            Write-Warning 'Detected release commit already present on origin; treating remote state as changed.'
+        try {
+            $fetchOutput = & git fetch origin $Branch 2>&1
+            $fetchExitCode = $LASTEXITCODE
+
+            if ($fetchExitCode -eq 0) {
+                $mergeBaseOutput = & git merge-base --is-ancestor $releaseCommitSha ("origin/" + $Branch) 2>&1
+                $mergeBaseExitCode = $LASTEXITCODE
+
+                if ($mergeBaseExitCode -eq 0) {
+                    $remoteContainsReleaseCommit = $true
+                    Write-Warning 'Detected release commit already present on origin; treating remote state as changed.'
+                }
+                elseif ($mergeBaseExitCode -ne 1) {
+                    $details = (($mergeBaseOutput | Out-String).Trim())
+                    if ([string]::IsNullOrWhiteSpace($details)) { $details = 'no output' }
+                    Write-Warning "Unable to verify remote ancestry (merge-base exit $mergeBaseExitCode): $details"
+                }
+            }
+            else {
+                $details = (($fetchOutput | Out-String).Trim())
+                if ([string]::IsNullOrWhiteSpace($details)) { $details = 'no output' }
+                Write-Warning "Unable to refresh remote refs after failure (git fetch exit $fetchExitCode): $details"
+            }
+        }
+        catch {
+            Write-Warning 'Unable to verify whether origin contains the release commit. Continuing with conservative recovery path.'
         }
     }
 
