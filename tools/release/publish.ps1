@@ -18,6 +18,12 @@ $ErrorActionPreference = 'Stop'
 Reset-TaskDiagnostics
 
 trap {
+    if ($_.Exception) {
+        Write-Error ("Publish fatal error: " + $_.Exception.Message)
+    }
+    if ($_.ScriptStackTrace) {
+        Write-Error ("Publish stack: " + $_.ScriptStackTrace)
+    }
     Write-TaskDiagnostics -Prefix 'Publish task'
     throw
 }
@@ -371,6 +377,7 @@ if (-not $staged) {
 
 $baseCommit = Get-GitOutput -Args @('rev-parse', 'HEAD') -WorkingDirectory $root
 $releaseCommitCreated = $false
+$releaseCommitSha = $null
 $releaseTagCreated = $false
 $branchPushed = $false
 $tagPushed = $false
@@ -384,6 +391,7 @@ foreach ($artifact in $artifacts) {
 try {
     Invoke-LoggedCommand -Command 'git' -Arguments @('commit', '-m', "release: $tag") -WorkingDirectory $root
     $releaseCommitCreated = $true
+    $releaseCommitSha = Get-GitOutput -Args @('rev-parse', 'HEAD') -WorkingDirectory $root
 
     Invoke-LoggedCommand -Command 'git' -Arguments @('tag', '-a', $tag, '-m', "Release $tag") -WorkingDirectory $root
     $releaseTagCreated = $true
@@ -410,6 +418,9 @@ try {
 }
 catch {
     Write-Warning "Publish failed for $tag. Attempting rollback of local release state."
+    if ($_.Exception) {
+        Write-Error ("Publish root failure: " + $_.Exception.Message)
+    }
 
     if ($githubReleaseCreated) {
         Write-Warning 'GitHub release was already created; rollback cannot fully undo remote state.'
@@ -419,7 +430,17 @@ catch {
         Write-Warning 'Branch/tag were pushed to origin; automatic rollback will be local only.'
     }
 
-    $remoteStateChanged = $branchPushed -or $tagPushed
+    $remoteContainsReleaseCommit = $false
+    if ($releaseCommitCreated -and -not [string]::IsNullOrWhiteSpace($releaseCommitSha)) {
+        & git fetch origin $Branch *> $null
+        & git merge-base --is-ancestor $releaseCommitSha ("origin/" + $Branch) *> $null
+        if ($LASTEXITCODE -eq 0) {
+            $remoteContainsReleaseCommit = $true
+            Write-Warning 'Detected release commit already present on origin; treating remote state as changed.'
+        }
+    }
+
+    $remoteStateChanged = $branchPushed -or $tagPushed -or $remoteContainsReleaseCommit
 
     if (-not $remoteStateChanged) {
         if ($releaseTagCreated) {
