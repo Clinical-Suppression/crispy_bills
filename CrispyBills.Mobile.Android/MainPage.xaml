@@ -1,0 +1,136 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:CrispyBills.Mobile.Android.Models"
+             x:Class="CrispyBills.Mobile.Android.MainPage"
+             Shell.NavBarIsVisible="False"
+             Title="Crispy Bills">
+
+    <Grid RowDefinitions="Auto,*" RowSpacing="0">
+        <Border Grid.Row="0"
+                StrokeThickness="0"
+                BackgroundColor="#0F172A"
+                Padding="14,16,14,12">
+            <VerticalStackLayout Spacing="12">
+                <Label Text="Crispy Bills"
+                       TextColor="White"
+                       FontSize="24"
+                       FontAttributes="Bold" />
+
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10">
+                    <Button Grid.Column="0" x:Name="PrevYearButton" Text="◀" Clicked="OnPrevYearClicked" WidthRequest="52" HeightRequest="52" />
+                    <Button Grid.Column="1"
+                            x:Name="YearButton"
+                            Clicked="OnYearSelectClicked"
+                            TextColor="White"
+                            BackgroundColor="Transparent"
+                            BorderColor="Transparent"
+                            VerticalOptions="Center"
+                            HorizontalOptions="Center"
+                            FontAttributes="Bold"
+                            FontSize="20" />
+                    <Button Grid.Column="2" x:Name="NextYearButton" Text="▶" Clicked="OnNextYearClicked" WidthRequest="52" HeightRequest="52" />
+                    <Button Grid.Column="3" Text="Archive" Clicked="OnArchiveYearClicked" HeightRequest="52" />
+                    <Button Grid.Column="4" Text="Notes" Clicked="OnNotesClicked" HeightRequest="52" />
+                    <Button Grid.Column="5" Text="Export" Clicked="OnExportClicked" HeightRequest="52" />
+                    <Button Grid.Column="6" Text="Diag" Clicked="OnDiagnosticsClicked" HeightRequest="52" />
+                </Grid>
+
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <Button Grid.Column="0" Text="◀" Clicked="OnPrevMonthClicked" WidthRequest="52" HeightRequest="52" />
+                    <Button Grid.Column="1"
+                            x:Name="MonthButton"
+                            Clicked="OnMonthSelectClicked"
+                            TextColor="White"
+                            BackgroundColor="Transparent"
+                            BorderColor="Transparent"
+                            FontAttributes="Bold"
+                            FontSize="20" />
+                    <Button Grid.Column="2" Text="▶" Clicked="OnNextMonthClicked" WidthRequest="52" HeightRequest="52" />
+                </Grid>
+            </VerticalStackLayout>
+        </Border>
+
+        <ScrollView Grid.Row="1">
+            <VerticalStackLayout Padding="14" Spacing="12">
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="10" ColumnSpacing="10">
+                    <Border Grid.Row="0" Grid.Column="0" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                        <VerticalStackLayout>
+                            <Label Text="Income" FontSize="12" TextColor="#475569" />
+                            <Label x:Name="IncomeLabel" FontSize="22" FontAttributes="Bold" TextColor="#0F172A" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Grid.Row="0" Grid.Column="1" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                        <VerticalStackLayout>
+                            <Label Text="Unpaid" FontSize="12" TextColor="#475569" />
+                            <Label x:Name="UnpaidLabel" FontSize="22" FontAttributes="Bold" TextColor="#991B1B" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Grid.Row="1" Grid.Column="0" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                        <VerticalStackLayout>
+                            <Label Text="Remaining" FontSize="12" TextColor="#475569" />
+                            <Label x:Name="RemainingLabel" FontSize="22" FontAttributes="Bold" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                        <VerticalStackLayout>
+                            <Label Text="Bills" FontSize="12" TextColor="#475569" />
+                            <Label x:Name="BillCountLabel" FontSize="22" FontAttributes="Bold" TextColor="#0F172A" />
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+
+                <Button Text="Set Monthly Income" Clicked="OnSetIncomeClicked" />
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                    <Entry x:Name="SearchEntry" Grid.Column="0" Placeholder="Search bills or categories" TextChanged="OnSearchChanged" />
+                    <Picker x:Name="CategoryPicker" Grid.Column="1" SelectedIndexChanged="OnCategoryChanged" Title="All categories" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+                    <Button Grid.Column="0" Text="Add Bill" Clicked="OnAddClicked" HeightRequest="52" />
+                    <Button Grid.Column="1" Text="Template" Clicked="OnAddTemplateClicked" HeightRequest="52" />
+                    <Button Grid.Column="2" Text="Rollover" Clicked="OnRolloverClicked" HeightRequest="52" />
+                    <Button Grid.Column="3" Text="New Year" Clicked="OnNewYearClicked" HeightRequest="52" />
+                    <Button Grid.Row="1" Grid.Column="0" Text="Import" Clicked="OnImportClicked" />
+                    <Button Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="Summary &amp; Pie Chart" Clicked="OnSummaryClicked" />
+                </Grid>
+
+                <CollectionView x:Name="BillsCollection" SelectionMode="None">
+                    <CollectionView.EmptyView>
+                        <VerticalStackLayout Padding="8,24" Spacing="6">
+                            <Label Text="No bills for this filter." HorizontalOptions="Center" TextColor="#64748B" />
+                            <Label Text="Tap Add Bill to create your first entry." HorizontalOptions="Center" TextColor="#94A3B8" FontSize="12" />
+                        </VerticalStackLayout>
+                    </CollectionView.EmptyView>
+
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="models:BillListItem">
+                            <Border StrokeThickness="0" BackgroundColor="#F8FAFC" StrokeShape="RoundRectangle 14" Padding="12" Margin="0,0,0,8">
+                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+                                    <Label Grid.Row="0" Grid.Column="0" Text="{Binding Name}" FontAttributes="Bold" FontSize="17" LineBreakMode="TailTruncation" />
+                                    <Label Grid.Row="0" Grid.Column="1" Text="{Binding Amount, StringFormat='${0:F2}'}" FontAttributes="Bold" FontSize="17" />
+
+                                    <Label Grid.Row="1" Grid.Column="0" Text="{Binding Category}" TextColor="#475569" FontSize="13" />
+                                    <Label Grid.Row="1" Grid.Column="1" Text="{Binding DueDate, StringFormat='Due {0:MMM d}'}" TextColor="#475569" FontSize="13" />
+
+                                    <Grid Grid.Row="2" Grid.ColumnSpan="2" ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="8">
+                                        <Button Grid.Column="0" Text="Paid" Clicked="OnTogglePaidClicked" CommandParameter="{Binding Id}" FontSize="12" HeightRequest="44" />
+                                        <Button Grid.Column="1" Text="Edit" Clicked="OnEditClicked" CommandParameter="{Binding Id}" FontSize="12" HeightRequest="44" />
+                                        <Button Grid.Column="2" Text="Delete" Clicked="OnDeleteClicked" CommandParameter="{Binding Id}" FontSize="12" HeightRequest="44" BackgroundColor="#FEE2E2" TextColor="#991B1B" />
+                                        <Border Grid.Column="3" StrokeThickness="0" Padding="10,4" BackgroundColor="#DBEAFE" StrokeShape="RoundRectangle 999" HorizontalOptions="End" VerticalOptions="Center">
+                                            <Label Text="{Binding StatusText}" FontSize="12" TextColor="#1E3A8A" />
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+</ContentPage>

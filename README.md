@@ -24,6 +24,72 @@ Run the app (Debug output):
 Start-Process -FilePath "bin\Debug\net8.0-windows\CrispyBills.exe" -WorkingDirectory "$PWD"
 ```
 
+## Android Project (In Repository)
+
+The Android project is in this repository:
+
+`CrispyBills.Mobile.Android`
+
+Build Android app:
+
+```powershell
+$jdkPath=(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\OpenJDK') -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
+$sdkPath=Join-Path $env:LOCALAPPDATA 'Android\Sdk'
+dotnet build '.\CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -p:JavaSdkDirectory="$jdkPath" -p:AndroidSdkDirectory="$sdkPath"
+```
+
+Publish APK:
+
+```powershell
+$jdkPath=(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\OpenJDK') -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
+$sdkPath=Join-Path $env:LOCALAPPDATA 'Android\Sdk'
+dotnet publish '.\CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -o '.\publish\net9.0-android' -p:AndroidPackageFormats=apk -p:JavaSdkDirectory="$jdkPath" -p:AndroidSdkDirectory="$sdkPath"
+```
+
+Publish both desktop EXE and Android APK in one run (VS Code task):
+
+`publish all (exe + apk)`
+
+Run Android smoke validation only (VS Code task):
+
+`mobile smoke`
+
+Combined release task outputs:
+
+- `.\publish\win-x64`
+- `.\publish\net9.0-android`
+
+Mobile app improvements included in this repository:
+
+- Clickable month and year selectors with left/right arrows.
+- Year navigation limited to years that already exist.
+- `Set Monthly Income` action that applies from selected month forward.
+- `Import` action for structured CSV into current year (replace or merge).
+- `Summary & Pie Chart` page for monthly category breakdown and year summary.
+- `Diag` page for app data/log diagnostics.
+
+## GitHub Release Automation
+
+This repository includes a workflow that builds release artifacts for both apps and publishes them on version tags:
+
+- Workflow: [ .github/workflows/release-build.yml ](.github/workflows/release-build.yml)
+- Trigger for release publish: push tag like `v1.0.0`
+- Manual trigger: workflow_dispatch
+
+Tag builds upload these release assets:
+
+- Windows EXE
+- Android APK
+- Android AAB (when signing secrets are configured)
+
+Android signing and distribution setup is documented here:
+
+- [ docs/ANDROID_SIGNING.md ](docs/ANDROID_SIGNING.md)
+
+Google Play upload workflow setup and usage is documented here:
+
+- [ docs/PLAY_UPLOAD.md ](docs/PLAY_UPLOAD.md)
+
 ## Current UX Notes
 
 - `View > Enter Moves Down` is checkable and shows a checkmark when enabled.

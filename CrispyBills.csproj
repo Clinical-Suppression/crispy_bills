@@ -11,6 +11,17 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
   </ItemGroup>
 
+  <!-- Keep MAUI project files under this repo from being pulled into the WPF build -->
+  <ItemGroup>
+    <Compile Remove="CrispyBills.Mobile.Android\**\*.cs" />
+    <Compile Remove="CrispyBills.Mobile.ParityTests\**\*.cs" />
+    <Page Remove="CrispyBills.Mobile.Android\**\*.xaml" />
+    <EmbeddedResource Remove="CrispyBills.Mobile.Android\**\*" />
+    <EmbeddedResource Remove="CrispyBills.Mobile.ParityTests\**\*" />
+    <None Remove="CrispyBills.Mobile.Android\**\*" />
+    <None Remove="CrispyBills.Mobile.ParityTests\**\*" />
+  </ItemGroup>
+
   <!-- These XAML files become Page resources automatically -->
   <ItemGroup>
     <Resource Include="Crispy_Pig.ico" />

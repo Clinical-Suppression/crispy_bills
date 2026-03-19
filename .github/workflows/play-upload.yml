@@ -1,0 +1,147 @@
+name: Google Play Upload (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      perform_upload:
+        description: Upload to Google Play after build
+        required: true
+        default: false
+        type: boolean
+      package_name:
+        description: Android application ID (package name)
+        required: true
+        default: com.companyname.crispybills.mobile.android
+        type: string
+      track:
+        description: Google Play track
+        required: true
+        default: internal
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+      release_status:
+        description: Google Play release status
+        required: true
+        default: completed
+        type: choice
+        options:
+          - completed
+          - draft
+          - inProgress
+          - halted
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-optionally-upload:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET SDK 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install MAUI Android workload
+        run: dotnet workload install maui-android --skip-manifest-update
+
+      - name: Restore Android project
+        run: dotnet restore ./CrispyBills.Mobile.Android/CrispyBills.Mobile.Android.csproj
+
+      - name: Validate Android version code increment
+        shell: pwsh
+        run: |
+          [xml]$proj = Get-Content './CrispyBills.Mobile.Android/CrispyBills.Mobile.Android.csproj'
+          $currentVersionCode = [int]$proj.Project.PropertyGroup.ApplicationVersion
+          if ($currentVersionCode -le 0) {
+            throw "ApplicationVersion must be greater than 0."
+          }
+
+          $lastTag = (git tag --list 'v*' --sort=-v:refname | Select-Object -First 1)
+          if ([string]::IsNullOrWhiteSpace($lastTag)) {
+            Write-Host "No version tag found; skipping historical comparison."
+            exit 0
+          }
+
+          $tagProject = git show "$lastTag:CrispyBills.Mobile.Android/CrispyBills.Mobile.Android.csproj"
+          if ([string]::IsNullOrWhiteSpace($tagProject)) {
+            Write-Host "Could not read previous tagged csproj; skipping historical comparison."
+            exit 0
+          }
+
+          [xml]$oldProj = $tagProject
+          $previousVersionCode = [int]$oldProj.Project.PropertyGroup.ApplicationVersion
+          if ($currentVersionCode -le $previousVersionCode) {
+            throw "ApplicationVersion ($currentVersionCode) must be greater than previous tagged version code ($previousVersionCode from $lastTag)."
+          }
+
+          Write-Host "Version check passed: $currentVersionCode > $previousVersionCode ($lastTag)."
+
+      - name: Prepare Android signing keystore
+        shell: pwsh
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_BASE64) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_PASSWORD) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_ALIAS) -or [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASSWORD)) {
+            throw 'Android signing secrets are missing. Configure ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.'
+          }
+
+          New-Item -ItemType Directory -Force -Path './signing' | Out-Null
+          [System.IO.File]::WriteAllBytes('./signing/release.keystore', [System.Convert]::FromBase64String($env:ANDROID_KEYSTORE_BASE64))
+
+      - name: Build signed AAB
+        shell: pwsh
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          dotnet publish './CrispyBills.Mobile.Android/CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -o './artifacts/android-play' -p:AndroidPackageFormats=aab -p:AndroidKeyStore=true -p:AndroidSigningKeyStore='./signing/release.keystore' -p:AndroidSigningStorePass="$env:ANDROID_KEYSTORE_PASSWORD" -p:AndroidSigningKeyAlias="$env:ANDROID_KEY_ALIAS" -p:AndroidSigningKeyPass="$env:ANDROID_KEY_PASSWORD"
+
+      - name: Upload signed AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crispybills-signed-aab
+          path: artifacts/android-play/**/*.aab
+          if-no-files-found: error
+
+      - name: Prepare Google Play service account JSON
+        if: ${{ inputs.perform_upload == 'true' }}
+        shell: pwsh
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)) {
+            throw 'GOOGLE_PLAY_SERVICE_ACCOUNT_JSON secret is missing.'
+          }
+
+          Set-Content -Path './play-service-account.json' -Value $env:GOOGLE_PLAY_SERVICE_ACCOUNT_JSON -Encoding utf8
+
+      - name: Upload to Google Play
+        if: ${{ inputs.perform_upload == 'true' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ./play-service-account.json
+          packageName: ${{ inputs.package_name }}
+          releaseFiles: artifacts/android-play/**/*.aab
+          track: ${{ inputs.track }}
+          status: ${{ inputs.release_status }}

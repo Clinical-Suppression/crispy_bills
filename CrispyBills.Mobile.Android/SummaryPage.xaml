@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:CrispyBills.Mobile.Android.Models"
+             x:Class="CrispyBills.Mobile.Android.SummaryPage"
+             Title="Summary &amp; Pie">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="14" Spacing="12">
+            <Label x:Name="HeaderLabel" FontSize="20" FontAttributes="Bold" />
+
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="10" ColumnSpacing="10">
+                <Border Grid.Row="0" Grid.Column="0" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                    <VerticalStackLayout>
+                        <Label Text="Year Income" FontSize="12" TextColor="#475569" />
+                        <Label x:Name="YearIncomeLabel" FontSize="20" FontAttributes="Bold" TextColor="#0F172A" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                    <VerticalStackLayout>
+                        <Label Text="Year Expenses" FontSize="12" TextColor="#475569" />
+                        <Label x:Name="YearExpensesLabel" FontSize="20" FontAttributes="Bold" TextColor="#991B1B" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                    <VerticalStackLayout>
+                        <Label Text="Year Remaining" FontSize="12" TextColor="#475569" />
+                        <Label x:Name="YearRemainingLabel" FontSize="20" FontAttributes="Bold" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                    <VerticalStackLayout>
+                        <Label Text="Monthly Bills" FontSize="12" TextColor="#475569" />
+                        <Label x:Name="MonthBillCountLabel" FontSize="20" FontAttributes="Bold" TextColor="#0F172A" />
+                    </VerticalStackLayout>
+                </Border>
+            </Grid>
+
+            <Border StrokeThickness="0" BackgroundColor="#F8FAFC" Padding="12">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Category Breakdown" FontSize="16" FontAttributes="Bold" />
+                    <GraphicsView x:Name="PieChartView" HeightRequest="240" />
+                </VerticalStackLayout>
+            </Border>
+
+            <CollectionView x:Name="CategoryCollection" SelectionMode="None">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="models:PieLegendItem">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Padding="4">
+                            <BoxView Color="{Binding Color}" WidthRequest="14" HeightRequest="14" VerticalOptions="Center" />
+                            <Label Grid.Column="1" Text="{Binding Category}" />
+                            <Label Grid.Column="2" Text="{Binding AmountText}" FontAttributes="Bold" />
+                        </Grid>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

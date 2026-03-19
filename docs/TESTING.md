@@ -47,6 +47,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "tools\apply_testdbs.ps1" -R
 - Category combo edit in DataGrid commits correctly on Enter/Tab and does not reopen unexpectedly.
 - Due date paste rejects invalid formats and normalizes valid values.
 
+## 3.1) Mobile Parity Regression Cases
+
+- New Year creation guardrail when next year already has data:
+	1. Ensure current year is selected (example: 2026).
+	2. Ensure next year (example: 2027) already contains at least one bill or non-zero income.
+	3. Trigger Create New Year from the mobile app.
+	4. Verify the app reports that the target year already exists and no new snapshot was created.
+	5. Verify next-year data remains unchanged (no overwrite, no duplicate generated templates).
+
 ## 4) Build Lock Troubleshooting
 
 If build reports lock errors:

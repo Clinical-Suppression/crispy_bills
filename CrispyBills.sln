@@ -5,6 +5,8 @@ VisualStudioVersion = 17.14.36327.8 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrispyBills", "CrispyBills.csproj", "{BF876881-4571-C684-9DDC-A0538FCB9D40}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CrispyBills.Mobile.ParityTests", "CrispyBills.Mobile.ParityTests\CrispyBills.Mobile.ParityTests.csproj", "{E4A80D53-28B0-4D37-9D6F-297E0B4D9F4F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{BF876881-4571-C684-9DDC-A0538FCB9D40}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BF876881-4571-C684-9DDC-A0538FCB9D40}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BF876881-4571-C684-9DDC-A0538FCB9D40}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E4A80D53-28B0-4D37-9D6F-297E0B4D9F4F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E4A80D53-28B0-4D37-9D6F-297E0B4D9F4F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E4A80D53-28B0-4D37-9D6F-297E0B4D9F4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E4A80D53-28B0-4D37-9D6F-297E0B4D9F4F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
