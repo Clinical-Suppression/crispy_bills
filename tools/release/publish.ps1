@@ -419,12 +419,19 @@ catch {
         Write-Warning 'Branch/tag were pushed to origin; automatic rollback will be local only.'
     }
 
-    if ($releaseTagCreated) {
-        & git tag -d $tag *> $null
-    }
+    $remoteStateChanged = $branchPushed -or $tagPushed
 
-    if ($releaseCommitCreated) {
-        & git reset --hard $baseCommit *> $null
+    if (-not $remoteStateChanged) {
+        if ($releaseTagCreated) {
+            & git tag -d $tag *> $null
+        }
+
+        if ($releaseCommitCreated) {
+            & git reset --hard $baseCommit *> $null
+        }
+    }
+    else {
+        Write-Warning 'Skipping local reset/tag-delete because remote already changed. Keep local state and reconcile manually.'
     }
 
     throw

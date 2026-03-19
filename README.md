@@ -90,6 +90,55 @@ Google Play upload workflow setup and usage is documented here:
 
 - [ docs/PLAY_UPLOAD.md ](docs/PLAY_UPLOAD.md)
 
+## Local Release Automation (VS Code Tasks)
+
+The repository also includes local task-driven release automation for Windows, Android, or both targets.
+
+Key tasks:
+
+- build windows, build mobile, build both
+- release windows, release mobile, release both
+- publish windows, publish mobile, publish both
+- publish windows (dryrun), publish mobile (dryrun), publish both (dryrun)
+
+Behavior during real publish:
+
+- Runs GitHub auth precheck from scripts (task dependency runs cached login first).
+- Computes semantic version from commit history.
+- Generates release notes and changelog updates.
+- Builds artifacts and writes artifact manifest under publish/logs.
+- If working tree is dirty, prompts for auto-commit type and auto-generates description (editable).
+- Pushes release commit and tag, then creates GitHub release.
+
+Safety behavior:
+
+- If no new commits exist since the previous tag, publish exits as a safe no-op.
+- Dry-run uses a synthetic preview version if no semantic bump is available.
+- Publish/build/release scripts print warnings and errors summary counts.
+- If publish fails after remote state changed, local reset is skipped to avoid desync.
+
+Republish verification sequence:
+
+```powershell
+# 1) Validate automation without mutating remote state
+Run Task: publish both (dryrun)
+
+# 2) Real publish
+Run Task: publish both
+```
+
+If a publish partially succeeds (for example branch pushed but tag/release missing), recover with:
+
+```powershell
+git fetch origin
+git checkout main
+git pull --ff-only
+
+git tag -a vX.Y.Z <release-commit-sha> -m "Release vX.Y.Z"
+git push origin vX.Y.Z
+gh release create vX.Y.Z --title vX.Y.Z --notes-file publish/logs/release-notes-vX.Y.Z.md
+```
+
 ## Current UX Notes
 
 - `View > Enter Moves Down` is checkable and shows a checkmark when enabled.

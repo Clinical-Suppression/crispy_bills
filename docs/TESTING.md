@@ -69,3 +69,33 @@ Then rebuild:
 ```powershell
 dotnet build CrispyBills.sln
 ```
+
+## 5) Release Automation Verification
+
+Use this before running a real release publish:
+
+```powershell
+# Recommended dry run first
+Run Task: publish both (dryrun)
+```
+
+Verify:
+
+1. Preflight reports auth, remote, and branch checks passed.
+2. Artifact paths are printed for both Windows EXE and Android APK.
+3. Publish task diagnostics summary appears with warning/error counts.
+4. Artifact manifest file exists under publish/logs.
+
+Then run:
+
+```powershell
+Run Task: publish both
+```
+
+Post-publish checks:
+
+1. A new release tag exists on origin.
+2. GitHub release exists for that tag.
+3. publish/logs contains release notes, publish summary, and artifact manifest files.
+
+If publish partially succeeds (branch pushed but tag/release missing), use the recovery flow in [docs/RELEASE_AUTOMATION_PLAN.md](RELEASE_AUTOMATION_PLAN.md).
