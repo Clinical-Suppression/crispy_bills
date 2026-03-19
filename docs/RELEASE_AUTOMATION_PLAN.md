@@ -70,6 +70,8 @@ Scripts are under tools/release.
 10. Publish/build/release diagnostics summaries with warning/error counts.
 11. Rollback safety: skip local reset if remote state already changed.
 12. Enhanced publish failure output: full multi-line command error text is printed.
+13. Tag sync before versioning (`git fetch --tags`) to reduce stale local tag decisions.
+14. Automatic release recovery attempt when push succeeded but release creation/upload failed.
 
 ## Validation Checklist
 
@@ -89,6 +91,7 @@ If publish fails after remote push but before release completion:
 3. git pull --ff-only
 4. If the release tag is missing, create and push it pointing to the pushed release commit.
 5. Create the GitHub release for that tag using the generated release notes file in publish/logs.
+6. Upload generated assets from `publish/releases/<version>/...` if they are missing on the release.
 
 ## Commit Convention Requirement
 

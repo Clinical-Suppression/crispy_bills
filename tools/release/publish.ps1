@@ -506,6 +506,8 @@ try {
     }
 }
 catch {
+    $recoveredAfterPartialPush = $false
+
     Write-Warning "Publish failed for $tag. Attempting rollback of local release state."
     if ($_.Exception) {
         Write-Host 'Publish root failure details:' -ForegroundColor Red
@@ -536,6 +538,22 @@ catch {
 
     $remoteStateChanged = $branchPushed -or $tagPushed -or $remoteContainsReleaseCommit
 
+    if ($remoteStateChanged -and -not $NoPush -and -not $githubReleaseCreated) {
+        try {
+            $ghRecovery = Get-Command gh -ErrorAction SilentlyContinue
+            if ($ghRecovery) {
+                Write-Warning 'Remote push succeeded but release step failed. Attempting automatic release recovery.'
+                Invoke-GhReleaseCreateAndUpload -GhCommand $ghRecovery.Source -Tag $tag -NotesPath $notesPath -Artifacts $artifacts -WorkingDirectory $root
+                $githubReleaseCreated = $true
+                $recoveredAfterPartialPush = $true
+                Write-Warning 'Automatic release recovery succeeded. Continuing publish flow.'
+            }
+        }
+        catch {
+            Write-Warning 'Automatic release recovery attempt failed. Proceeding with normal failure handling.'
+        }
+    }
+
     if (-not $remoteStateChanged) {
         if ($releaseTagCreated) {
             & git tag -d $tag *> $null
@@ -549,7 +567,9 @@ catch {
         Write-Warning 'Skipping local reset/tag-delete because remote already changed. Keep local state and reconcile manually.'
     }
 
-    throw
+    if (-not $recoveredAfterPartialPush) {
+        throw
+    }
 }
 
 $summary = [PSCustomObject]@{

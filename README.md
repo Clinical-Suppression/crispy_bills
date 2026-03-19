@@ -93,6 +93,18 @@ Safety and diagnostics:
 - Warning/error counts printed at script end
 - Multi-line root failure details printed on publish errors
 - Rollback avoids destructive local reset when remote already changed
+- Publish fetches tags before version resolution and refuses to reuse an existing computed tag
+- If remote push succeeds but release creation fails, publish attempts automatic release recovery
+
+Release consistency note:
+
+- Semantic versioning uses git commit history and tags, not the GitHub release list.
+- If tags and release objects ever drift (for example tag exists without release), backfill missing releases first.
+- Backfill format:
+
+```powershell
+gh release create vX.Y.Z --title vX.Y.Z --notes-file publish/logs/release-notes-vX.Y.Z.md <artifact1> <artifact2>
+```
 
 ## Testing and Validation
 
