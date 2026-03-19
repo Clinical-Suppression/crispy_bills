@@ -94,39 +94,6 @@ Safety and diagnostics:
 - Multi-line root failure details printed on publish errors
 - Rollback avoids destructive local reset when remote already changed
 
-## Output Locations
-
-Build outputs (debug task defaults):
-
-- `bin\Debug\net8.0-windows\`
-- `obj\Debug\net8.0-windows\`
-- `CrispyBills.Mobile.Android\bin\Debug\net9.0-android\`
-- `CrispyBills.Mobile.Android\obj\Debug\net9.0-android\`
-
-Release/publish artifacts:
-
-- `publish\releases\<version>\windows\crispybills-v<version>-win-x64.exe`
-- `publish\releases\<version>\mobile\crispybills-v<version>-android.apk`
-
-Publish logs/manifests:
-
-- `publish\logs\release-notes-v<version>.md`
-- `publish\logs\release-artifacts-v<version>.json`
-- `publish\logs\artifact-manifest-v<version>.json`
-- `publish\logs\publish-summary-v<version>.json`
-
-Version file:
-
-- `VERSION`
-
-## GitHub Workflow Notes
-
-The repository includes a workflow file for release builds:
-
-- `.github/workflows/release-build.yml`
-
-Current intent is local publish as source of truth for GitHub releases. If workflow behavior changes, align it with local publish strategy to avoid race conditions.
-
 ## Testing and Validation
 
 Full regression script:
@@ -158,9 +125,3 @@ By default, user data is under:
 - `%USERPROFILE%\Documents\CrispyBills`
 
 This includes yearly databases, notes database, backups, and test artifacts.
-
-## Troubleshooting
-
-- If desktop build fails with file-lock/copy errors (`MSB3026/MSB3027/MSB3021`), close any running `CrispyBills.exe` instances and rebuild.
-- If publish fails after partial remote changes, inspect `publish\logs` and reconcile tag/release state.
-- If Android publish fails due to SDK/JDK resolution, verify OpenJDK and Android SDK locations listed above.

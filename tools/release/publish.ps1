@@ -340,6 +340,9 @@ $root = Get-WorkspaceRoot
 $logsRoot = Join-Path $root 'publish\logs'
 Ensure-Directory -Path $logsRoot
 
+# Ensure local tag view matches origin before semantic version calculation.
+Invoke-LoggedCommand -Command 'git' -Arguments @('fetch', '--tags', 'origin') -WorkingDirectory $root
+
 $prePublishCommit = $null
 $initialStatus = Get-WorkingTreeStatus
 $hasWorkingChanges = -not [string]::IsNullOrWhiteSpace($initialStatus)
@@ -404,6 +407,12 @@ else {
     $version = $versionInfo.Version
     $tag = $versionInfo.NextTag
     $previousTag = $versionInfo.CurrentTag
+}
+
+if (-not $DryRun) {
+    if (Test-TagExistsLocal -Tag $tag -or Test-TagExistsRemote -Tag $tag) {
+        throw "Refusing publish because tag already exists ($tag). Reconcile missing releases for existing tags first."
+    }
 }
 
 $notesPath = Join-Path $logsRoot ("release-notes-" + $tag + '.md')
