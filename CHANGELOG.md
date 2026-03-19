@@ -53,3 +53,8 @@ All notable changes to this project will be documented in this file.
 ### Features
 - feat: harden publish flow and document release recovery (11ad341)
 
+## 1.3.1 - 2026-03-18
+
+### Build
+- build: update build and release automation (db60bd6)
+
