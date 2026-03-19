@@ -52,7 +52,7 @@ Scripts are under tools/release.
 6. Update VERSION file.
 7. Commit release metadata.
 8. Create tag.
-9. Push branch and tag.
+9. Push branch and tag atomically in one git push operation.
 10. Create GitHub release and upload artifacts.
 11. Write publish summary logs under publish/logs.
 
@@ -69,6 +69,7 @@ Scripts are under tools/release.
 9. Artifact manifest generation with SHA256 hashes.
 10. Publish/build/release diagnostics summaries with warning/error counts.
 11. Rollback safety: skip local reset if remote state already changed.
+12. Enhanced publish failure output: full multi-line command error text is printed.
 
 ## Validation Checklist
 
@@ -81,12 +82,12 @@ Scripts are under tools/release.
 
 ## Partial Publish Recovery
 
-If publish fails after branch push but before tag/release completion:
+If publish fails after remote push but before release completion:
 
 1. git fetch origin
 2. git checkout main
 3. git pull --ff-only
-4. Create and push the missing release tag pointing to the pushed release commit.
+4. If the release tag is missing, create and push it pointing to the pushed release commit.
 5. Create the GitHub release for that tag using the generated release notes file in publish/logs.
 
 ## Commit Convention Requirement

@@ -19,10 +19,20 @@ Reset-TaskDiagnostics
 
 trap {
     if ($_.Exception) {
-        Write-Error ("Publish fatal error: " + $_.Exception.Message)
+        Write-Host 'Publish fatal error details:' -ForegroundColor Red
+        foreach ($line in (($_.Exception.Message | Out-String).TrimEnd() -split "`r?`n")) {
+            if (-not [string]::IsNullOrWhiteSpace($line)) {
+                Write-Host ("  " + $line) -ForegroundColor Red
+            }
+        }
     }
     if ($_.ScriptStackTrace) {
-        Write-Error ("Publish stack: " + $_.ScriptStackTrace)
+        Write-Host 'Publish stack:' -ForegroundColor Red
+        foreach ($line in (($_.ScriptStackTrace | Out-String).TrimEnd() -split "`r?`n")) {
+            if (-not [string]::IsNullOrWhiteSpace($line)) {
+                Write-Host ("  " + $line) -ForegroundColor DarkRed
+            }
+        }
     }
     Write-TaskDiagnostics -Prefix 'Publish task'
     throw
@@ -397,9 +407,9 @@ try {
     $releaseTagCreated = $true
 
     if (-not $NoPush) {
-        Invoke-LoggedCommand -Command 'git' -Arguments @('push', 'origin', 'HEAD') -WorkingDirectory $root
+        # Push branch and tag together to prevent partial remote state.
+        Invoke-LoggedCommand -Command 'git' -Arguments @('push', '--atomic', 'origin', 'HEAD', $tag) -WorkingDirectory $root
         $branchPushed = $true
-        Invoke-LoggedCommand -Command 'git' -Arguments @('push', 'origin', $tag) -WorkingDirectory $root
         $tagPushed = $true
     }
 
@@ -419,7 +429,12 @@ try {
 catch {
     Write-Warning "Publish failed for $tag. Attempting rollback of local release state."
     if ($_.Exception) {
-        Write-Error ("Publish root failure: " + $_.Exception.Message)
+        Write-Host 'Publish root failure details:' -ForegroundColor Red
+        foreach ($line in (($_.Exception.Message | Out-String).TrimEnd() -split "`r?`n")) {
+            if (-not [string]::IsNullOrWhiteSpace($line)) {
+                Write-Host ("  " + $line) -ForegroundColor Red
+            }
+        }
     }
 
     if ($githubReleaseCreated) {

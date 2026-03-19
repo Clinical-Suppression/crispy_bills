@@ -97,5 +97,6 @@ Post-publish checks:
 1. A new release tag exists on origin.
 2. GitHub release exists for that tag.
 3. publish/logs contains release notes, publish summary, and artifact manifest files.
+4. If publish fails, terminal output includes full multi-line root-failure details.
 
-If publish partially succeeds (branch pushed but tag/release missing), use the recovery flow in [docs/RELEASE_AUTOMATION_PLAN.md](RELEASE_AUTOMATION_PLAN.md).
+If publish partially succeeds (remote push completed but release is missing), use the recovery flow in [docs/RELEASE_AUTOMATION_PLAN.md](RELEASE_AUTOMATION_PLAN.md).

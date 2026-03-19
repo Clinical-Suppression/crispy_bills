@@ -108,7 +108,7 @@ Behavior during real publish:
 - Generates release notes and changelog updates.
 - Builds artifacts and writes artifact manifest under publish/logs.
 - If working tree is dirty, prompts for auto-commit type and auto-generates description (editable).
-- Pushes release commit and tag, then creates GitHub release.
+- Pushes release commit and tag atomically (single push), then creates GitHub release.
 
 Safety behavior:
 
@@ -116,6 +116,7 @@ Safety behavior:
 - Dry-run uses a synthetic preview version if no semantic bump is available.
 - Publish/build/release scripts print warnings and errors summary counts.
 - If publish fails after remote state changed, local reset is skipped to avoid desync.
+- Publish errors now print multi-line root-failure details so server-side git/gh errors are visible.
 
 Republish verification sequence:
 
@@ -127,7 +128,7 @@ Run Task: publish both (dryrun)
 Run Task: publish both
 ```
 
-If a publish partially succeeds (for example branch pushed but tag/release missing), recover with:
+If a publish partially succeeds (for example commit+tag pushed but release missing), recover with:
 
 ```powershell
 git fetch origin
