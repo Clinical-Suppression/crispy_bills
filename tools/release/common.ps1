@@ -58,6 +58,26 @@ function Get-WorkspaceRoot {
     return (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 }
 
+function ConvertTo-CommandLineArgument {
+    param([AllowEmptyString()][string]$Value)
+
+    if ($null -eq $Value) {
+        return '""'
+    }
+
+    if ($Value.Length -eq 0) {
+        return '""'
+    }
+
+    if ($Value -notmatch '[\s"]') {
+        return $Value
+    }
+
+    $escaped = $Value -replace '(\\*)"', '$1$1\"'
+    $escaped = $escaped -replace '(\\+)$', '$1$1'
+    return '"' + $escaped + '"'
+}
+
 function Invoke-LoggedCommand {
     param(
         [Parameter(Mandatory = $true)][string]$Command,
@@ -77,7 +97,8 @@ function Invoke-LoggedCommand {
         $stdoutPath = [System.IO.Path]::GetTempFileName()
         $stderrPath = [System.IO.Path]::GetTempFileName()
         try {
-            $process = Start-Process -FilePath $Command -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+            $quotedArguments = @($Arguments | ForEach-Object { ConvertTo-CommandLineArgument -Value $_ }) -join ' '
+            $process = Start-Process -FilePath $Command -ArgumentList $quotedArguments -WorkingDirectory $WorkingDirectory -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
 
             $stdoutText = if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath -Raw } else { '' }
             $stderrText = if (Test-Path $stderrPath) { Get-Content -Path $stderrPath -Raw } else { '' }
