@@ -410,7 +410,7 @@ else {
 }
 
 if (-not $DryRun) {
-    if (Test-TagExistsLocal -Tag $tag -or Test-TagExistsRemote -Tag $tag) {
+    if ((Test-TagExistsLocal -Tag $tag) -or (Test-TagExistsRemote -Tag $tag)) {
         throw "Refusing publish because tag already exists ($tag). Reconcile missing releases for existing tags first."
     }
 }
