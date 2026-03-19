@@ -37,3 +37,8 @@ All notable changes to this project will be documented in this file.
 ### Documentation
 - docs: update documentation (93cc2c0)
 
+## 1.2.8 - 2026-03-18
+
+### CI
+- ci: update ci workflows (dc3edb2)
+
