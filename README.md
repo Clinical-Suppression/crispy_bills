@@ -1,36 +1,50 @@
 # Crispy Bills
 
-Crispy Bills is a .NET 8 WPF desktop app for managing monthly bills, recurring payments, and yearly budgeting in a local SQLite-backed workflow.
+Crispy Bills is a local-first bill manager with a Windows desktop app (WPF) and an Android app (.NET MAUI). It helps track monthly bills, recurring entries, and yearly planning with SQLite-backed data.
 
-## Highlights
+## What This Repository Includes
 
-- Year/month bill tracking with quick inline editing.
-- Recurring bill propagation across future months.
-- Paid/unpaid/past-due status handling.
-- Category-based dashboard and summary views.
-- CSV import/export and verification helper scripts.
+- Desktop app: .NET 8 WPF (`CrispyBills.csproj`)
+- Mobile app: .NET MAUI Android (`CrispyBills.Mobile.Android`)
+- Parity tests and utility scripts for validation and regression
+- Local release automation for build, release artifact generation, and GitHub publish
 
-## Build and Run
+## Key Features
 
-From the repository root:
+- Year/month bill tracking with inline edits
+- Recurring bill propagation into future months
+- Paid/unpaid/past-due status workflows
+- Category summary and pie-chart support
+- CSV import/export and verification tooling
+
+## Requirements
+
+- Windows
+- .NET SDK (desktop + MAUI workloads used by this repo)
+- For Android build/publish:
+	- OpenJDK under `%LOCALAPPDATA%\Programs\OpenJDK`
+	- Android SDK under `%LOCALAPPDATA%\Android\Sdk`
+- For publish-to-GitHub flow:
+	- Git
+	- GitHub CLI (`gh`) authenticated with `repo` scope
+
+## Quick Start (Desktop)
+
+Build solution:
 
 ```powershell
 dotnet build CrispyBills.sln
 ```
 
-Run the app (Debug output):
+Run desktop app from Debug output:
 
 ```powershell
 Start-Process -FilePath "bin\Debug\net8.0-windows\CrispyBills.exe" -WorkingDirectory "$PWD"
 ```
 
-## Android Project (In Repository)
+## Android Build and Publish (CLI)
 
-The Android project is in this repository:
-
-`CrispyBills.Mobile.Android`
-
-Build Android app:
+Build Android:
 
 ```powershell
 $jdkPath=(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\OpenJDK') -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
@@ -38,7 +52,7 @@ $sdkPath=Join-Path $env:LOCALAPPDATA 'Android\Sdk'
 dotnet build '.\CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -p:JavaSdkDirectory="$jdkPath" -p:AndroidSdkDirectory="$sdkPath"
 ```
 
-Publish APK:
+Publish Android APK:
 
 ```powershell
 $jdkPath=(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\OpenJDK') -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
@@ -46,171 +60,107 @@ $sdkPath=Join-Path $env:LOCALAPPDATA 'Android\Sdk'
 dotnet publish '.\CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -o '.\publish\net9.0-android' -p:AndroidPackageFormats=apk -p:JavaSdkDirectory="$jdkPath" -p:AndroidSdkDirectory="$sdkPath"
 ```
 
-Publish both desktop EXE and Android APK in one run (VS Code task):
+## VS Code Task Flows
 
-`publish all (exe + apk)`
+Main task groups:
 
-Run Android smoke validation only (VS Code task):
+- Build: `build windows`, `build mobile`, `build both`
+- Release artifacts only: `release windows`, `release mobile`, `release both`
+- Full publish: `publish windows`, `publish mobile`, `publish both`
+- Publish dry-run: `publish windows (dryrun)`, `publish mobile (dryrun)`, `publish both (dryrun)`
 
-`mobile smoke`
+Recommended sequence before a real release:
 
-Combined release task outputs:
+1. Run `publish both (dryrun)`
+2. Run `publish both`
 
-- `.\publish\win-x64`
-- `.\publish\net9.0-android`
+## Local Publish Automation Behavior
 
-Mobile app improvements included in this repository:
+On a real publish, scripts do the following:
 
-- Clickable month and year selectors with left/right arrows.
-- Year navigation limited to years that already exist.
-- `Set Monthly Income` action that applies from selected month forward.
-- `Import` action for structured CSV into current year (replace or merge).
-- `Summary & Pie Chart` page for monthly category breakdown and year summary.
-- `Diag` page for app data/log diagnostics.
+1. Preflight checks (auth, branch, remote, working tree policy)
+2. Semantic version resolution from commit history
+3. Changelog/release notes generation
+4. Artifact build (desktop exe + android apk)
+5. Release commit and tag creation
+6. Atomic git push of branch and tag
+7. GitHub release creation and artifact upload (with retries)
 
-## GitHub Release Automation
+Safety and diagnostics:
 
-This repository includes a workflow that builds release artifacts for both apps and publishes them on version tags:
+- No-op when no new commits exist since latest tag
+- Dry-run synthetic version fallback when semantic bump is unavailable
+- Warning/error counts printed at script end
+- Multi-line root failure details printed on publish errors
+- Rollback avoids destructive local reset when remote already changed
 
-- Workflow: [ .github/workflows/release-build.yml ](.github/workflows/release-build.yml)
-- Trigger for release publish: push tag like `v1.0.0`
-- Manual trigger: workflow_dispatch
+## Output Locations
 
-Tag builds upload these release assets:
+Build outputs (debug task defaults):
 
-- Windows EXE
-- Android APK
-- Android AAB (when signing secrets are configured)
+- `bin\Debug\net8.0-windows\`
+- `obj\Debug\net8.0-windows\`
+- `CrispyBills.Mobile.Android\bin\Debug\net9.0-android\`
+- `CrispyBills.Mobile.Android\obj\Debug\net9.0-android\`
 
-Android signing and distribution setup is documented here:
+Release/publish artifacts:
 
-- [ docs/ANDROID_SIGNING.md ](docs/ANDROID_SIGNING.md)
+- `publish\releases\<version>\windows\crispybills-v<version>-win-x64.exe`
+- `publish\releases\<version>\mobile\crispybills-v<version>-android.apk`
 
-Google Play upload workflow setup and usage is documented here:
+Publish logs/manifests:
 
-- [ docs/PLAY_UPLOAD.md ](docs/PLAY_UPLOAD.md)
+- `publish\logs\release-notes-v<version>.md`
+- `publish\logs\release-artifacts-v<version>.json`
+- `publish\logs\artifact-manifest-v<version>.json`
+- `publish\logs\publish-summary-v<version>.json`
 
-## Local Release Automation (VS Code Tasks)
+Version file:
 
-The repository also includes local task-driven release automation for Windows, Android, or both targets.
+- `VERSION`
 
-Key tasks:
+## GitHub Workflow Notes
 
-- build windows, build mobile, build both
-- release windows, release mobile, release both
-- publish windows, publish mobile, publish both
-- publish windows (dryrun), publish mobile (dryrun), publish both (dryrun)
+The repository includes a workflow file for release builds:
 
-Behavior during real publish (happy path):
+- `.github/workflows/release-build.yml`
 
-- Runs GitHub auth precheck from scripts (task dependency runs cached login first).
-- Computes semantic version from commit history.
-- Generates release notes and changelog updates.
-- Builds artifacts and writes artifact manifest under publish/logs.
-- If working tree is dirty, prompts for auto-commit type and auto-generates description (editable).
-- Pushes release commit and tag in one atomic git push, then creates the GitHub release and uploads artifacts.
+Current intent is local publish as source of truth for GitHub releases. If workflow behavior changes, align it with local publish strategy to avoid race conditions.
 
-Safety behavior and failure handling:
+## Testing and Validation
 
-- If no new commits exist since the previous tag, publish exits as a safe no-op.
-- Dry-run uses a synthetic preview version if no semantic bump is available.
-- Publish/build/release scripts print warnings and errors summary counts.
-- If publish fails after remote state changed, local reset is skipped to avoid desync.
-- Publish errors now print multi-line root-failure details so server-side git/gh errors are visible.
+Full regression script:
 
-Republish verification sequence:
-
-```powershell
-# 1) Validate automation without mutating remote state
-Run Task: publish both (dryrun)
-
-# 2) Real publish
-Run Task: publish both
-```
-
-If a publish partially succeeds (for example commit+tag pushed but release missing), recover with:
-
-```powershell
-git fetch origin
-git checkout main
-git pull --ff-only
-
-git tag -a vX.Y.Z <release-commit-sha> -m "Release vX.Y.Z"
-git push origin vX.Y.Z
-gh release create vX.Y.Z --title vX.Y.Z --notes-file publish/logs/release-notes-vX.Y.Z.md
-```
-
-## Current UX Notes
-
-- `View > Enter Moves Down` is checkable and shows a checkmark when enabled.
-- The DataGrid right-click context menu includes `Add Bill`, `Edit`, and `Delete`.
-- `Add Bill` opens the calendar on the currently selected app year/month context.
-
-## Automation Scripts
-
-### Full app regression runner
-
-Script: [tools/test_all_functions.ps1](tools/test_all_functions.ps1)
-
-Runs:
-
-1. Solution build
-2. Startup auto-test roundtrip path
-3. Export-to-testDB row compare
-4. Live DB verification
-
-Examples:
-
-```powershell
-# Full pass
-powershell -NoProfile -ExecutionPolicy Bypass -File "tools\test_all_functions.ps1"
-
-# Skip UI auto pass
-powershell -NoProfile -ExecutionPolicy Bypass -File "tools\test_all_functions.ps1" -SkipUiPass
-```
-
-### Apply generated test DBs to live DBs
-
-Script: [tools/apply_testdbs.ps1](tools/apply_testdbs.ps1)
-
-Parameters:
-
-- `-RootPath`: CrispyBills data root (default: Documents/CrispyBills)
-- `-Years`: years to apply (default: 2026, 2027)
-- `-TestDbDir`: source directory for `CrispyBills_<year>_test.db`
+- `tools/test_all_functions.ps1`
 
 Example:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "tools\apply_testdbs.ps1" -RootPath "C:\Data\CrispyBills" -Years 2026,2027
+powershell -NoProfile -ExecutionPolicy Bypass -File "tools\test_all_functions.ps1"
 ```
 
-### Compare exported CSV rows to test DBs
+Additional helpers:
 
-Script: [tools/compare_export_db.py](tools/compare_export_db.py)
+- `tools/apply_testdbs.ps1`
+- `tools/compare_export_db.py`
 
-Parameters:
+Detailed guides:
 
-- `--root`: base data directory (default: `~/Documents/CrispyBills`)
-- `--csv-path`: explicit export CSV (optional, falls back to latest `auto_export_*.csv` under root)
-- `--test-db-dir`: explicit test DB directory (optional, falls back under root)
-
-Examples:
-
-```powershell
-python "tools\compare_export_db.py" --root "C:\Data\CrispyBills"
-python "tools\compare_export_db.py" --root "C:\Data\CrispyBills" --csv-path "C:\temp\auto_export_20260315_154749.csv"
-```
+- `docs/TESTING.md`
+- `docs/RELEASE_AUTOMATION_PLAN.md`
+- `docs/ANDROID_SIGNING.md`
+- `docs/PLAY_UPLOAD.md`
 
 ## Data Location
 
-By default, app data is stored in:
+By default, user data is under:
 
-`%USERPROFILE%\Documents\CrispyBills`
+- `%USERPROFILE%\Documents\CrispyBills`
 
-This includes yearly DB files, notes DB, backups, and auto-test artifacts.
+This includes yearly databases, notes database, backups, and test artifacts.
 
 ## Troubleshooting
 
-- If build fails with `MSB3026/MSB3027/MSB3021`, close running `CrispyBills.exe` instances and rebuild.
-- If script runs produce stale results, delete/refresh temporary auto-test outputs under `db_backups\auto_tests`.
+- If desktop build fails with file-lock/copy errors (`MSB3026/MSB3027/MSB3021`), close any running `CrispyBills.exe` instances and rebuild.
+- If publish fails after partial remote changes, inspect `publish\logs` and reconcile tag/release state.
+- If Android publish fails due to SDK/JDK resolution, verify OpenJDK and Android SDK locations listed above.
