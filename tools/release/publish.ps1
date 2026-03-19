@@ -98,8 +98,13 @@ function Test-GhReleaseExists {
 
     Push-Location $WorkingDirectory
     try {
-        & $GhCommand 'release' 'view' $Tag *> $null
-        return ($LASTEXITCODE -eq 0)
+        try {
+            & $GhCommand 'release' 'view' $Tag 2>$null *> $null
+            return ($LASTEXITCODE -eq 0)
+        }
+        catch {
+            return $false
+        }
     }
     finally {
         Pop-Location
