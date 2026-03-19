@@ -74,7 +74,29 @@ function Invoke-LoggedCommand {
 
     Push-Location $WorkingDirectory
     try {
-        $commandOutput = & $Command @Arguments 2>&1
+        $stdoutPath = [System.IO.Path]::GetTempFileName()
+        $stderrPath = [System.IO.Path]::GetTempFileName()
+        try {
+            $process = Start-Process -FilePath $Command -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+
+            $stdoutText = if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath -Raw } else { '' }
+            $stderrText = if (Test-Path $stderrPath) { Get-Content -Path $stderrPath -Raw } else { '' }
+
+            $commandOutput = @()
+            if (-not [string]::IsNullOrWhiteSpace($stdoutText)) {
+                $commandOutput += $stdoutText.TrimEnd("`r", "`n")
+            }
+            if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+                $commandOutput += $stderrText.TrimEnd("`r", "`n")
+            }
+
+            $global:LASTEXITCODE = $process.ExitCode
+        }
+        finally {
+            if (Test-Path $stdoutPath) { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $stderrPath) { Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue }
+        }
+
         if ($null -ne $commandOutput) {
             $commandOutput | Out-Host
         }

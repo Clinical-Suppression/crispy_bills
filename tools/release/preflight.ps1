@@ -36,6 +36,21 @@ if (-not $AllowNonMain -and $currentBranch -ne $Branch) {
     throw "Publishing is restricted to branch $Branch. Current branch: $currentBranch"
 }
 
+Invoke-LoggedCommand -Command 'git' -Arguments @('fetch', 'origin', $Branch) -WorkingDirectory $root
+
+$branchSyncCounts = Get-GitOutput -Args @('rev-list', '--left-right', '--count', ("HEAD...origin/" + $Branch)) -WorkingDirectory $root
+$branchSyncParts = @($branchSyncCounts -split '\s+')
+if ($branchSyncParts.Count -lt 2) {
+    throw "Unable to determine sync status against origin/$Branch. Output: $branchSyncCounts"
+}
+
+$aheadCount = [int]$branchSyncParts[0]
+$behindCount = [int]$branchSyncParts[1]
+Write-Host "Preflight branch sync: ahead=$aheadCount behind=$behindCount"
+if ($aheadCount -ne 0 -or $behindCount -ne 0) {
+    throw "Local branch is not synchronized with origin/$Branch (ahead=$aheadCount, behind=$behindCount). Pull/rebase/push before publishing."
+}
+
 if (-not $AllowDirty) {
     $status = Get-GitOutput -Args @('status', '--porcelain') -WorkingDirectory $root
     if ($status) {
