@@ -101,16 +101,16 @@ Key tasks:
 - publish windows, publish mobile, publish both
 - publish windows (dryrun), publish mobile (dryrun), publish both (dryrun)
 
-Behavior during real publish:
+Behavior during real publish (happy path):
 
 - Runs GitHub auth precheck from scripts (task dependency runs cached login first).
 - Computes semantic version from commit history.
 - Generates release notes and changelog updates.
 - Builds artifacts and writes artifact manifest under publish/logs.
 - If working tree is dirty, prompts for auto-commit type and auto-generates description (editable).
-- Pushes release commit and tag atomically (single push), then creates GitHub release.
+- Pushes release commit and tag in one atomic git push, then creates the GitHub release and uploads artifacts.
 
-Safety behavior:
+Safety behavior and failure handling:
 
 - If no new commits exist since the previous tag, publish exits as a safe no-op.
 - Dry-run uses a synthetic preview version if no semantic bump is available.
