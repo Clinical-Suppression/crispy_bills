@@ -63,3 +63,13 @@ All notable changes to this project will be documented in this file.
 ### Chores
 - chore: update build and release automation (c5fe192)
 
+## 1.3.3 - 2026-03-19
+
+### Build
+- build: allow ahead-only preflight state for publish (3648f83)
+- build: harden release command execution and preflight sync checks (25e0222)
+
+### Chores
+- chore: update build and release automation (7f6131f)
+- chore: update build and release automation (4935430)
+
