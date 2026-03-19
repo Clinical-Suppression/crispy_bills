@@ -58,3 +58,8 @@ All notable changes to this project will be documented in this file.
 ### Build
 - build: update build and release automation (db60bd6)
 
+## 1.3.2 - 2026-03-19
+
+### Chores
+- chore: update build and release automation (c5fe192)
+
