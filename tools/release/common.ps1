@@ -82,7 +82,12 @@ function Invoke-LoggedCommand {
         Add-TaskDiagnosticsFromOutput -Command $Command -OutputText (($commandOutput | Out-String))
 
         if ($LASTEXITCODE -ne 0) {
-            throw "Command failed with exit code ${LASTEXITCODE}: $display"
+            $outputText = ($commandOutput | Out-String).Trim()
+            if ([string]::IsNullOrWhiteSpace($outputText)) {
+                throw "Command failed with exit code ${LASTEXITCODE}: $display"
+            }
+
+            throw "Command failed with exit code ${LASTEXITCODE}: $display`n$outputText"
         }
     }
     finally {
