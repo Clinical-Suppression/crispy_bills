@@ -42,3 +42,9 @@ All notable changes to this project will be documented in this file.
 ### CI
 - ci: update ci workflows (dc3edb2)
 
+## 1.2.9 - 2026-03-18
+
+### Chores
+- chore: update README.md (ec7ba07)
+- chore: update README.md (cebe195)
+
