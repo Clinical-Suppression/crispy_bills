@@ -6,17 +6,18 @@
 
     <!-- Note: For Android please see also Platforms\Android\Resources\values\colors.xml -->
 
-    <Color x:Key="Primary">#512BD4</Color>
-    <Color x:Key="PrimaryDark">#ac99ea</Color>
-    <Color x:Key="PrimaryDarkText">#242424</Color>
-    <Color x:Key="Secondary">#DFD8F7</Color>
-    <Color x:Key="SecondaryDarkText">#9880e5</Color>
-    <Color x:Key="Tertiary">#2B0B98</Color>
+    <!-- Professional navy/teal palette -->
+    <Color x:Key="Primary">#1F4B99</Color>
+    <Color x:Key="PrimaryDark">#163762</Color>
+    <Color x:Key="PrimaryDarkText">#EAF2FF</Color>
+    <Color x:Key="Secondary">#F3F6FA</Color>
+    <Color x:Key="SecondaryDarkText">#9DB4E9</Color>
+    <Color x:Key="Tertiary">#0BA5A5</Color>
 
     <Color x:Key="White">White</Color>
     <Color x:Key="Black">Black</Color>
-    <Color x:Key="Magenta">#D600AA</Color>
-    <Color x:Key="MidnightBlue">#190649</Color>
+    <Color x:Key="Magenta">#2563EB</Color>
+    <Color x:Key="MidnightBlue">#0F2A44</Color>
     <Color x:Key="OffBlack">#1f1f1f</Color>
 
     <Color x:Key="Gray100">#E1E1E1</Color>
@@ -27,6 +28,21 @@
     <Color x:Key="Gray600">#404040</Color>
     <Color x:Key="Gray900">#212121</Color>
     <Color x:Key="Gray950">#141414</Color>
+
+    <!-- Semantic tokens -->
+    <Color x:Key="CardBackground">#F8FAFC</Color>
+    <Color x:Key="SurfaceLight">#E2E8F0</Color>
+    <Color x:Key="MutedText">#475569</Color>
+    <Color x:Key="MutedLight">#94A3B8</Color>
+    <Color x:Key="EmptyText">#64748B</Color>
+    <Color x:Key="Danger">#991B1B</Color>
+    <Color x:Key="DangerLight">#FEE2E2</Color>
+    <Color x:Key="TagBackground">#DBEAFE</Color>
+    <Color x:Key="TagText">#1E3A8A</Color>
+    <Color x:Key="Success">#16A34A</Color>
+    <Color x:Key="Info">#0EA5E9</Color>
+    <Color x:Key="NeutralText">#111827</Color>
+    <Color x:Key="ValidationDanger">#B42318</Color>
 
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource Primary}"/>
     <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource Secondary}"/>

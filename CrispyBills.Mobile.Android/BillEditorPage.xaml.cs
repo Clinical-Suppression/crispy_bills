@@ -74,6 +74,16 @@ public partial class BillEditorPage : ContentPage
         return _tcs.Task;
     }
 
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+
+        if (!_tcs.Task.IsCompleted)
+        {
+            _tcs.TrySetResult(null);
+        }
+    }
+
     private async void OnCancelClicked(object? sender, EventArgs e)
     {
         _tcs.TrySetResult(null);

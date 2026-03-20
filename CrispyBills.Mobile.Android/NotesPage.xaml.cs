@@ -3,6 +3,7 @@ using CrispyBills.Mobile.Android.Services;
 namespace CrispyBills.Mobile.Android;
 
 public partial class NotesPage : ContentPage
+    private bool _unsubscribed = false;
 {
     private readonly BillingService _service;
 
@@ -18,6 +19,17 @@ public partial class NotesPage : ContentPage
         base.OnAppearing();
         NotesEditor.Text = await _service.LoadNotesAsync();
         UpdateLineCount();
+        _unsubscribed = false;
+    }
+
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        if (!_unsubscribed)
+        {
+            NotesEditor.TextChanged -= OnNotesChanged;
+            _unsubscribed = true;
+        }
     }
 
     private async void OnSaveClicked(object? sender, EventArgs e)
@@ -33,9 +45,9 @@ public partial class NotesPage : ContentPage
 
     private void UpdateLineCount()
     {
-        var lines = (NotesEditor.Text ?? string.Empty)
-            .Split('\n', StringSplitOptions.None)
-            .Length;
+        var text = (NotesEditor.Text ?? string.Empty).Replace("\r\n", "\n");
+        var trimmed = text.TrimEnd('\n');
+        var lines = string.IsNullOrEmpty(trimmed) ? 0 : trimmed.Split('\n').Length;
 
         LinesLabel.Text = $"{Math.Min(lines, 500)} / 500 lines";
     }

@@ -10,33 +10,33 @@
             <Label x:Name="HeaderLabel" FontSize="20" FontAttributes="Bold" />
 
             <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="10" ColumnSpacing="10">
-                <Border Grid.Row="0" Grid.Column="0" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                <Border Grid.Row="0" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12">
                     <VerticalStackLayout>
-                        <Label Text="Year Income" FontSize="12" TextColor="#475569" />
-                        <Label x:Name="YearIncomeLabel" FontSize="20" FontAttributes="Bold" TextColor="#0F172A" />
+                        <Label Text="Year Income" FontSize="12" TextColor="{StaticResource MutedText}" />
+                        <Label x:Name="YearIncomeLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
                     </VerticalStackLayout>
                 </Border>
-                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12">
                     <VerticalStackLayout>
-                        <Label Text="Year Expenses" FontSize="12" TextColor="#475569" />
-                        <Label x:Name="YearExpensesLabel" FontSize="20" FontAttributes="Bold" TextColor="#991B1B" />
+                        <Label Text="Year Expenses" FontSize="12" TextColor="{StaticResource MutedText}" />
+                        <Label x:Name="YearExpensesLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Danger}" />
                     </VerticalStackLayout>
                 </Border>
-                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12">
                     <VerticalStackLayout>
-                        <Label Text="Year Remaining" FontSize="12" TextColor="#475569" />
+                        <Label Text="Year Remaining" FontSize="12" TextColor="{StaticResource MutedText}" />
                         <Label x:Name="YearRemainingLabel" FontSize="20" FontAttributes="Bold" />
                     </VerticalStackLayout>
                 </Border>
-                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="#E2E8F0" Padding="12">
+                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12">
                     <VerticalStackLayout>
-                        <Label Text="Monthly Bills" FontSize="12" TextColor="#475569" />
-                        <Label x:Name="MonthBillCountLabel" FontSize="20" FontAttributes="Bold" TextColor="#0F172A" />
+                        <Label Text="Monthly Bills" FontSize="12" TextColor="{StaticResource MutedText}" />
+                        <Label x:Name="MonthBillCountLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
                     </VerticalStackLayout>
                 </Border>
             </Grid>
 
-            <Border StrokeThickness="0" BackgroundColor="#F8FAFC" Padding="12">
+            <Border StrokeThickness="0" BackgroundColor="{StaticResource CardBackground}" Padding="12">
                 <VerticalStackLayout Spacing="8">
                     <Label Text="Category Breakdown" FontSize="16" FontAttributes="Bold" />
                     <GraphicsView x:Name="PieChartView" HeightRequest="240" />
@@ -48,8 +48,8 @@
                     <DataTemplate x:DataType="models:PieLegendItem">
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Padding="4">
                             <BoxView Color="{Binding Color}" WidthRequest="14" HeightRequest="14" VerticalOptions="Center" />
-                            <Label Grid.Column="1" Text="{Binding Category}" />
-                            <Label Grid.Column="2" Text="{Binding AmountText}" FontAttributes="Bold" />
+                            <Label Grid.Column="1" Text="{Binding Category}" TextColor="{StaticResource MutedText}" />
+                            <Label Grid.Column="2" Text="{Binding AmountText}" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
                         </Grid>
                     </DataTemplate>
                 </CollectionView.ItemTemplate>

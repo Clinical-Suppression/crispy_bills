@@ -10,7 +10,7 @@
             <Button Grid.Column="0" Text="Refresh" Clicked="OnRefreshClicked" />
             <Button Grid.Column="1" Text="Integrity Repair" Clicked="OnIntegrityRepairClicked" />
         </Grid>
-        <Label Grid.Row="2" x:Name="StartupIssuesLabel" FontSize="12" TextColor="#B45309" />
+        <Label Grid.Row="2" x:Name="StartupIssuesLabel" FontSize="12" TextColor="{StaticResource Info}" />
         <Editor Grid.Row="3" x:Name="LogEditor" IsReadOnly="True" FontSize="12" AutoSize="TextChanges" />
     </Grid>
 </ContentPage>

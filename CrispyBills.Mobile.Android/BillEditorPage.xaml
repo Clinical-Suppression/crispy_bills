@@ -57,10 +57,10 @@
                 <Entry Grid.Row="2" x:Name="RecurrenceCountEntry" IsVisible="False" Keyboard="Numeric" Placeholder="Occurrences (e.g. 6)" HeightRequest="48" TextChanged="OnInputChanged" />
             </Grid>
 
-            <Label x:Name="ValidationLabel" TextColor="#B42318" IsVisible="False" />
+            <Label x:Name="ValidationLabel" TextColor="{StaticResource ValidationDanger}" IsVisible="False" />
 
             <Grid ColumnDefinitions="*,*" ColumnSpacing="12" Margin="0,8,0,0">
-                <Button Grid.Column="0" Text="Cancel" Clicked="OnCancelClicked" BackgroundColor="#E5E7EB" TextColor="#111827" />
+                <Button Grid.Column="0" Text="Cancel" Clicked="OnCancelClicked" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
                 <Button Grid.Column="1" Text="Save" Clicked="OnSaveClicked" />
             </Grid>
         </VerticalStackLayout>

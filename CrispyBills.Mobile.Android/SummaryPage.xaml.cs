@@ -1,25 +1,39 @@
 using CrispyBills.Mobile.Android.Services;
 using CrispyBills.Mobile.Android.Models;
+using Microsoft.Maui;
+using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 
 namespace CrispyBills.Mobile.Android;
 
 public partial class SummaryPage : ContentPage
 {
-    private static readonly Color[] Palette =
-    {
-        Color.FromArgb("#2563EB"),
-        Color.FromArgb("#16A34A"),
-        Color.FromArgb("#F97316"),
-        Color.FromArgb("#9333EA"),
-        Color.FromArgb("#DC2626"),
-        Color.FromArgb("#0EA5E9"),
-        Color.FromArgb("#14B8A6"),
-        Color.FromArgb("#A855F7")
-    };
+    // Palette will be populated from resource colors at runtime for consistency with theme
 
     public SummaryPage(int year, int month, BillingService service)
     {
         InitializeComponent();
+
+        // Build a palette from theme resources (fall back to hardcoded if missing)
+        var resources = Application.Current?.Resources;
+        var palette = new List<Color>();
+        void addResource(string key, string fallback)
+        {
+            if (resources != null && resources.TryGetValue(key, out var val) && val is Color c)
+                palette.Add(c);
+            else
+                palette.Add(Color.FromArgb(fallback));
+        }
+
+        addResource("Magenta", "#2563EB");
+        addResource("Success", "#16A34A");
+        addResource("Info", "#0EA5E9");
+        addResource("Tertiary", "#0BA5A5");
+        addResource("Danger", "#DC2626");
+        addResource("Primary", "#1F4B99");
+        addResource("SecondaryDarkText", "#9DB4E9");
+        addResource("PrimaryDark", "#163762");
+        var Palette = palette.ToArray();
 
         var yearSummary = service.GetYearSummary();
         var monthSummary = service.GetMonthSummary(month);
@@ -31,7 +45,7 @@ public partial class SummaryPage : ContentPage
         YearIncomeLabel.Text = $"${yearSummary.income:F2}";
         YearExpensesLabel.Text = $"${yearSummary.expenses:F2}";
         YearRemainingLabel.Text = $"${yearSummary.remaining:F2}";
-        YearRemainingLabel.TextColor = yearSummary.remaining >= 0 ? Color.FromArgb("#166534") : Color.FromArgb("#991B1B");
+        YearRemainingLabel.TextColor = yearSummary.remaining >= 0 ? GetResourceColor("Success", "#16A34A") : GetResourceColor("Danger", "#DC2626");
         MonthBillCountLabel.Text = monthSummary.billCount.ToString();
 
         var chartItems = categoryRows.Select((row, index) =>
@@ -44,6 +58,13 @@ public partial class SummaryPage : ContentPage
 
         CategoryCollection.ItemsSource = chartItems;
         PieChartView.Drawable = new PieChartDrawable(chartItems);
+    }
+
+    private static Color GetResourceColor(string key, string fallback)
+    {
+        if (Application.Current?.Resources.TryGetValue(key, out var v) == true && v is Color c)
+            return c;
+        return Color.FromArgb(fallback);
     }
 
     private sealed class PieChartDrawable : IDrawable
@@ -60,7 +81,7 @@ public partial class SummaryPage : ContentPage
             canvas.Antialias = true;
             if (_items.Count == 0)
             {
-                canvas.FontColor = Color.FromArgb("#64748B");
+                canvas.FontColor = ResourcesColor("EmptyText", "#64748B");
                 canvas.FontSize = 14;
                 canvas.DrawString("No category totals to chart.", dirtyRect, HorizontalAlignment.Center, VerticalAlignment.Center);
                 return;
@@ -69,7 +90,7 @@ public partial class SummaryPage : ContentPage
             var total = _items.Sum(x => (float)x.Amount);
             if (total <= 0)
             {
-                canvas.FontColor = Color.FromArgb("#64748B");
+                canvas.FontColor = ResourcesColor("EmptyText", "#64748B");
                 canvas.FontSize = 14;
                 canvas.DrawString("No category totals to chart.", dirtyRect, HorizontalAlignment.Center, VerticalAlignment.Center);
                 return;
@@ -90,18 +111,25 @@ public partial class SummaryPage : ContentPage
                 startAngle += sweep;
             }
 
-            canvas.FillColor = Colors.White;
+            canvas.FillColor = ResourcesColor("White", "#FFFFFF");
             var donutSize = size * 0.42f;
             var donutLeft = dirtyRect.Center.X - (donutSize / 2f);
             var donutTop = dirtyRect.Center.Y - (donutSize / 2f);
             canvas.FillCircle(donutLeft + (donutSize / 2f), donutTop + (donutSize / 2f), donutSize / 2f);
 
-            canvas.FontColor = Color.FromArgb("#0F172A");
+            canvas.FontColor = ResourcesColor("MidnightBlue", "#0F172A");
             canvas.FontSize = 12;
             canvas.DrawString("Total", new RectF(dirtyRect.Center.X - 40f, dirtyRect.Center.Y - 16f, 80f, 16f), HorizontalAlignment.Center, VerticalAlignment.Center);
             canvas.FontSize = 14;
             canvas.Font = Microsoft.Maui.Graphics.Font.DefaultBold;
             canvas.DrawString($"${total:F0}", new RectF(dirtyRect.Center.X - 45f, dirtyRect.Center.Y, 90f, 20f), HorizontalAlignment.Center, VerticalAlignment.Center);
+        }
+
+        private static Color ResourcesColor(string key, string fallback)
+        {
+            if (Application.Current?.Resources.TryGetValue(key, out var v) == true && v is Color c)
+                return c;
+            return Color.FromArgb(fallback);
         }
 
         private static void FillPieSlice(ICanvas canvas, RectF rect, float startAngle, float sweepAngle)

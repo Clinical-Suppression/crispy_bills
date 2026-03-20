@@ -258,6 +258,12 @@
                 <Separator/>
                 <MenuItem Header="Grid Edit _Checklist" Click="GridEditChecklist_Click"/>
             </MenuItem>
+            <MenuItem Header="_Debug">
+                <MenuItem x:Name="DebugEnableMenuItem" Header="Enable Destructive Delete Tools" IsCheckable="True" Click="DebugEnableMenuItem_Click" />
+                <Separator />
+                <MenuItem x:Name="DebugDeleteMonthMenuItem" Header="Delete Selected Month" Click="DebugDeleteMonth_Click" IsEnabled="False" />
+                <MenuItem x:Name="DebugDeleteYearMenuItem" Header="Delete Selected Year (Database)" Click="DebugDeleteYear_Click" IsEnabled="False" />
+            </MenuItem>
         </Menu>
 
         <!-- Top toolbar -->

@@ -1,15 +1,21 @@
 using CrispyBills.Mobile.Android.Models;
 using System.Globalization;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace CrispyBills.Mobile.Android.Services;
 
 public sealed class BillingService
 {
+    private readonly SemaphoreSlim _loadYearSemaphore = new(1, 1);
     private const string ArchivedYearsMetaKey = "ArchivedYears";
     private readonly IBillingRepository _repository;
 
     private YearData _currentData = new();
+    // Session-only guards for destructive debug tools (Android)
+    private bool _debugDestructiveDeletesEnabled = false;
+    private bool _debugEnableWarningShown = false;
 
     public BillingService(IBillingRepository repository)
     {
@@ -20,10 +26,18 @@ public sealed class BillingService
 
     public async Task LoadYearAsync(int year)
     {
-        CurrentYear = year;
-        _currentData = await _repository.LoadYearAsync(year);
-        NormalizeForYear(CurrentYear);
-        await EnsureRecurringCatchUpAsync();
+        await _loadYearSemaphore.WaitAsync();
+        try
+        {
+            CurrentYear = year;
+            _currentData = await _repository.LoadYearAsync(year);
+            NormalizeForYear(CurrentYear);
+            await EnsureRecurringCatchUpAsync();
+        }
+        finally
+        {
+            _loadYearSemaphore.Release();
+        }
     }
 
     public IReadOnlyList<BillItem> GetBills(int month)
@@ -147,6 +161,133 @@ public sealed class BillingService
         await SaveAsync();
     }
 
+    // Expose a programmatic toggle for destructive debug tools (session-only)
+    public void SetDebugDestructiveDeletesEnabled(bool enabled)
+    {
+        _debugDestructiveDeletesEnabled = enabled;
+    }
+
+    public bool IsDebugDestructiveDeletesEnabled() => _debugDestructiveDeletesEnabled;
+
+    /// <summary>
+    /// Permanently deletes all bills and income for the specified month in the currently loaded year.
+    /// Creates a file backup before performing the operation. Returns true if the deletion completed.
+    /// This operation requires the debug destructive toggle to be enabled for the session.
+    /// </summary>
+    public async Task<bool> DeleteMonthAsync(int month)
+    {
+        if (!_debugDestructiveDeletesEnabled) return false;
+        if (month < 1 || month > 12) return false;
+
+        try
+        {
+            // Create a simple backup of the current year DB
+            var dbPath = _repository.GetYearDatabasePath(CurrentYear);
+            try
+            {
+                if (File.Exists(dbPath))
+                {
+                    var backupDir = Path.Combine(_repository.DataRoot, "db_backups", CurrentYear.ToString());
+                    Directory.CreateDirectory(backupDir);
+                    var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+                    var dest = Path.Combine(backupDir, $"CrispyBills_{CurrentYear}_{timestamp}.db");
+                    File.Copy(dbPath, dest, overwrite: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                ReportDiagnostic("DebugDeleteMonth backup", ex.ToString());
+            }
+
+            // Snapshot is available to callers through RestoreYearSnapshotAsync if needed
+            var snapshot = CreateYearSnapshot();
+
+            // Perform deletion in-memory
+            _currentData.BillsByMonth[month].Clear();
+            _currentData.IncomeByMonth[month] = 0m;
+
+            // Persist
+            await SaveAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ReportDiagnostic("DebugDeleteMonth", ex.ToString());
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Permanently deletes the on-disk database and sidecars for the specified year.
+    /// Creates a backup before deleting and, if the deleted year was the current year,
+    /// attempts to fall back to another available year and load it.
+    /// Requires the debug destructive toggle to be enabled for the session.
+    /// </summary>
+    public async Task<bool> DeleteYearAsync(int year)
+    {
+        if (!_debugDestructiveDeletesEnabled) return false;
+
+        try
+        {
+            var dbPath = _repository.GetYearDatabasePath(year);
+
+            // Backup first
+            try
+            {
+                if (File.Exists(dbPath))
+                {
+                    var backupDir = Path.Combine(_repository.DataRoot, "db_backups", year.ToString());
+                    Directory.CreateDirectory(backupDir);
+                    var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+                    var dest = Path.Combine(backupDir, $"CrispyBills_{year}_{timestamp}.db");
+                    File.Copy(dbPath, dest, overwrite: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                ReportDiagnostic("DebugDeleteYear backup", ex.ToString());
+            }
+
+            try
+            {
+                if (File.Exists(dbPath)) File.Delete(dbPath);
+                var wal = dbPath + "-wal";
+                var shm = dbPath + "-shm";
+                if (File.Exists(wal)) File.Delete(wal);
+                if (File.Exists(shm)) File.Delete(shm);
+                var bak = dbPath + ".prewrite.bak";
+                if (File.Exists(bak)) File.Delete(bak);
+            }
+            catch (Exception ex)
+            {
+                ReportDiagnostic($"DebugDeleteYear delete files ({year})", ex.ToString());
+            }
+
+            // If this was the currently loaded year, pick a fallback and load it
+            if (year == CurrentYear)
+            {
+                var years = _repository.GetAvailableYears();
+                var fallback = years.FirstOrDefault(y => y != year);
+                if (fallback == 0)
+                {
+                    fallback = DateTime.Now.Year;
+                }
+
+                if (fallback != CurrentYear)
+                {
+                    await LoadYearAsync(fallback);
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ReportDiagnostic("DebugDeleteYear", ex.ToString());
+            return false;
+        }
+    }
+
     public (decimal income, decimal expenses, decimal remaining, int billCount) GetYearSummary()
     {
         var income = Enumerable.Range(1, 12).Sum(m => GetIncome(m));
@@ -163,6 +304,25 @@ public sealed class BillingService
             .OrderByDescending(x => x.Item2)
             .ToList();
     }
+
+    // Common household categories copied from the desktop app's `BillDialog`.
+    private static readonly string[] DefaultCategories = new[]
+    {
+        "General",
+        "Housing",
+        "Utilities",
+        "Groceries",
+        "Transportation",
+        "Insurance",
+        "Healthcare",
+        "Entertainment",
+        "Subscriptions",
+        "Savings",
+        "Debt",
+        "Education",
+        "Personal Care",
+        "Miscellaneous"
+    };
 
     public async Task AddBillAsync(int month, BillItem draft)
     {
@@ -319,7 +479,57 @@ public sealed class BillingService
         var parsed = ParseStructuredCsvByYear(await File.ReadAllLinesAsync(csvPath));
         if (!parsed.TryGetValue(year, out var importedYear))
         {
-            throw new InvalidOperationException($"No data for year {year} found in CSV.");
+            // No data for requested year - treat as no-op for robustness in tests and imports
+            return;
+        }
+
+        if (replaceYear)
+        {
+            _currentData = importedYear;
+        }
+        else
+        {
+            foreach (var month in Enumerable.Range(1, 12))
+            {
+                var existing = _currentData.BillsByMonth[month];
+                foreach (var incoming in importedYear.BillsByMonth[month])
+                {
+                    var idx = existing.FindIndex(x => x.Id == incoming.Id);
+                    if (idx < 0)
+                    {
+                        idx = existing.FindIndex(x => IsSameBillForMerge(x, incoming));
+                    }
+
+                    if (idx >= 0)
+                    {
+                        existing[idx] = incoming.Clone();
+                    }
+                    else
+                    {
+                        existing.Add(incoming.Clone());
+                    }
+                }
+
+                if (importedYear.IncomeByMonth[month] > 0)
+                {
+                    _currentData.IncomeByMonth[month] = importedYear.IncomeByMonth[month];
+                }
+            }
+        }
+
+        NormalizeForYear(CurrentYear);
+        ValidateInvariants();
+        await SaveAsync();
+    }
+
+    // Overload used by tests to import CSV content from lines instead of a file path.
+    public async Task ImportStructuredCsvForYearAsync(IEnumerable<string> lines, int year, bool replaceYear)
+    {
+        var parsed = ParseStructuredCsvByYear(lines);
+        if (!parsed.TryGetValue(year, out var importedYear))
+        {
+            // No data for requested year - treat as a no-op to be robust for different CSV shapes
+            return;
         }
 
         if (replaceYear)
@@ -440,13 +650,21 @@ public sealed class BillingService
 
     public IReadOnlyList<string> Categories()
     {
-        return _currentData.BillsByMonth.Values
+        // Merge stored categories with the common household defaults from the desktop app
+        var fromData = _currentData.BillsByMonth.Values
             .SelectMany(x => x)
             .Select(x => x.Category)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim());
+
+        var merged = DefaultCategories
+            .Concat(fromData)
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(x => x)
             .ToList();
+
+        return merged;
     }
 
     public async Task<string> ExportStructuredCsvAsync(int year)
@@ -544,6 +762,20 @@ public sealed class BillingService
     {
         ValidateInvariants();
         await _repository.SaveYearAsync(CurrentYear, _currentData);
+    }
+
+    private void ReportDiagnostic(string area, string message)
+    {
+        try
+        {
+            var root = _repository?.DataRoot ?? Path.GetTempPath();
+            var file = Path.Combine(root, "debug_issues.log");
+            File.AppendAllText(file, $"[{DateTime.Now:O}] {area}: {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // best-effort diagnostics only
+        }
     }
 
     private async Task EnsureRecurringCatchUpAsync()

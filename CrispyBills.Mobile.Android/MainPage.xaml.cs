@@ -1,5 +1,9 @@
 ﻿using CrispyBills.Mobile.Android.Models;
 using CrispyBills.Mobile.Android.Services;
+using System.IO;
+using Microsoft.Maui;
+using Microsoft.Maui.Controls;
+using Microsoft.Maui.Graphics;
 using System.Collections.ObjectModel;
 using System.Globalization;
 
@@ -34,27 +38,34 @@ public partial class MainPage : ContentPage
 		BillsCollection.ItemsSource = _visibleBills;
 	}
 
-	protected override async void OnAppearing()
+	protected override async Task OnAppearing()
 	{
 		base.OnAppearing();
-
-		if (_loaded)
+		try
 		{
-			return;
-		}
-
-		_loaded = true;
-		await _localization.InitializeAsync();
-		await LoadYearAsync(_currentYear);
-
-		if (StartupDiagnostics.HasIssues && !_startupDiagnosticsShown)
-		{
-			_startupDiagnosticsShown = true;
-			var open = await DisplayAlert("Startup diagnostics", "Issues were detected during startup recovery. Open diagnostics now?", "Open", "Later");
-			if (open)
+			if (_loaded)
 			{
-				await Navigation.PushAsync(new DiagnosticsPage(_service));
+				return;
 			}
+
+			_loaded = true;
+			await _localization.InitializeAsync();
+			await LoadYearAsync(_currentYear);
+
+			if (StartupDiagnostics.HasIssues && !_startupDiagnosticsShown)
+			{
+				_startupDiagnosticsShown = true;
+				var open = await DisplayAlert("Startup diagnostics", "Issues were detected during startup recovery. Open diagnostics now?", "Open", "Later");
+				if (open)
+				{
+					await Navigation.PushAsync(new DiagnosticsPage(_service));
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			await DisplayAlert("Error", $"An error occurred during startup: {ex.Message}", "OK");
+			// Optionally log to diagnostics
 		}
 	}
 
@@ -150,78 +161,221 @@ public partial class MainPage : ContentPage
 		UnpaidLabel.Text = _localization.FormatCurrency(summary.unpaid);
 		RemainingLabel.Text = _localization.FormatCurrency(summary.remaining);
 		BillCountLabel.Text = summary.billCount.ToString();
-		RemainingLabel.TextColor = summary.remaining >= 0 ? Color.FromArgb("#166534") : Color.FromArgb("#991B1B");
+		RemainingLabel.TextColor = summary.remaining >= 0 ? GetResourceColor("Success", "#16A34A") : GetResourceColor("Danger", "#991B1B");
 	}
 
-	private async void OnPrevYearClicked(object? sender, EventArgs e)
+	private static Color GetResourceColor(string key, string fallback)
 	{
-		var idx = _availableYears.IndexOf(_currentYear);
-		if (idx > 0)
+		if (Application.Current?.Resources.TryGetValue(key, out var v) == true && v is Color c)
+			return c;
+		return Color.FromArgb(fallback);
+	}
+
+	private async Task OnPrevYearClicked(object? sender, EventArgs e)
+	{
+		try
 		{
-			await LoadYearAsync(_availableYears[idx - 1]);
+			var idx = _availableYears.IndexOf(_currentYear);
+			if (idx > 0)
+			{
+				await LoadYearAsync(_availableYears[idx - 1]);
+			}
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnPrevYearClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
 		}
 	}
 
-	private async void OnNextYearClicked(object? sender, EventArgs e)
+	private async Task OnNextYearClicked(object? sender, EventArgs e)
 	{
-		var idx = _availableYears.IndexOf(_currentYear);
-		if (idx >= 0 && idx < _availableYears.Count - 1)
+		try
 		{
-			await LoadYearAsync(_availableYears[idx + 1]);
+			var idx = _availableYears.IndexOf(_currentYear);
+			if (idx >= 0 && idx < _availableYears.Count - 1)
+			{
+				await LoadYearAsync(_availableYears[idx + 1]);
+			}
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnNextYearClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
 		}
 	}
 
-	private async void OnPrevMonthClicked(object? sender, EventArgs e)
+	private async Task OnPrevMonthClicked(object? sender, EventArgs e)
 	{
-		_currentMonth = _currentMonth == 1 ? 12 : _currentMonth - 1;
-		await ReloadMonthAsync();
+		try
+		{
+			_currentMonth = _currentMonth == 1 ? 12 : _currentMonth - 1;
+			await ReloadMonthAsync();
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnPrevMonthClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
 	}
 
-	private async void OnNextMonthClicked(object? sender, EventArgs e)
+	private async void OnDebugToggleToggled(object? sender, ToggledEventArgs e)
 	{
-		_currentMonth = _currentMonth == 12 ? 1 : _currentMonth + 1;
-		await ReloadMonthAsync();
+		try
+		{
+			if (sender is not Switch sw) return;
+			if (e.Value)
+			{
+				var ok = await DisplayAlert("Enable Destructive Tools",
+					"Enabling destructive delete tools will allow permanent removal of data. A backup will be created automatically where possible. Do you want to enable these tools for this session?",
+					"Enable",
+					"Cancel");
+				if (!ok)
+				{
+					sw.IsToggled = false;
+					_service.SetDebugDestructiveDeletesEnabled(false);
+					DebugDeleteMonthButton.IsEnabled = false;
+					DebugDeleteYearButton.IsEnabled = false;
+					return;
+				}
+
+				_service.SetDebugDestructiveDeletesEnabled(true);
+				DebugDeleteMonthButton.IsEnabled = true;
+				DebugDeleteYearButton.IsEnabled = true;
+			}
+			else
+			{
+				_service.SetDebugDestructiveDeletesEnabled(false);
+				DebugDeleteMonthButton.IsEnabled = false;
+				DebugDeleteYearButton.IsEnabled = false;
+			}
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnDebugToggleToggled", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
 	}
 
-	private async void OnMonthSelectClicked(object? sender, EventArgs e)
+	private async void OnDebugDeleteMonthClicked(object? sender, EventArgs e)
 	{
-		var selected = await DisplayActionSheet(
-			"Select Month",
-			"Cancel",
-			null,
-			MonthNames.All.ToArray());
-
-		if (string.IsNullOrWhiteSpace(selected) || selected == "Cancel")
+		try
 		{
-			return;
-		}
+			var confirm = await DisplayAlert("Confirm Delete Month",
+				$"Permanently delete all bills and income for {MonthNames.Name(_currentMonth)} in {_currentYear}? A backup will be created where possible.",
+				"Delete",
+				"Cancel");
+			if (!confirm) return;
 
-		var idx = Array.IndexOf(MonthNames.All, selected);
-		if (idx < 0)
+			var ok = await _service.DeleteMonthAsync(_currentMonth);
+			if (!ok)
+			{
+				await DisplayAlert("Failed", "Month deletion did not complete. See diagnostics.", "OK");
+			}
+			await ReloadMonthAsync();
+		}
+		catch (Exception ex)
 		{
-			return;
+			await DiagnosticsLog.WriteAsync("OnDebugDeleteMonthClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
 		}
-
-		_currentMonth = idx + 1;
-		await ReloadMonthAsync();
 	}
 
-	private async void OnYearSelectClicked(object? sender, EventArgs e)
+	private async void OnDebugDeleteYearClicked(object? sender, EventArgs e)
 	{
-		await RefreshAvailableYearsAsync();
-		var options = _availableYears.Select(y => y.ToString()).ToArray();
-		var selected = await DisplayActionSheet("Select Year", "Cancel", null, options);
-		if (string.IsNullOrWhiteSpace(selected) || selected == "Cancel")
+		try
 		{
-			return;
-		}
+			var confirm = await DisplayAlert("Confirm Delete Year",
+				$"Permanently delete the database and sidecars for year {_currentYear}? This cannot be undone except from backups. Proceed?",
+				"Delete",
+				"Cancel");
+			if (!confirm) return;
 
-		if (!int.TryParse(selected, out var year))
+			var ok = await _service.DeleteYearAsync(_currentYear);
+			if (!ok)
+			{
+				await DisplayAlert("Failed", "Year deletion did not complete. See diagnostics.", "OK");
+			}
+
+			// Refresh UI after possible fallback
+			await LoadYearAsync(_currentYear);
+		}
+		catch (Exception ex)
 		{
-			return;
+			await DiagnosticsLog.WriteAsync("OnDebugDeleteYearClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
 		}
+	}
 
-		await LoadYearAsync(year);
+	private async Task OnNextMonthClicked(object? sender, EventArgs e)
+	{
+		try
+		{
+			_currentMonth = _currentMonth == 12 ? 1 : _currentMonth + 1;
+			await ReloadMonthAsync();
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnNextMonthClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
+	}
+
+	private async Task OnMonthSelectClicked(object? sender, EventArgs e)
+	{
+		try
+		{
+			var selected = await DisplayActionSheet(
+				"Select Month",
+				"Cancel",
+				null,
+				MonthNames.All.ToArray());
+
+			if (string.IsNullOrWhiteSpace(selected) || selected == "Cancel")
+			{
+				return;
+			}
+
+			var idx = Array.IndexOf(MonthNames.All, selected);
+			if (idx < 0)
+			{
+				return;
+			}
+
+			_currentMonth = idx + 1;
+			await ReloadMonthAsync();
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnMonthSelectClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
+	}
+
+	private async Task OnYearSelectClicked(object? sender, EventArgs e)
+	{
+		try
+		{
+			await RefreshAvailableYearsAsync();
+			var options = _availableYears.Select(y => y.ToString()).ToArray();
+			var selected = await DisplayActionSheet("Select Year", "Cancel", null, options);
+			if (string.IsNullOrWhiteSpace(selected) || selected == "Cancel")
+			{
+				return;
+			}
+
+			if (!int.TryParse(selected, out var year))
+			{
+				return;
+			}
+
+			await LoadYearAsync(year);
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnYearSelectClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
 	}
 
 	private void OnSearchChanged(object? sender, TextChangedEventArgs e)
@@ -267,7 +421,7 @@ public partial class MainPage : ContentPage
 		await ReloadMonthAsync();
 	}
 
-	private async void OnAddClicked(object? sender, EventArgs e)
+	private async Task OnAddClicked(object? sender, EventArgs e)
 	{
 		try
 		{
@@ -534,29 +688,30 @@ public partial class MainPage : ContentPage
 				return;
 			}
 
-			var mode = await DisplayActionSheet(
-				"Import mode",
-				"Cancel",
-				null,
-				"Replace current year",
-				"Merge into current year");
+			// Read lines from the picked file
+			List<string> lines = new();
+			await using (var stream = await pick.OpenReadAsync())
+			using (var reader = new System.IO.StreamReader(stream))
+			{
+				while (!reader.EndOfStream)
+				{
+					lines.Add(await reader.ReadLineAsync() ?? string.Empty);
+				}
+			}
 
-			if (mode == "Cancel" || string.IsNullOrWhiteSpace(mode))
+			var mode = await DisplayActionSheet("Import mode", "Cancel", null, "Replace Year", "Merge");
+			if (string.IsNullOrWhiteSpace(mode) || mode == "Cancel")
 			{
 				return;
 			}
 
-			var replace = mode == "Replace current year";
-			await _service.ImportStructuredCsvForYearAsync(pick.FullPath, _currentYear, replace);
-			await ReloadMonthAsync();
-
-			await DisplayAlert("Import complete", replace
-				? $"Replaced {_currentYear} with data from {pick.FileName}."
-				: $"Merged data from {pick.FileName} into {_currentYear}.", "OK");
+			var replaceYear = mode == "Replace Year";
+			await _service.ImportStructuredCsvForYearAsync(lines, _currentYear, replaceYear);
+			await LoadYearAsync(_currentYear);
+			await DisplayAlert("Import complete", "CSV import finished.", "OK");
 		}
 		catch (Exception ex)
 		{
-			StartupDiagnostics.AddIssue("Import", ex.Message);
 			await DiagnosticsLog.WriteAsync("OnImportClicked", ex);
 			await DisplayAlert("Import failed", ex.Message, "OK");
 		}
@@ -564,24 +719,32 @@ public partial class MainPage : ContentPage
 
 	private async void OnArchiveYearClicked(object? sender, EventArgs e)
 	{
-		var currentlyArchived = _archivedYears.Contains(_currentYear);
-		var targetState = !currentlyArchived;
-		var confirm = await DisplayAlert(
-			targetState ? "Archive Year" : "Unarchive Year",
-			targetState
-				? $"Archive {_currentYear}? It will be hidden from normal year navigation."
-				: $"Unarchive {_currentYear}? It will be visible in year navigation.",
-			"Yes",
-			"Cancel");
-
-		if (!confirm)
+		try
 		{
-			return;
-		}
+			var currentlyArchived = _archivedYears.Contains(_currentYear);
+			var targetState = !currentlyArchived;
+			var confirm = await DisplayAlert(
+				targetState ? "Archive Year" : "Unarchive Year",
+				targetState
+					? $"Archive {_currentYear}? It will be hidden from normal year navigation."
+					: $"Unarchive {_currentYear}? It will be visible in year navigation.",
+				"Yes",
+				"Cancel");
 
-		await _service.SetYearArchivedAsync(_currentYear, targetState);
-		await RefreshAvailableYearsAsync();
-		await ReloadMonthAsync();
+			if (!confirm)
+			{
+				return;
+			}
+
+			await _service.SetYearArchivedAsync(_currentYear, targetState);
+			await RefreshAvailableYearsAsync();
+			await ReloadMonthAsync();
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnArchiveYearClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
 	}
 
 	private async void WarnDuplicateRecurringRules()

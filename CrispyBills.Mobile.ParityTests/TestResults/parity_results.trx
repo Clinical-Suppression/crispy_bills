@@ -1,0 +1,76 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="5fe1177c-b743-4a79-9d9a-e7c8ddd534f4" name="Chris@CHRIS-PC 2026-03-20 02:20:17" runUser="CHRIS-PC\Chris" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-03-20T02:20:17.3659507-05:00" queuing="2026-03-20T02:20:17.3659511-05:00" start="2026-03-20T02:20:16.6574268-05:00" finish="2026-03-20T02:20:17.3748757-05:00" />
+  <TestSettings name="default" id="21bf1f7d-928d-4f1e-8c21-143a4ac62ac7">
+    <Deployment runDeploymentRoot="Chris_CHRIS-PC_2026-03-20_02_20_17" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="21370c48-3390-4b70-8d58-02a28375ea04" testId="ba7e25b9-cca2-368e-3752-0656496d23fb" testName="CrispyBills.Mobile.ParityTests.BillingServiceReliabilityTests.LoadYearAsync_InvalidGuid_SkipsRowAndLogs" computerName="CHRIS-PC" duration="00:00:00.0010870" startTime="2026-03-20T02:20:17.2212777-05:00" endTime="2026-03-20T02:20:17.2212778-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="21370c48-3390-4b70-8d58-02a28375ea04" />
+    <UnitTestResult executionId="e7cc7295-6f40-4e54-bb61-c551cf8e806b" testId="f727bf29-7ba8-22a8-7ffc-ca8fd9edbf16" testName="CrispyBills.Mobile.ParityTests.BillingServiceReliabilityTests.ImportStructuredCsvForYearAsync_MalformedRow_LogsAndSkips" computerName="CHRIS-PC" duration="00:00:00.0100577" startTime="2026-03-20T02:20:17.2168717-05:00" endTime="2026-03-20T02:20:17.2169210-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e7cc7295-6f40-4e54-bb61-c551cf8e806b" />
+    <UnitTestResult executionId="1f069fe9-6c5a-4e9d-905e-8300497031ea" testId="ab176cb1-e795-c3c6-a4fb-157bfa942160" testName="CrispyBills.Mobile.ParityTests.BillingServiceParityTests.AddBillAsync_Recurring_ClampsFutureDueDatesByMonth" computerName="CHRIS-PC" duration="00:00:00.0006243" startTime="2026-03-20T02:20:17.2468455-05:00" endTime="2026-03-20T02:20:17.2468456-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1f069fe9-6c5a-4e9d-905e-8300497031ea" />
+    <UnitTestResult executionId="892d320d-838d-4ab7-a2fb-278abba3c30c" testId="b9cbbc4b-d6db-9efa-7a0b-c73c12280e09" testName="CrispyBills.Mobile.ParityTests.BillingServiceParityTests.SetIncomeAsync_AppliesToSelectedAndFutureMonthsOnly" computerName="CHRIS-PC" duration="00:00:00.0004660" startTime="2026-03-20T02:20:17.2461569-05:00" endTime="2026-03-20T02:20:17.2461570-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="892d320d-838d-4ab7-a2fb-278abba3c30c" />
+    <UnitTestResult executionId="2b465883-e11d-4bf7-b462-ca079abd807c" testId="90c33d3e-a02f-6ac1-a659-26f5a0c809ae" testName="CrispyBills.Mobile.ParityTests.BillingServiceReliabilityTests.LoadYearAsync_Concurrent_NoDataCorruption" computerName="CHRIS-PC" duration="00:00:00.0008842" startTime="2026-03-20T02:20:17.2216311-05:00" endTime="2026-03-20T02:20:17.2216311-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2b465883-e11d-4bf7-b462-ca079abd807c" />
+    <UnitTestResult executionId="2d7b605f-7db6-46c5-a3f0-e225fe375abb" testId="0f003a99-ff07-f229-eb47-85539eeb18a1" testName="CrispyBills.Mobile.ParityTests.BillingServiceParityTests.CreateNewYearFromDecemberAsync_ReturnsFalse_WhenTargetYearAlreadyHasData" computerName="CHRIS-PC" duration="00:00:00.0013827" startTime="2026-03-20T02:20:17.2483738-05:00" endTime="2026-03-20T02:20:17.2483740-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2d7b605f-7db6-46c5-a3f0-e225fe375abb" />
+    <UnitTestResult executionId="8b228117-dca1-4b03-b25c-f862e2015bad" testId="fcdc0783-1af2-d7d0-29f1-7e5dbef74025" testName="CrispyBills.Mobile.ParityTests.BillingServiceParityTests.CreateNewYearFromDecemberAsync_CarriesExpectedTemplatesAndUnpaidItems" computerName="CHRIS-PC" duration="00:00:00.0129515" startTime="2026-03-20T02:20:17.2457152-05:00" endTime="2026-03-20T02:20:17.2457156-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8b228117-dca1-4b03-b25c-f862e2015bad" />
+    <UnitTestResult executionId="5f66b723-3737-4c13-b893-9f7519d0ddb7" testId="3bfed15a-2727-c06e-f475-c95c8aaa2f13" testName="CrispyBills.Mobile.ParityTests.BillingServiceParityTests.ImportStructuredCsvForYearAsync_Merge_DoesNotDuplicateExistingEquivalentBill" computerName="CHRIS-PC" duration="00:00:00.0254345" startTime="2026-03-20T02:20:17.2315312-05:00" endTime="2026-03-20T02:20:17.2315316-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="5f66b723-3737-4c13-b893-9f7519d0ddb7" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="CrispyBills.Mobile.ParityTests.BillingServiceParityTests.ImportStructuredCsvForYearAsync_Merge_DoesNotDuplicateExistingEquivalentBill" storage="c:\users\chris\documents\visual studio projects\projects\crispy bills\crispybills.mobile.paritytests\bin\debug\net9.0\crispybills.mobile.paritytests.dll" id="3bfed15a-2727-c06e-f475-c95c8aaa2f13">
+      <Execution id="5f66b723-3737-4c13-b893-9f7519d0ddb7" />
+      <TestMethod codeBase="c:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy Bills\CrispyBills.Mobile.ParityTests\bin\Debug\net9.0\CrispyBills.Mobile.ParityTests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="CrispyBills.Mobile.ParityTests.BillingServiceParityTests" name="ImportStructuredCsvForYearAsync_Merge_DoesNotDuplicateExistingEquivalentBill" />
+    </UnitTest>
+    <UnitTest name="CrispyBills.Mobile.ParityTests.BillingServiceReliabilityTests.LoadYearAsync_Concurrent_NoDataCorruption" storage="c:\users\chris\documents\visual studio projects\projects\crispy bills\crispybills.mobile.paritytests\bin\debug\net9.0\crispybills.mobile.paritytests.dll" id="90c33d3e-a02f-6ac1-a659-26f5a0c809ae">
+      <Execution id="2b465883-e11d-4bf7-b462-ca079abd807c" />
+      <TestMethod codeBase="c:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy Bills\CrispyBills.Mobile.ParityTests\bin\Debug\net9.0\CrispyBills.Mobile.ParityTests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="CrispyBills.Mobile.ParityTests.BillingServiceReliabilityTests" name="LoadYearAsync_Concurrent_NoDataCorruption" />
+    </UnitTest>
+    <UnitTest name="CrispyBills.Mobile.ParityTests.BillingServiceReliabilityTests.LoadYearAsync_InvalidGuid_SkipsRowAndLogs" storage="c:\users\chris\documents\visual studio projects\projects\crispy bills\crispybills.mobile.paritytests\bin\debug\net9.0\crispybills.mobile.paritytests.dll" id="ba7e25b9-cca2-368e-3752-0656496d23fb">
+      <Execution id="21370c48-3390-4b70-8d58-02a28375ea04" />
+      <TestMethod codeBase="c:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy Bills\CrispyBills.Mobile.ParityTests\bin\Debug\net9.0\CrispyBills.Mobile.ParityTests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="CrispyBills.Mobile.ParityTests.BillingServiceReliabilityTests" name="LoadYearAsync_InvalidGuid_SkipsRowAndLogs" />
+    </UnitTest>
+    <UnitTest name="CrispyBills.Mobile.ParityTests.BillingServiceReliabilityTests.ImportStructuredCsvForYearAsync_MalformedRow_LogsAndSkips" storage="c:\users\chris\documents\visual studio projects\projects\crispy bills\crispybills.mobile.paritytests\bin\debug\net9.0\crispybills.mobile.paritytests.dll" id="f727bf29-7ba8-22a8-7ffc-ca8fd9edbf16">
+      <Execution id="e7cc7295-6f40-4e54-bb61-c551cf8e806b" />
+      <TestMethod codeBase="c:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy Bills\CrispyBills.Mobile.ParityTests\bin\Debug\net9.0\CrispyBills.Mobile.ParityTests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="CrispyBills.Mobile.ParityTests.BillingServiceReliabilityTests" name="ImportStructuredCsvForYearAsync_MalformedRow_LogsAndSkips" />
+    </UnitTest>
+    <UnitTest name="CrispyBills.Mobile.ParityTests.BillingServiceParityTests.AddBillAsync_Recurring_ClampsFutureDueDatesByMonth" storage="c:\users\chris\documents\visual studio projects\projects\crispy bills\crispybills.mobile.paritytests\bin\debug\net9.0\crispybills.mobile.paritytests.dll" id="ab176cb1-e795-c3c6-a4fb-157bfa942160">
+      <Execution id="1f069fe9-6c5a-4e9d-905e-8300497031ea" />
+      <TestMethod codeBase="c:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy Bills\CrispyBills.Mobile.ParityTests\bin\Debug\net9.0\CrispyBills.Mobile.ParityTests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="CrispyBills.Mobile.ParityTests.BillingServiceParityTests" name="AddBillAsync_Recurring_ClampsFutureDueDatesByMonth" />
+    </UnitTest>
+    <UnitTest name="CrispyBills.Mobile.ParityTests.BillingServiceParityTests.CreateNewYearFromDecemberAsync_CarriesExpectedTemplatesAndUnpaidItems" storage="c:\users\chris\documents\visual studio projects\projects\crispy bills\crispybills.mobile.paritytests\bin\debug\net9.0\crispybills.mobile.paritytests.dll" id="fcdc0783-1af2-d7d0-29f1-7e5dbef74025">
+      <Execution id="8b228117-dca1-4b03-b25c-f862e2015bad" />
+      <TestMethod codeBase="c:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy Bills\CrispyBills.Mobile.ParityTests\bin\Debug\net9.0\CrispyBills.Mobile.ParityTests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="CrispyBills.Mobile.ParityTests.BillingServiceParityTests" name="CreateNewYearFromDecemberAsync_CarriesExpectedTemplatesAndUnpaidItems" />
+    </UnitTest>
+    <UnitTest name="CrispyBills.Mobile.ParityTests.BillingServiceParityTests.CreateNewYearFromDecemberAsync_ReturnsFalse_WhenTargetYearAlreadyHasData" storage="c:\users\chris\documents\visual studio projects\projects\crispy bills\crispybills.mobile.paritytests\bin\debug\net9.0\crispybills.mobile.paritytests.dll" id="0f003a99-ff07-f229-eb47-85539eeb18a1">
+      <Execution id="2d7b605f-7db6-46c5-a3f0-e225fe375abb" />
+      <TestMethod codeBase="c:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy Bills\CrispyBills.Mobile.ParityTests\bin\Debug\net9.0\CrispyBills.Mobile.ParityTests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="CrispyBills.Mobile.ParityTests.BillingServiceParityTests" name="CreateNewYearFromDecemberAsync_ReturnsFalse_WhenTargetYearAlreadyHasData" />
+    </UnitTest>
+    <UnitTest name="CrispyBills.Mobile.ParityTests.BillingServiceParityTests.SetIncomeAsync_AppliesToSelectedAndFutureMonthsOnly" storage="c:\users\chris\documents\visual studio projects\projects\crispy bills\crispybills.mobile.paritytests\bin\debug\net9.0\crispybills.mobile.paritytests.dll" id="b9cbbc4b-d6db-9efa-7a0b-c73c12280e09">
+      <Execution id="892d320d-838d-4ab7-a2fb-278abba3c30c" />
+      <TestMethod codeBase="c:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy Bills\CrispyBills.Mobile.ParityTests\bin\Debug\net9.0\CrispyBills.Mobile.ParityTests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="CrispyBills.Mobile.ParityTests.BillingServiceParityTests" name="SetIncomeAsync_AppliesToSelectedAndFutureMonthsOnly" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="ba7e25b9-cca2-368e-3752-0656496d23fb" executionId="21370c48-3390-4b70-8d58-02a28375ea04" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f727bf29-7ba8-22a8-7ffc-ca8fd9edbf16" executionId="e7cc7295-6f40-4e54-bb61-c551cf8e806b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ab176cb1-e795-c3c6-a4fb-157bfa942160" executionId="1f069fe9-6c5a-4e9d-905e-8300497031ea" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b9cbbc4b-d6db-9efa-7a0b-c73c12280e09" executionId="892d320d-838d-4ab7-a2fb-278abba3c30c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="90c33d3e-a02f-6ac1-a659-26f5a0c809ae" executionId="2b465883-e11d-4bf7-b462-ca079abd807c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0f003a99-ff07-f229-eb47-85539eeb18a1" executionId="2d7b605f-7db6-46c5-a3f0-e225fe375abb" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="fcdc0783-1af2-d7d0-29f1-7e5dbef74025" executionId="8b228117-dca1-4b03-b25c-f862e2015bad" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3bfed15a-2727-c06e-f475-c95c8aaa2f13" executionId="5f66b723-3737-4c13-b893-9f7519d0ddb7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="8" executed="8" passed="8" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v2.8.2+699d445a1a (64-bit .NET 9.0.14)&#xD;
+[xUnit.net 00:00:00.06]   Discovering: CrispyBills.Mobile.ParityTests&#xD;
+[xUnit.net 00:00:00.09]   Discovered:  CrispyBills.Mobile.ParityTests&#xD;
+[xUnit.net 00:00:00.09]   Starting:    CrispyBills.Mobile.ParityTests&#xD;
+[xUnit.net 00:00:00.18]   Finished:    CrispyBills.Mobile.ParityTests&#xD;
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>

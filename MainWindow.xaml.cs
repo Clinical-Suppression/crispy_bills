@@ -72,6 +72,10 @@ namespace CrispyBills
         private DispatcherTimer? _routineBackupTimer;
         private bool _allowImmediateClose;
         private bool _closingBackupInProgress;
+        private bool _isFilteringActive = false;
+        // Session-only guards for destructive debug tools
+        private bool _debugDestructiveDeletesEnabled = false;
+        private bool _debugEnableWarningShown = false;
         private static readonly Regex DueDatePattern = new(@"^\s*(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s*$", RegexOptions.Compiled);
         private static readonly TimeSpan RoutineBackupInterval = TimeSpan.FromMinutes(15);
 
@@ -624,9 +628,15 @@ namespace CrispyBills
 
                     try
                     {
+                        var guidStr = r.GetString(0);
+                        if (!Guid.TryParse(guidStr, out var id))
+                        {
+                            LogNonFatal($"Skipping row with invalid GUID: {guidStr}");
+                            continue;
+                        }
                         var bill = new Bill
                         {
-                            Id = Guid.Parse(r.GetString(0)),
+                            Id = id,
                             Name = r.IsDBNull(3) ? string.Empty : r.GetString(3),
                             Amount = r.IsDBNull(4) ? 0m : r.GetDecimal(4),
                             DueDate = r.IsDBNull(5)
@@ -952,7 +962,8 @@ namespace CrispyBills
                 if (TryReadNotesFromDatabase(legacyAppDbPath, out var legacyDbNotes))
                 {
                     SaveGlobalNotesToDatabase(legacyDbNotes);
-                    NotesBox.Text = legacyDbNotes;
+                    if (NotesBox != null)
+                        NotesBox.Text = legacyDbNotes;
                     return;
                 }
 
@@ -961,13 +972,15 @@ namespace CrispyBills
                 {
                     var migratedText = File.ReadAllText(legacyNotesPath);
                     SaveGlobalNotesToDatabase(migratedText);
-                    NotesBox.Text = migratedText;
+                    if (NotesBox != null)
+                        NotesBox.Text = migratedText;
 
                     try { File.Delete(legacyNotesPath); } catch { }
                     return;
                 }
 
-                NotesBox.Text = string.Empty;
+                if (NotesBox != null)
+                    NotesBox.Text = string.Empty;
             }
             catch (Exception ex)
             {
@@ -2792,41 +2805,50 @@ namespace CrispyBills
         /// when WPF is in AddNew/EditItem mode.
         /// </summary>
         private void ApplyFilters()
-        {
-            if (BillsGrid == null || MonthSelector.SelectedIndex < 0) return;
-            var view = System.Windows.Data.CollectionViewSource.GetDefaultView(
-                AnnualData[months[MonthSelector.SelectedIndex]]);
-            if (view == null) return;
-
-            if (view is System.Windows.Data.ListCollectionView lcv &&
-                (lcv.IsAddingNew || lcv.IsEditingItem))
             {
-                // ListCollectionView blocks Filter changes during edit/add transactions.
-                Dispatcher.BeginInvoke(new Action(ApplyFilters), System.Windows.Threading.DispatcherPriority.Background);
-                return;
-            }
-
-            string search = SearchBox.Text ?? string.Empty;
-            string? selectedCategory = CategoryFilter.SelectedItem as string;
-
+            if (_isFilteringActive) return;
+            _isFilteringActive = true;
             try
             {
-                view.Filter = item =>
+                if (BillsGrid == null || MonthSelector.SelectedIndex < 0) return;
+                var view = System.Windows.Data.CollectionViewSource.GetDefaultView(
+                    AnnualData[months[MonthSelector.SelectedIndex]]);
+                if (view == null) return;
+
+                if (view is System.Windows.Data.ListCollectionView lcv &&
+                    (lcv.IsAddingNew || lcv.IsEditingItem))
                 {
-                    if (item is not Bill b) return false;
+                    // ListCollectionView blocks Filter changes during edit/add transactions.
+                    Dispatcher.BeginInvoke(new Action(ApplyFilters), System.Windows.Threading.DispatcherPriority.Background);
+                    return;
+                }
 
-                    bool categoryMatch = string.IsNullOrEmpty(selectedCategory) || selectedCategory == "All Categories" || b.Category == selectedCategory;
-                    // Use OrdinalIgnoreCase to avoid culture-specific casing bugs (e.g. Turkish İ/I).
-                    bool searchMatch = string.IsNullOrEmpty(search)
-                        || b.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
-                        || b.Category.Contains(search, StringComparison.OrdinalIgnoreCase);
+                string search = SearchBox.Text ?? string.Empty;
+                string? selectedCategory = CategoryFilter.SelectedItem as string;
 
-                    return categoryMatch && searchMatch;
-                };
+                try
+                {
+                    view.Filter = item =>
+                    {
+                        if (item is not Bill b) return false;
+
+                        bool categoryMatch = string.IsNullOrEmpty(selectedCategory) || selectedCategory == "All Categories" || b.Category == selectedCategory;
+                        // Use OrdinalIgnoreCase to avoid culture-specific casing bugs (e.g. Turkish İ/I).
+                        bool searchMatch = string.IsNullOrEmpty(search)
+                            || b.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                            || b.Category.Contains(search, StringComparison.OrdinalIgnoreCase);
+
+                        return categoryMatch && searchMatch;
+                    };
+                }
+                catch (InvalidOperationException)
+                {
+                    Dispatcher.BeginInvoke(new Action(ApplyFilters), System.Windows.Threading.DispatcherPriority.Background);
+                }
             }
-            catch (InvalidOperationException)
+            finally
             {
-                Dispatcher.BeginInvoke(new Action(ApplyFilters), System.Windows.Threading.DispatcherPriority.Background);
+                _isFilteringActive = false;
             }
         }
 
@@ -3258,6 +3280,161 @@ namespace CrispyBills
             }
         }
 
+        private void DebugEnableMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (sender is not MenuItem mi) return;
+
+                bool enabling = mi.IsChecked == true;
+
+                if (enabling && !_debugEnableWarningShown)
+                {
+                    var res = MessageBox.Show(
+                        "Enabling destructive delete tools will allow permanent removal of data. Backups will be created automatically, but this action can be dangerous. Do you want to enable these tools for this session?",
+                        "Enable Destructive Tools",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (res != MessageBoxResult.Yes)
+                    {
+                        mi.IsChecked = false;
+                        _debugDestructiveDeletesEnabled = false;
+                        DebugDeleteMonthMenuItem.IsEnabled = false;
+                        DebugDeleteYearMenuItem.IsEnabled = false;
+                        return;
+                    }
+
+                    _debugEnableWarningShown = true;
+                }
+
+                _debugDestructiveDeletesEnabled = enabling;
+                DebugDeleteMonthMenuItem.IsEnabled = _debugDestructiveDeletesEnabled;
+                DebugDeleteYearMenuItem.IsEnabled = _debugDestructiveDeletesEnabled;
+                SetStatus(_debugDestructiveDeletesEnabled ? "Destructive debug tools enabled (session)." : "Destructive debug tools disabled.");
+            }
+            catch (Exception ex)
+            {
+                LogNonFatal("DebugEnableMenuItem_Click", ex);
+            }
+        }
+
+        private void DebugDeleteMonth_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!_debugDestructiveDeletesEnabled)
+                {
+                    MessageBox.Show("Destructive tools are not enabled. Check Debug > Enable Destructive Delete Tools first.", "Not Enabled", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                if (MonthSelector.SelectedIndex < 0)
+                {
+                    MessageBox.Show("No month selected.", "Delete Month", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                var monthName = months[MonthSelector.SelectedIndex];
+                var confirm = MessageBox.Show($"Permanently delete all bills and income for {monthName} in {CurrentYear}? This will be backed up first. Proceed?", "Confirm Delete Month", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (confirm != MessageBoxResult.Yes) return;
+
+                // Backup before destructive action
+                BackupDatabase(CurrentYear);
+
+                // Snapshot for undo
+                var savedBills = AnnualData[monthName].Select(CloneBillForExport).ToList();
+                var savedIncome = MonthlyIncome.GetValueOrDefault(monthName, 0m);
+
+                PushUndo(() =>
+                {
+                    AnnualData[monthName].Clear();
+                    foreach (var sb in savedBills)
+                        AnnualData[monthName].Add(sb);
+                    MonthlyIncome[monthName] = savedIncome;
+                    UpdateDashboard();
+                },
+                () =>
+                {
+                    AnnualData[monthName].Clear();
+                    MonthlyIncome[monthName] = 0m;
+                    UpdateDashboard();
+                });
+
+                // Perform deletion
+                AnnualData[monthName].Clear();
+                MonthlyIncome[monthName] = 0m;
+
+                // Persist change
+                try
+                {
+                    PersistYearDataToDatabase(GetDbPath(CurrentYear));
+                    SetStatus($"Deleted month {monthName} in {CurrentYear}. Backup created.");
+                }
+                catch (Exception ex)
+                {
+                    LogNonFatal("DebugDeleteMonth persist", ex);
+                    MessageBox.Show("Month deletion persisted with errors. See logs.", "Delete Month", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+
+                UpdateDashboard();
+            }
+            catch (Exception ex)
+            {
+                LogNonFatal("DebugDeleteMonth_Click", ex);
+            }
+        }
+
+        private void DebugDeleteYear_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (!_debugDestructiveDeletesEnabled)
+                {
+                    MessageBox.Show("Destructive tools are not enabled. Check Debug > Enable Destructive Delete Tools first.", "Not Enabled", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                var targetYear = YearSelector.SelectedItem as string ?? CurrentYear;
+                var confirm = MessageBox.Show($"Permanently delete the database and sidecars for year {targetYear}? This cannot be undone except from backups. Proceed?", "Confirm Delete Year", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (confirm != MessageBoxResult.Yes) return;
+
+                // Backup before destructive action
+                BackupDatabase(targetYear);
+
+                var dbFile = GetDbPath(targetYear);
+                try
+                {
+                    if (File.Exists(dbFile)) File.Delete(dbFile);
+                    var wal = dbFile + "-wal";
+                    var shm = dbFile + "-shm";
+                    if (File.Exists(wal)) File.Delete(wal);
+                    if (File.Exists(shm)) File.Delete(shm);
+
+                    SetStatus($"Deleted database for {targetYear}. Backup created.");
+                }
+                catch (Exception ex)
+                {
+                    LogNonFatal($"DebugDeleteYear file delete ({targetYear})", ex);
+                    MessageBox.Show("Failed to delete some files. See logs.", "Delete Year", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+
+                // Refresh year selector and load a fallback year
+                UpdateYearSelector();
+                var years = GetAvailableYears();
+                if (!years.Contains(CurrentYear))
+                {
+                    _currentYear = years.FirstOrDefault() ?? DateTime.Now.Year.ToString();
+                }
+
+                LoadData();
+            }
+            catch (Exception ex)
+            {
+                LogNonFatal("DebugDeleteYear_Click", ex);
+            }
+        }
+
         // Helper: export the structured CSV to a specific path (no dialog)
         private void ExportCsvToPath(string path)
         {
@@ -3376,9 +3553,16 @@ namespace CrispyBills
                     if (!billsByMonth.ContainsKey(monthName))
                         continue;
 
+                    var guidStr = reader.GetString(0);
+                    if (!Guid.TryParse(guidStr, out var id))
+                    {
+                        LogNonFatal($"Skipping row with invalid GUID: {guidStr}");
+                        continue;
+                    }
+
                     billsByMonth[monthName].Add(new Bill
                     {
-                        Id = Guid.Parse(reader.GetString(0)),
+                        Id = id,
                         Name = reader.GetString(2),
                         Amount = reader.GetDecimal(3),
                         DueDate = DateTime.ParseExact(reader.GetString(4), "yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -3605,7 +3789,10 @@ namespace CrispyBills
                         AnnualData[monthKey].Add(bill);
                         importedCount++;
                     }
-                    catch { /* ignore malformed line */ }
+                    catch (Exception ex)
+                    {
+                        LogNonFatal($"CSV import row error: {line}", ex);
+                    }
                 }
 
                 UpdateDashboard();
