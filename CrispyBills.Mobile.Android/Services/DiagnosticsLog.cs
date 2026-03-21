@@ -36,7 +36,8 @@ public static class DiagnosticsLog
                 {
                     if (dt < threshold)
                     {
-                        try { File.Delete(file); } catch { }
+                        try { File.Delete(file); }
+                        catch (Exception ex) { await WriteAsync("DiagnosticsLogFileDelete", ex); }
                     }
                 }
             }

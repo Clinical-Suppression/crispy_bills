@@ -7,6 +7,15 @@ keeps the original scripts as the execution engines and only provides an
 interactive selection, dry-run, commit synthesis, and confirmation checkpoints.
 #>
 
+param(
+    [string[]]$Tasks,
+    [switch]$DryRun,
+    [switch]$NoCommit,
+    [switch]$Verbose,
+    [switch]$AutoConfirm,
+    [switch]$AllowDirty
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -34,33 +43,74 @@ function Prompt-MultiSelect {
     for ($i = 0; $i -lt $Options.Length; $i++) {
         Write-Host "[$($i+1)] $($Options[$i])"
     }
-    $s = Read-Host "Select tasks to run (comma-separated numbers, or 'all')"
-    if ($s -eq 'all') { return 0..($Options.Length-1) }
-    $indices = @()
-    foreach ($part in ($s -split ',')) {
+    $s = Read-Host "Select tasks to run (comma-separated numbers, ranges e.g. 1-3, 'all', or 'none')"
+    if ([string]::IsNullOrWhiteSpace($s)) { return @() }
+
+    $s = $s.Trim().ToLowerInvariant()
+    if ($s -eq 'all' -or $s -eq 'a') { return 0..($Options.Length-1) }
+    if ($s -eq 'none' -or $s -eq 'n') { return @() }
+
+    $indices = New-Object System.Collections.Generic.List[int]
+    foreach ($part in $s -split ',') {
         $part = $part.Trim()
         if (-not $part) { continue }
+
+        if ($part -match '^(\d+)-(\d+)$') {
+            $start = [int]$Matches[1]
+            $end = [int]$Matches[2]
+            if ($start -le 0 -or $end -le 0 -or $start -gt $end) {
+                Write-Host "Ignoring invalid range '$part'" -ForegroundColor Yellow
+                continue
+            }
+            for ($n = $start; $n -le $end; $n++) {
+                if ($n -ge 1 -and $n -le $Options.Length) { $indices.Add($n - 1) }
+            }
+            continue
+        }
+
+        $n = 0
         if ([int]::TryParse($part, [ref]$n)) {
-            if ($n -ge 1 -and $n -le $Options.Length) { $indices += ($n-1) }
+            if ($n -ge 1 -and $n -le $Options.Length) {
+                $indices.Add($n - 1)
+            } else {
+                Write-Host "Ignoring out-of-range selection '$part'" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "Ignoring invalid selection '$part'" -ForegroundColor Yellow
         }
     }
+
     return $indices | Sort-Object -Unique
+}
+
+function Get-ShellCommand {
+    if (Get-Command pwsh -ErrorAction SilentlyContinue) { return 'pwsh' }
+    if (Get-Command powershell -ErrorAction SilentlyContinue) { return 'powershell' }
+    throw 'No PowerShell executable found (pwsh or powershell).'
 }
 
 function Compose-CommandForScript {
     param([string]$ScriptName)
-    return @('powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot $ScriptName))
+    $shell = Get-ShellCommand
+    return @($shell, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot $ScriptName))
 }
 
 function Run-ScriptByName {
     param(
         [string]$ScriptName,
-        [bool]$DryRun = $false
+        [bool]$DryRun = $false,
+        [string[]]$ExtraArgs
     )
+
+    $scriptPath = Join-Path $PSScriptRoot $ScriptName
+    if (-not (Test-Path $scriptPath)) {
+        throw "Script not found: $scriptPath"
+    }
 
     $cmd = Compose-CommandForScript -ScriptName $ScriptName
     $command = $cmd[0]
     $args = $cmd[1..($cmd.Length-1)]
+    if ($ExtraArgs) { $args += $ExtraArgs }
 
     if ($DryRun) {
         Write-Host "DRY-RUN: $command $($args -join ' ')"
@@ -70,7 +120,7 @@ function Run-ScriptByName {
     Invoke-LoggedCommand -Command $command -Arguments $args -WorkingDirectory (Get-WorkspaceRoot)
 }
 
-function Show-Header { Write-Host '=== Crispy Bills Release Wizard ===' -ForegroundColor Cyan }
+function Show-Header { Write-Host '=== Crispy_Bills Release Wizard ===' -ForegroundColor Cyan }
 
 Show-Header
 
@@ -91,19 +141,43 @@ $available = @(
 )
 
 Write-Host "Discovered release scripts (from: $PSScriptRoot):" -ForegroundColor Yellow
-$sel = Prompt-MultiSelect -Options $available
-if (-not $sel -or $sel.Count -eq 0) {
-    Write-Host 'No tasks selected; exiting.' -ForegroundColor Yellow
-    exit 0
+$chosen = @()
+
+if ($Tasks -and $Tasks.Count -gt 0) {
+    $lowerAvailable = $available | ForEach-Object { $_.ToLowerInvariant() }
+    foreach ($t in $Tasks) {
+        $ttrim = $t.Trim()
+        if ($lowerAvailable -contains $ttrim.ToLowerInvariant()) {
+            $chosen += $available[$lowerAvailable.IndexOf($ttrim.ToLowerInvariant())]
+        } else {
+            Write-Host "Unknown task specified: $ttrim" -ForegroundColor Yellow
+        }
+    }
+
+    if ($chosen.Count -eq 0) {
+        Write-Host 'No valid tasks provided via -Tasks; exiting.' -ForegroundColor Yellow
+        exit 0
+    }
+}
+else {
+    $sel = @((Prompt-MultiSelect -Options $available))
+    if ($sel.Count -eq 0) {
+        Write-Host 'No tasks selected; exiting.' -ForegroundColor Yellow
+        exit 0
+    }
+    $chosen = $sel | ForEach-Object { $available[$_] }
 }
 
-$chosen = $sel | ForEach-Object { $available[$_] }
 Write-Host "Selected tasks:" -ForegroundColor Green
 $chosen | ForEach-Object { Write-Host " - $_" }
 
 $doCommit = Prompt-YesNo -Message 'Create a commit as part of the flow (will run conventional-commit.ps1 if available)?' -Default $true
 
 $dryRun = Prompt-YesNo -Message 'Run in dry-run mode (show commands but do not execute)?' -Default $false
+
+if (-not $AllowDirty) {
+    $AllowDirty = Prompt-YesNo -Message 'Allow dirty working tree for preflight (skip clean check)?' -Default $false
+}
 
 if ($doCommit) {
     if (Test-Path (Join-Path $PSScriptRoot 'conventional-commit.ps1')) {
@@ -124,30 +198,55 @@ if (-not (Prompt-YesNo -Message 'Proceed with the selected operations?' -Default
 try {
     foreach ($s in $chosen) {
         Write-Host "`n=== Running: $s ===" -ForegroundColor Cyan
-        Run-ScriptByName -ScriptName $s -DryRun:$dryRun
+        $extraArgs = @()
+        if ($s -eq 'preflight.ps1' -and $AllowDirty) { $extraArgs += '-AllowDirty' }
+        Run-ScriptByName -ScriptName $s -DryRun:$dryRun -ExtraArgs $extraArgs
     }
 
     if ($doCommit) {
-        Write-Host '`n=== Commit Step ===' -ForegroundColor Cyan
+        Write-Host "`n=== Commit Step ===" -ForegroundColor Cyan
         if ($commitScript) {
             Run-ScriptByName -ScriptName $commitScript -DryRun:$dryRun
         }
         else {
-            $msg = Read-Host 'Enter commit message (conventional style recommended)'
-            if (-not $dryRun) {
-                Push-Location (Get-WorkspaceRoot)
-                try { & git add -A; git commit -m $msg }
-                finally { Pop-Location }
+            if ($dryRun) {
+                Write-Host "DRY-RUN: git add -A && git commit -m '<message>'"
             }
-            else { Write-Host "DRY-RUN: git add -A && git commit -m '$msg'" }
+            else {
+                do {
+                    $msg = Read-Host 'Enter commit message (conventional style recommended, or type SKIP to skip commit)'
+                    if ($msg -eq 'SKIP') {
+                        Write-Host 'Skipping commit step.' -ForegroundColor Yellow
+                        break
+                    }
+
+                    if ([string]::IsNullOrWhiteSpace($msg)) {
+                        Write-Host 'Commit message cannot be empty unless SKIP is entered.' -ForegroundColor Yellow
+                    }
+                } while ([string]::IsNullOrWhiteSpace($msg))
+
+                if ($msg -and $msg -ne 'SKIP') {
+                    Push-Location (Get-WorkspaceRoot)
+                    try { & git add -A; git commit -m $msg }
+                    finally { Pop-Location }
+                }
+            }
         }
     }
 
-    Write-TaskDiagnostics -Prefix 'Wizard'
-    Write-Host '`nWizard completed.' -ForegroundColor Green
+    if (Get-Command Write-TaskDiagnostics -ErrorAction SilentlyContinue) {
+        Write-TaskDiagnostics -Prefix 'Wizard'
+    } else {
+        Write-Host 'Warning: Write-TaskDiagnostics not available.' -ForegroundColor Yellow
+    }
+    Write-Host "`nWizard completed." -ForegroundColor Green
 }
 catch {
     Write-Host "Wizard failed: $($_.Exception.Message)" -ForegroundColor Red
-    Write-TaskDiagnostics -Prefix 'Wizard (partial)'
+    if (Get-Command Write-TaskDiagnostics -ErrorAction SilentlyContinue) {
+        Write-TaskDiagnostics -Prefix 'Wizard (partial)'
+    } else {
+        Write-Host 'Warning: Write-TaskDiagnostics not available.' -ForegroundColor Yellow
+    }
     exit 1
 }

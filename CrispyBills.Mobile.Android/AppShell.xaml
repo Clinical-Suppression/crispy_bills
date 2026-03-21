@@ -4,7 +4,7 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:local="clr-namespace:CrispyBills.Mobile.Android"
-    Title="Crispy Bills"
+    Title="Crispy_Bills"
     BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource Gray950}}"
     ForegroundColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark={StaticResource White}}">
 

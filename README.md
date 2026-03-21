@@ -1,6 +1,6 @@
-# Crispy Bills
+# Crispy_Bills
 
-Crispy Bills is a local-first bill manager with a Windows desktop app (WPF) and an Android app (.NET MAUI). It helps track monthly bills, recurring entries, and yearly planning with SQLite-backed data.
+Crispy_Bills is a local-first bill manager with a Windows desktop app (WPF) and an Android app (.NET MAUI). It helps track monthly bills, recurring entries, and yearly planning with SQLite-backed data.
 
 ## What This Repository Includes
 

@@ -14,9 +14,9 @@ public partial class NotesPage : ContentPage
         NotesEditor.TextChanged += OnNotesChanged;
     }
 
-    protected override async void OnAppearing()
+    protected override async Task OnAppearing()
     {
-        base.OnAppearing();
+        await base.OnAppearing();
         NotesEditor.Text = await _service.LoadNotesAsync();
         UpdateLineCount();
         _unsubscribed = false;
@@ -32,7 +32,7 @@ public partial class NotesPage : ContentPage
         }
     }
 
-    private async void OnSaveClicked(object? sender, EventArgs e)
+    private async Task OnSaveClicked(object? sender, EventArgs e)
     {
         await _service.SaveNotesAsync(NotesEditor.Text ?? string.Empty);
         await DisplayAlert("Saved", "Notes updated.", "OK");

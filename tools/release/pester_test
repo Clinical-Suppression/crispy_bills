@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="5" errors="0" failures="4" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2026-03-20" time="19:53:49">
+  <environment user="Chris" machine-name="CHRIS-PC" cwd="C:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy_Bills\tools\release" user-domain="CHRIS-PC" platform="Microsoft Windows 11 Pro|C:\WINDOWS|\Device\Harddisk0\Partition4" nunit-version="2.5.8.0" os-version="10.0.22631" clr-version="4.0.30319.42000" />
+  <culture-info current-culture="en-US" current-uiculture="en-US" />
+  <test-suite type="Powershell" name="Pester" executed="True" result="Failure" success="False" time="17.4564" asserts="0">
+    <results>
+      <test-suite type="TestFixture" name="Crispy_Bills Release Wizard" executed="True" result="Failure" success="False" time="17.4564" asserts="0" description="Crispy_Bills Release Wizard">
+        <results>
+          <test-case description="Prompt-MultiSelect accepts all (case-insensitive)" name="Crispy_Bills Release Wizard.Prompt-MultiSelect accepts all (case-insensitive)" time="16.1531" asserts="0" success="False" result="Failure" executed="True">
+            <failure>
+              <message>Expected: {0 1 2}
+But was:  {0}</message>
+              <stack-trace>at line: 15 in C:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy_Bills\tools\release\wizard.tests.ps1
+15:         $result | Should Be @([int]0,[int]1,[int]2)
+</stack-trace>
+            </failure>
+          </test-case>
+          <test-case description="Prompt-MultiSelect parses numeric ranges and ignores invalid entries" name="Crispy_Bills Release Wizard.Prompt-MultiSelect parses numeric ranges and ignores invalid entries" time="0.227" asserts="0" success="False" result="Failure" executed="True">
+            <failure>
+              <message>Expected: {0 1 3}
+But was:  {0}</message>
+              <stack-trace>at line: 23 in C:\Users\Chris\Documents\Visual Studio Projects\Projects\Crispy_Bills\tools\release\wizard.tests.ps1
+23:         $result | Should Be @([int]0,[int]1,[int]3)
+</stack-trace>
+            </failure>
+          </test-case>
+          <test-case description="Get-ShellCommand returns a shell command" name="Crispy_Bills Release Wizard.Get-ShellCommand returns a shell command" time="0.8027" asserts="0" success="False" result="Failure" executed="True">
+            <failure>
+              <message>'BeOneOf' is not a valid Should operator.</message>
+              <stack-trace>at line: 42 in C:\Program Files\WindowsPowerShell\Modules\Pester\3.4.0\Functions\Assertions\Should.ps1</stack-trace>
+            </failure>
+          </test-case>
+          <test-case description="Run-ScriptByName throws when script not found" name="Crispy_Bills Release Wizard.Run-ScriptByName throws when script not found" time="0.0861" asserts="0" success="True" result="Success" executed="True" />
+          <test-case description="Prompt-YesNo returns default when response blank" name="Crispy_Bills Release Wizard.Prompt-YesNo returns default when response blank" time="0.1876" asserts="0" success="False" result="Failure" executed="True">
+            <failure>
+              <message>'BeFalse' is not a valid Should operator.</message>
+              <stack-trace>at line: 42 in C:\Program Files\WindowsPowerShell\Modules\Pester\3.4.0\Functions\Assertions\Should.ps1</stack-trace>
+            </failure>
+          </test-case>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>

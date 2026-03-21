@@ -4,7 +4,7 @@
              xmlns:models="clr-namespace:CrispyBills.Mobile.Android.Models"
              x:Class="CrispyBills.Mobile.Android.MainPage"
              Shell.NavBarIsVisible="False"
-             Title="Crispy Bills">
+             Title="Crispy_Bills">
 
     <Grid RowDefinitions="Auto,*" RowSpacing="0">
         <Border Grid.Row="0"
@@ -12,7 +12,7 @@
             BackgroundColor="{StaticResource PrimaryDark}"
             Padding="14,16,14,12">
             <VerticalStackLayout Spacing="12">
-                  <Label Text="Crispy Bills"
+                  <Label Text="Crispy_Bills"
                       TextColor="{StaticResource White}"
                        FontSize="24"
                        FontAttributes="Bold" />

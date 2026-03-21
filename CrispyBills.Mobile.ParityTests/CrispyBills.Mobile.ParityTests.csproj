@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <IsPackable>false</IsPackable>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -20,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Crispy_Bills\CrispyBills.csproj" />
     <Compile Include="..\CrispyBills.Mobile.Android\Models\BillItem.cs" Link="Source\BillItem.cs" />
     <Compile Include="..\CrispyBills.Mobile.Android\Models\BillTemplate.cs" Link="Source\BillTemplate.cs" />
     <Compile Include="..\CrispyBills.Mobile.Android\Models\RecurrenceEndMode.cs" Link="Source\RecurrenceEndMode.cs" />

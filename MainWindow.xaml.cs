@@ -19,6 +19,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using System.Windows.Threading;
 using System.Threading.Tasks;
+using CrispyBills;
 
 namespace CrispyBills
 {
@@ -83,30 +84,6 @@ namespace CrispyBills
         private sealed record GridEditSnapshot(Bill Bill, string Month, string Name, decimal Amount, DateTime DueDate, string Category);
         private sealed record PersistenceSnapshot(string Year, Dictionary<string, List<Bill>> BillsByMonth, Dictionary<string, decimal> IncomeByMonth, string NotesText);
         private sealed record PieCategoryRow(string Name, decimal Total);
-        private sealed class StructuredImportPackage
-        {
-            public Dictionary<string, StructuredYearImportData> Years { get; } = new(StringComparer.OrdinalIgnoreCase);
-            public bool HasNotesSection { get; set; }
-            public string NotesText { get; set; } = string.Empty;
-        }
-
-        private sealed class StructuredYearImportData
-        {
-            public Dictionary<string, List<Bill>> BillsByMonth { get; }
-            public Dictionary<string, decimal> IncomeByMonth { get; }
-
-            public StructuredYearImportData(IEnumerable<string> monthNames)
-            {
-                BillsByMonth = monthNames.ToDictionary(
-                    month => month,
-                    _ => new List<Bill>(),
-                    StringComparer.OrdinalIgnoreCase);
-                IncomeByMonth = monthNames.ToDictionary(
-                    month => month,
-                    _ => 0m,
-                    StringComparer.OrdinalIgnoreCase);
-            }
-        }
 
         /// <summary>
         /// Initializes UI state, ensures database storage exists, loads the current year,
@@ -178,7 +155,8 @@ namespace CrispyBills
 
                     MessageBox.Show(this, $"Auto export+parse completed. Diagnostics and test DBs saved.", "Auto Test", MessageBoxButton.OK, MessageBoxImage.Information);
                     // Remove sentinel so auto-test doesn't re-run on every launch.
-                    try { File.Delete(autoTestPath); } catch { }
+                    try { File.Delete(autoTestPath); }
+                    catch (Exception ex) { LogNonFatal("AutoTestPathDelete", ex); }
                 }
             }
             catch (Exception ex)
@@ -294,7 +272,7 @@ namespace CrispyBills
             {
                 popup = new Window
                 {
-                    Title = "Closing Crispy Bills",
+                    Title = "Closing Crispy_Bills",
                     Owner = this,
                     WindowStartupLocation = WindowStartupLocation.CenterOwner,
                     ResizeMode = ResizeMode.NoResize,
@@ -422,26 +400,37 @@ namespace CrispyBills
 
         private void LogNonFatal(string area, Exception? ex = null)
         {
+            var sb = new StringBuilder();
+            sb.AppendLine($"[{DateTime.Now:O}] {area}");
+            if (ex != null)
+            {
+                sb.AppendLine(ex.ToString());
+            }
+            sb.AppendLine();
+
+            // Try primary log location
             try
             {
                 var logDir = Path.Combine(backupsRoot, "logs");
                 Directory.CreateDirectory(logDir);
                 var logPath = Path.Combine(logDir, $"nonfatal_{DateTime.Now:yyyyMMdd}.log");
+                File.AppendAllText(logPath, sb.ToString());
+                return;
+            }
+            catch { }
 
-                var sb = new StringBuilder();
-                sb.AppendLine($"[{DateTime.Now:O}] {area}");
-                if (ex != null)
-                {
-                    sb.AppendLine(ex.ToString());
-                }
-                sb.AppendLine();
-
+            // Fallback: try app root
+            try
+            {
+                var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"nonfatal_{DateTime.Now:yyyyMMdd}.log");
                 File.AppendAllText(logPath, sb.ToString());
             }
-            catch
-            {
-                // Logging is best-effort and should never break app workflows.
-            }
+            catch { }
+        }
+
+        private void LogNonFatalMessage(string message)
+        {
+            LogNonFatal(message);
         }
 
         private void MigrateLegacyDatabases()
@@ -901,7 +890,7 @@ namespace CrispyBills
             }
 
             var info = new StringBuilder();
-            info.AppendLine("Crispy Bills Pre-Import Backup");
+            info.AppendLine("Crispy_Bills Pre-Import Backup");
             info.AppendLine($"Created: {DateTime.Now:f}");
             info.AppendLine($"Target Years: {string.Join(", ", targetYears)}");
             foreach (var entry in selectedMonthsByYear.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase))
@@ -975,7 +964,8 @@ namespace CrispyBills
                     if (NotesBox != null)
                         NotesBox.Text = migratedText;
 
-                    try { File.Delete(legacyNotesPath); } catch { }
+                    try { File.Delete(legacyNotesPath); }
+                    catch (Exception ex) { LogNonFatal("LegacyNotesPathDelete", ex); }
                     return;
                 }
 
@@ -996,8 +986,9 @@ namespace CrispyBills
             {
                 SaveGlobalNotesToDatabase(NotesBox?.Text ?? string.Empty);
             }
-            catch
+            catch (Exception ex)
             {
+                LogNonFatal("SaveGlobalNotes", ex);
                 // Non-fatal: notes save failure should not break app workflows.
             }
         }
@@ -1039,8 +1030,9 @@ namespace CrispyBills
                 notes = dbNotes;
                 return true;
             }
-            catch
+            catch (Exception)
             {
+                // Logging handled by caller
                 return false;
             }
         }
@@ -3206,77 +3198,89 @@ namespace CrispyBills
                 Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
                 FileName = $"CrispyBills_Report_{DateTime.Now:yyyyMMdd}.csv"
             };
-
             if (dlg.ShowDialog() == true)
             {
-                var sb = new StringBuilder();
-                sb.AppendLine($"REPORT,{EscapeCsv("Crispy Bills Export")}");
-                sb.AppendLine($"GENERATED AT,{EscapeCsv(DateTime.Now.ToString("f"))}");
-                sb.AppendLine($"EXPORT SCOPE,{EscapeCsv("All available years")}");
-                sb.AppendLine();
-
-                var years = GetAvailableYears().OrderBy(y => y, StringComparer.Ordinal).ToList();
-                foreach (var year in years)
+                try
                 {
-                    var yearData = LoadYearExportData(year);
-                    decimal yearIncome = months.Sum(m => yearData.IncomeByMonth.GetValueOrDefault(m, 0m));
-                    decimal yearExpenses = months.Sum(m => yearData.BillsByMonth[m].Sum(b => b.Amount));
-                    decimal yearRemaining = months.Sum(m => yearData.BillsByMonth[m].Where(b => !b.IsPaid).Sum(b => b.Amount));
+                    ExportCsvToPath(dlg.FileName);
+                    var years = GetAvailableYears().OrderBy(y => y, StringComparer.Ordinal).ToList();
+                    MessageBox.Show($"Successfully exported {years.Count} year(s) and notes to {Path.GetFileName(dlg.FileName)}", "Export Complete");
+                }
+                catch (Exception ex)
+                {
+                    LogNonFatal("ExportCsv_Click", ex);
+                    MessageBox.Show($"Export failed: {ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
 
-                    sb.AppendLine($"===== YEAR =====,{year}");
-                    sb.AppendLine($"YEAR SUMMARY,Income,{yearIncome.ToString(CultureInfo.InvariantCulture)},Expenses,{yearExpenses.ToString(CultureInfo.InvariantCulture)},Remaining,{yearRemaining.ToString(CultureInfo.InvariantCulture)},Net,{(yearIncome - yearExpenses).ToString(CultureInfo.InvariantCulture)}");
-                    sb.AppendLine();
+        public void ImportCsv_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dlg = new OpenFileDialog { Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*" };
+                if (dlg.ShowDialog() != true) return;
 
-                    foreach (var month in months)
-                    {
-                        var bills = yearData.BillsByMonth[month]
-                            .OrderBy(b => b.DueDate)
-                            .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
-                            .ToList();
-
-                        decimal income = yearData.IncomeByMonth.GetValueOrDefault(month, 0m);
-                        decimal expenses = bills.Sum(b => b.Amount);
-                        decimal remaining = bills.Where(b => !b.IsPaid).Sum(b => b.Amount);
-                        decimal paid = expenses - remaining;
-
-                        sb.AppendLine($"--- MONTH ---,{month}");
-                        sb.AppendLine($"MONTH SUMMARY,Income,{income.ToString(CultureInfo.InvariantCulture)},Expenses,{expenses.ToString(CultureInfo.InvariantCulture)},Paid,{paid.ToString(CultureInfo.InvariantCulture)},Remaining,{remaining.ToString(CultureInfo.InvariantCulture)},Net,{(income - expenses).ToString(CultureInfo.InvariantCulture)},Bill Count,{bills.Count}");
-                        sb.AppendLine("Name,Category,Amount,Due Date,Status,Recurring,Past Due,Month,Year");
-
-                        foreach (var b in bills)
-                        {
-                            string status = b.IsPaid ? "PAID" : IsBillPastDueForContext(b, year, month) ? "PAST DUE" : "DUE";
-                            sb.AppendLine(string.Join(",",
-                                EscapeCsv(b.Name),
-                                EscapeCsv(b.Category),
-                                b.Amount.ToString(CultureInfo.InvariantCulture),
-                                EscapeCsv(b.DueDate.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)),
-                                EscapeCsv(status),
-                                b.IsRecurring ? "Yes" : "No",
-                                IsBillPastDueForContext(b, year, month) ? "Yes" : "No",
-                                EscapeCsv(month),
-                                EscapeCsv(year)));
-                        }
-
-                        sb.AppendLine();
-                    }
-
-                    sb.AppendLine();
+                var lines = File.ReadAllLines(dlg.FileName);
+                if (lines.Length == 0)
+                {
+                    MessageBox.Show(this, "The selected CSV is empty.", "Import CSV", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
                 }
 
-                string notesText = NotesBox?.Text ?? string.Empty;
-                string[] noteLines = SplitNotesLines(notesText);
-
-                sb.AppendLine("===== NOTES =====,Global Notes");
-                sb.AppendLine($"NOTES SUMMARY,Line Count,{noteLines.Length},Character Count,{notesText.Length}");
-                sb.AppendLine("Line Number,Text");
-                for (int i = 0; i < noteLines.Length; i++)
+                StructuredImportPackage importPackage;
+                try
                 {
-                    sb.AppendLine($"{i + 1},{EscapeCsv(noteLines[i])}");
+                    importPackage = ParseStructuredReportCsv(lines);
+                }
+                catch (Exception ex)
+                {
+                    LogNonFatal("ImportCsv_Click parse", ex);
+                    MessageBox.Show($"The structured CSV could not be parsed.\nError: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
                 }
 
-                File.WriteAllText(dlg.FileName, sb.ToString());
-                MessageBox.Show($"Successfully exported {years.Count} year(s) and notes to {Path.GetFileName(dlg.FileName)}", "Export Complete");
+                if (importPackage.Years.Count == 0 && !importPackage.HasNotesSection)
+                {
+                    MessageBox.Show("The structured CSV does not contain any importable year, month, or notes data.", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var monthlySummary = importPackage.Years.ToDictionary(
+                    yearEntry => yearEntry.Key,
+                    yearEntry => yearEntry.Value.BillsByMonth.ToDictionary(
+                        monthEntry => monthEntry.Key,
+                        monthEntry => (
+                            BillCount: monthEntry.Value.Count,
+                            Expense: monthEntry.Value.Sum(b => b.Amount),
+                            Income: yearEntry.Value.IncomeByMonth.GetValueOrDefault(monthEntry.Key, 0m)),
+                        StringComparer.OrdinalIgnoreCase),
+                    StringComparer.OrdinalIgnoreCase);
+
+                var importDialog = new ImportSelectionDialog(
+                    importPackage.Years.Keys.OrderBy(year => year, StringComparer.OrdinalIgnoreCase),
+                    months,
+                    importPackage.HasNotesSection,
+                    monthlySummary)
+                {
+                    Owner = this
+                };
+
+                if (importDialog.ShowDialog() != true)
+                    return;
+
+                var selectedMonthsByYear = importDialog.SelectedMonthsByYear;
+                bool importNotes = importPackage.HasNotesSection && importDialog.ImportNotes;
+
+                if (!ConfirmAndBackupBeforeImport(selectedMonthsByYear, importNotes))
+                    return;
+
+                ApplyStructuredImportPackage(importPackage, selectedMonthsByYear, importNotes);
+            }
+            catch (Exception ex)
+            {
+                LogNonFatal("ImportCsv_Click", ex);
+                MessageBox.Show($"Import failed: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -3400,7 +3404,15 @@ namespace CrispyBills
                 if (confirm != MessageBoxResult.Yes) return;
 
                 // Backup before destructive action
-                BackupDatabase(targetYear);
+                try
+                {
+                    BackupDatabase(targetYear);
+                }
+                catch (Exception ex)
+                {
+                    LogNonFatal($"DebugDeleteYear backup ({targetYear})", ex);
+                    MessageBox.Show($"Backup failed: {ex.Message}", "Delete Year", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
 
                 var dbFile = GetDbPath(targetYear);
                 try
@@ -3416,7 +3428,7 @@ namespace CrispyBills
                 catch (Exception ex)
                 {
                     LogNonFatal($"DebugDeleteYear file delete ({targetYear})", ex);
-                    MessageBox.Show("Failed to delete some files. See logs.", "Delete Year", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    MessageBox.Show($"Failed to delete some files.\n{ex}", "Delete Year", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
 
                 // Refresh year selector and load a fallback year
@@ -3432,6 +3444,7 @@ namespace CrispyBills
             catch (Exception ex)
             {
                 LogNonFatal("DebugDeleteYear_Click", ex);
+                MessageBox.Show($"Error: {ex.Message}", "Delete Year", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -3450,7 +3463,7 @@ namespace CrispyBills
 
             var sb = new StringBuilder();
             // Match ExportCsv_Click format exactly (no trailing spaces).
-            sb.AppendLine($"REPORT,{EscapeCsv("Crispy Bills Export")}");
+            sb.AppendLine($"REPORT,{EscapeCsv("Crispy_Bills Export")}");
             sb.AppendLine($"GENERATED AT,{EscapeCsv(DateTime.Now.ToString("f"))}");
             sb.AppendLine($"EXPORT SCOPE,{EscapeCsv("All available years")}");
             sb.AppendLine();
@@ -3469,7 +3482,13 @@ namespace CrispyBills
 
                 foreach (var month in months)
                 {
-                    var bills = yearData.BillsByMonth[month]
+                    if (!yearData.BillsByMonth.TryGetValue(month, out var monthBills))
+                    {
+                        LogNonFatal($"ExportCsvToPath: missing month in data: {month} for year {year}");
+                        continue;
+                    }
+
+                    var bills = monthBills
                         .OrderBy(b => b.DueDate)
                         .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
                         .ToList();
@@ -3483,9 +3502,25 @@ namespace CrispyBills
                     sb.AppendLine($"MONTH SUMMARY,Income,{income.ToString(CultureInfo.InvariantCulture)},Expenses,{expenses.ToString(CultureInfo.InvariantCulture)},Paid,{paid.ToString(CultureInfo.InvariantCulture)},Remaining,{remaining.ToString(CultureInfo.InvariantCulture)},Net,{(income - expenses).ToString(CultureInfo.InvariantCulture)},Bill Count,{bills.Count}");
                     sb.AppendLine("Name,Category,Amount,Due Date,Status,Recurring,Past Due,Month,Year");
 
+                    int monthIndex = Array.IndexOf(months, month);
+                    if (monthIndex < 0)
+                    {
+                        LogNonFatal($"ExportCsvToPath: unknown month '{month}' for year {year}");
+                        continue;
+                    }
+
+                    if (!int.TryParse(year, out int yearVal) || yearVal <= 0)
+                    {
+                        LogNonFatal($"ExportCsvToPath: invalid year value '{year}'");
+                        continue;
+                    }
+
+                    var contextStart = new DateTime(yearVal, monthIndex + 1, 1);
+
                     foreach (var b in bills)
                     {
-                        string status = b.IsPaid ? "PAID" : IsBillPastDueForContext(b, year, month) ? "PAST DUE" : "DUE";
+                        bool isPastDue = !b.IsPaid && (b.DueDate.Date < DateTime.Today || b.DueDate.Date < contextStart.Date);
+                        string status = b.IsPaid ? "PAID" : isPastDue ? "PAST DUE" : "DUE";
                         sb.AppendLine(string.Join(",",
                             EscapeCsv(b.Name),
                             EscapeCsv(b.Category),
@@ -3493,7 +3528,7 @@ namespace CrispyBills
                             EscapeCsv(b.DueDate.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture)),
                             EscapeCsv(status),
                             b.IsRecurring ? "Yes" : "No",
-                            IsBillPastDueForContext(b, year, month) ? "Yes" : "No",
+                            isPastDue ? "Yes" : "No",
                             EscapeCsv(month),
                             EscapeCsv(year)));
                     }
@@ -3536,7 +3571,10 @@ namespace CrispyBills
 
             var dbFile = GetDbPath(year);
             if (!File.Exists(dbFile))
+            {
+                LogNonFatal($"LoadYearExportData: database file missing for year {year} ({dbFile})");
                 return (billsByMonth, incomeByMonth);
+            }
 
             var exportCsb = new SqliteConnectionStringBuilder { DataSource = dbFile };
             using var conn = new SqliteConnection(exportCsb.ConnectionString);
@@ -3598,395 +3636,21 @@ namespace CrispyBills
                 Id = source.Id,
                 Name = source.Name,
                 Amount = source.Amount,
-                Category = source.Category,
                 DueDate = source.DueDate,
                 IsPaid = source.IsPaid,
-                IsRecurring = source.IsRecurring,
-                ContextPeriodStart = source.ContextPeriodStart
+                Category = source.Category,
+                IsRecurring = source.IsRecurring
             };
-        }
-
-        private bool IsBillPastDueForContext(Bill bill, string year, string monthName)
-        {
-            if (!int.TryParse(year, out int yearValue))
-                return !bill.IsPaid && bill.DueDate.Date < DateTime.Today;
-
-            int monthIndex = Array.IndexOf(months, monthName);
-            if (monthIndex < 0)
-                return !bill.IsPaid && bill.DueDate.Date < DateTime.Today;
-
-            var contextStart = new DateTime(yearValue, monthIndex + 1, 1);
-            return !bill.IsPaid && (bill.DueDate.Date < DateTime.Today || bill.DueDate.Date < contextStart.Date);
-        }
-
-        /// <summary>
-        /// Imports either month-scoped CSV or year-export CSV and maps valid rows into the selected month.
-        /// </summary>
-        private void ImportCsv_Click(object sender, RoutedEventArgs e)
-        {
-            if (MonthSelector.SelectedIndex < 0) return;
-            var dlg = new OpenFileDialog
-            {
-                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*"
-            };
-            if (dlg.ShowDialog() == true)
-            {
-                string[] lines;
-                try
-                {
-                    lines = File.ReadAllLines(dlg.FileName);
-                }
-                catch (IOException ex)
-                {
-                    MessageBox.Show($"Could not read file. It may be open in another program.\nError: {ex.Message}", "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                if (lines.Length <= 1) return; // no data
-
-                string monthKey = months[MonthSelector.SelectedIndex];
-
-                // Support formats:
-                // 1) Name,Amount,Category,DueDate,IsPaid
-                // 2) Month,Name,Amount,Category,DueDate,IsPaid (legacy year export)
-                // 3) Structured report export with YEAR/MONTH sections and detail header:
-                //    Name,Category,Amount,Due Date,Status,Recurring,Past Due,Month,Year
-                var header = ParseCsvLine(lines[0]).Select(h => h.Trim()).ToList();
-                bool hasMonthColumn = header.Count >= 6 &&
-                                      string.Equals(header[0], "Month", StringComparison.OrdinalIgnoreCase);
-                bool isStructuredReport = lines.Any(line =>
-                {
-                    var cols = ParseCsvLine(line).Select(c => c.Trim()).ToList();
-                    return cols.Count >= 9 &&
-                           string.Equals(cols[0], "Name", StringComparison.OrdinalIgnoreCase) &&
-                           string.Equals(cols[1], "Category", StringComparison.OrdinalIgnoreCase) &&
-                           string.Equals(cols[2], "Amount", StringComparison.OrdinalIgnoreCase) &&
-                           string.Equals(cols[3], "Due Date", StringComparison.OrdinalIgnoreCase) &&
-                           string.Equals(cols[4], "Status", StringComparison.OrdinalIgnoreCase);
-                });
-
-                bool validLegacyHeader = header.Count >= 5 &&
-                    string.Equals(header[0], "Name", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(header[1], "Amount", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(header[2], "Category", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(header[3], "DueDate", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(header[4], "IsPaid", StringComparison.OrdinalIgnoreCase);
-
-                bool validYearHeader = header.Count >= 6 &&
-                    string.Equals(header[0], "Month", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(header[1], "Name", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(header[2], "Amount", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(header[3], "Category", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(header[4], "DueDate", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(header[5], "IsPaid", StringComparison.OrdinalIgnoreCase);
-
-                if (!validLegacyHeader && !validYearHeader && !isStructuredReport)
-                {
-                    MessageBox.Show("Unsupported CSV format. Expected legacy export or the new structured report export.",
-                                    "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                if (isStructuredReport)
-                {
-                    StructuredImportPackage importPackage;
-                    try
-                    {
-                        importPackage = ParseStructuredReportCsv(lines);
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"The structured CSV could not be parsed.\nError: {ex.Message}",
-                                        "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
-
-                    if (importPackage.Years.Count == 0 && !importPackage.HasNotesSection)
-                    {
-                        MessageBox.Show("The structured CSV does not contain any importable year, month, or notes data.",
-                                        "Import Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                        return;
-                    }
-
-                    var monthlySummary = importPackage.Years.ToDictionary(
-                        yearEntry => yearEntry.Key,
-                        yearEntry => yearEntry.Value.BillsByMonth.ToDictionary(
-                            monthEntry => monthEntry.Key,
-                            monthEntry => (
-                                BillCount: monthEntry.Value.Count,
-                                Expense: monthEntry.Value.Sum(b => b.Amount),
-                                Income: yearEntry.Value.IncomeByMonth.GetValueOrDefault(monthEntry.Key, 0m)),
-                            StringComparer.OrdinalIgnoreCase),
-                        StringComparer.OrdinalIgnoreCase);
-
-                    var importDialog = new ImportSelectionDialog(
-                        importPackage.Years.Keys.OrderBy(year => year, StringComparer.OrdinalIgnoreCase),
-                        months,
-                        importPackage.HasNotesSection,
-                        monthlySummary)
-                    {
-                        Owner = this
-                    };
-
-                    if (importDialog.ShowDialog() != true)
-                        return;
-
-                    var selectedMonthsByYear = importDialog.SelectedMonthsByYear;
-                    bool importNotes = importPackage.HasNotesSection && importDialog.ImportNotes;
-
-                    if (!ConfirmAndBackupBeforeImport(selectedMonthsByYear, importNotes))
-                        return;
-
-                    ApplyStructuredImportPackage(importPackage, selectedMonthsByYear, importNotes);
-                    return;
-                }
-
-                int nameIndex = hasMonthColumn ? 1 : 0;
-                int amountIndex = hasMonthColumn ? 2 : 1;
-                int categoryIndex = hasMonthColumn ? 3 : 2;
-                int dueDateIndex = hasMonthColumn ? 4 : 3;
-                int isPaidIndex = hasMonthColumn ? 5 : 4;
-                
-                if (!ConfirmAndBackupBeforeImport(monthKey))
-                    return;
-
-                AnnualData[monthKey].Clear();
-
-                int importedCount = 0;
-
-                foreach (var line in lines.Skip(1))
-                {
-                    var parts = ParseCsvLine(line);
-                    if (parts.Count <= isPaidIndex) continue;
-
-                    if (hasMonthColumn && !string.Equals(parts[0], monthKey, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    try
-                    {
-                        if (!decimal.TryParse(parts[amountIndex], NumberStyles.Number, CultureInfo.InvariantCulture, out decimal amount))
-                            continue;
-                        if (!DateTime.TryParseExact(parts[dueDateIndex], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime dueDate))
-                            continue;
-                        bool isPaid;
-                        if (!bool.TryParse(parts[isPaidIndex], out isPaid))
-                        {
-                            var paidText = parts[isPaidIndex].Trim();
-                            if (paidText == "1") isPaid = true;
-                            else if (paidText == "0") isPaid = false;
-                            else continue;
-                        }
-
-                        var bill = new Bill
-                        {
-                            Name = parts[nameIndex],
-                            Amount = amount,
-                            Category = parts[categoryIndex],
-                            DueDate = dueDate,
-                            IsPaid = isPaid
-                        };
-                        AssignBillContext(bill, monthKey);
-                        AnnualData[monthKey].Add(bill);
-                        importedCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        LogNonFatal($"CSV import row error: {line}", ex);
-                    }
-                }
-
-                UpdateDashboard();
-                AutoSave();
-                MessageBox.Show($"Imported {importedCount} bill(s) into {monthKey}.", "Import Complete");
-            }
         }
 
         private StructuredImportPackage ParseStructuredReportCsv(string[] lines)
         {
-            var package = new StructuredImportPackage();
-            var notesByLineNumber = new SortedDictionary<int, string>();
-            string? currentYear = null;
-            string? currentMonth = null;
-            bool inDetailSection = false;
-            bool inNotesSection = false;
-            int totalLines = 0;
-            int totalDetailRows = 0;
-
-            foreach (var rawLine in lines)
-            {
-                totalLines++;
-                var parts = ParseCsvLine(rawLine);
-                if (parts.Count == 0 || parts.All(string.IsNullOrWhiteSpace))
-                {
-                    inDetailSection = false;
-                    continue;
-                }
-
-                string first = parts[0].Trim();
-
-                if (string.Equals(first, "===== YEAR =====", StringComparison.OrdinalIgnoreCase))
-                {
-                    currentYear = parts.Count > 1 ? parts[1].Trim() : null;
-                    currentMonth = null;
-                    inDetailSection = false;
-                    inNotesSection = false;
-
-                    if (!string.IsNullOrWhiteSpace(currentYear))
-                    {
-                        GetOrCreateYearImportData(package, currentYear);
-                    }
-
-                    continue;
-                }
-
-                if (string.Equals(first, "--- MONTH ---", StringComparison.OrdinalIgnoreCase))
-                {
-                    currentMonth = parts.Count > 1 ? parts[1].Trim() : null;
-                    inDetailSection = false;
-                    inNotesSection = false;
-                    continue;
-                }
-
-                if (string.Equals(first, "===== NOTES =====", StringComparison.OrdinalIgnoreCase))
-                {
-                    package.HasNotesSection = true;
-                    currentYear = null;
-                    currentMonth = null;
-                    inDetailSection = false;
-                    inNotesSection = true;
-                    continue;
-                }
-
-                if (inNotesSection)
-                {
-                    if (string.Equals(first, "NOTES SUMMARY", StringComparison.OrdinalIgnoreCase) ||
-                        (parts.Count >= 2 &&
-                         string.Equals(parts[0].Trim(), "Line Number", StringComparison.OrdinalIgnoreCase) &&
-                         string.Equals(parts[1].Trim(), "Text", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        continue;
-                    }
-
-                    if (int.TryParse(parts[0].Trim(), out int lineNumber))
-                    {
-                        notesByLineNumber[lineNumber] = parts.Count > 1 ? parts[1] : string.Empty;
-                    }
-
-                    continue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(currentYear) &&
-                    !string.IsNullOrWhiteSpace(currentMonth) &&
-                    string.Equals(first, "MONTH SUMMARY", StringComparison.OrdinalIgnoreCase))
-                {
-                    var yearData = GetOrCreateYearImportData(package, currentYear);
-                    yearData.IncomeByMonth[currentMonth] = ParseIncomeFromMonthSummary(parts);
-                    continue;
-                }
-
-                if (parts.Count >= 9 &&
-                    string.Equals(parts[0].Trim(), "Name", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(parts[1].Trim(), "Category", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(parts[2].Trim(), "Amount", StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(parts[3].Trim(), "Due Date", StringComparison.OrdinalIgnoreCase))
-                {
-                    inDetailSection = true;
-                    continue;
-                }
-
-                if (!inDetailSection || parts.Count < 9)
-                    continue;
-
-                totalDetailRows++;
-
-                string rowMonth = string.IsNullOrWhiteSpace(parts[7]) ? currentMonth ?? string.Empty : parts[7].Trim();
-                string rowYear = string.IsNullOrWhiteSpace(parts[8]) ? currentYear ?? string.Empty : parts[8].Trim();
-
-                if (string.IsNullOrWhiteSpace(rowMonth) || string.IsNullOrWhiteSpace(rowYear))
-                    continue;
-
-                if (Array.IndexOf(months, rowMonth) < 0)
-                    continue;
-
-                if (!decimal.TryParse(parts[2], NumberStyles.Number, CultureInfo.InvariantCulture, out decimal amount))
-                    continue;
-
-                if (!TryParseStructuredDueDate(parts[3], out DateTime dueDate))
-                    continue;
-
-                bool isPaid = string.Equals(parts[4].Trim(), "PAID", StringComparison.OrdinalIgnoreCase);
-                bool isRecurring = string.Equals(parts[5].Trim(), "Yes", StringComparison.OrdinalIgnoreCase);
-
-                var bill = new Bill
-                {
-                    Id = Guid.NewGuid(),
-                    Name = parts[0],
-                    Category = parts[1],
-                    Amount = amount,
-                    DueDate = dueDate,
-                    IsPaid = isPaid,
-                    IsRecurring = isRecurring
-                };
-
-                if (int.TryParse(rowYear, out int yearValue))
-                {
-                    int monthIndex = Array.IndexOf(months, rowMonth);
-                    AssignBillContext(bill, yearValue, monthIndex + 1);
-                }
-
-                var yearDataForBill = GetOrCreateYearImportData(package, rowYear);
-                yearDataForBill.BillsByMonth[rowMonth].Add(bill);
-            }
-
-            if (package.HasNotesSection)
-            {
-                package.NotesText = RebuildNotesText(notesByLineNumber);
-            }
-
-            // Write diagnostics so user can inspect parsing results if something was missed.
-            try
-            {
-                var diagSb = new StringBuilder();
-                diagSb.AppendLine($"Parsed structured CSV diagnostics");
-                diagSb.AppendLine($"Generated: {DateTime.Now:f}");
-                diagSb.AppendLine($"Total lines: {totalLines}");
-                diagSb.AppendLine($"Detail rows found: {totalDetailRows}");
-                diagSb.AppendLine("");
-                foreach (var y in package.Years.OrderBy(kv => kv.Key))
-                {
-                    diagSb.AppendLine($"Year: {y.Key}");
-                    foreach (var m in months)
-                    {
-                        var count = y.Value.BillsByMonth.GetValueOrDefault(m)?.Count ?? 0;
-                        diagSb.AppendLine($"  {m}: {count} bill(s), Income: {y.Value.IncomeByMonth.GetValueOrDefault(m, 0m):F2}");
-                    }
-                    diagSb.AppendLine("");
-                }
-
-                var diagFolder = Path.Combine(backupsRoot, "import_diagnostics");
-                Directory.CreateDirectory(diagFolder);
-                var diagPath = Path.Combine(diagFolder, $"import_diag_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
-                File.WriteAllText(diagPath, diagSb.ToString());
-                // Expose diagnostics to the user via status
-                SetStatus($"Imported CSV parsed: {package.Years.Count} year(s), diagnostics: {Path.GetFileName(diagPath)}");
-            }
-            catch (Exception ex)
-            {
-                LogNonFatal("ParseStructuredReportCsv diagnostics write", ex);
-            }
-
-            return package;
+            return ImportExportHelpers.ParseStructuredReportCsv(lines, months, backupsRoot, LogNonFatalMessage, writeDiagnostics: true);
         }
 
         private StructuredYearImportData GetOrCreateYearImportData(StructuredImportPackage package, string year)
         {
-            if (!package.Years.TryGetValue(year, out var yearData))
-            {
-                yearData = new StructuredYearImportData(months);
-                package.Years[year] = yearData;
-            }
-
-            return yearData;
+            return ImportExportHelpers.GetOrCreateYearImportData(package, year, months);
         }
 
         private decimal ParseIncomeFromMonthSummary(List<string> parts)
@@ -4084,6 +3748,7 @@ namespace CrispyBills
                 }
 
                 string targetDbPath = GetDbPath(selection.Key);
+                BackupDatabase(selection.Key);
                 InitializeDatabase(targetDbPath);
                 PersistYearDataToDatabase(targetDbPath, selection.Key, targetYearData.BillsByMonth, targetYearData.IncomeByMonth);
             }
@@ -4133,43 +3798,9 @@ namespace CrispyBills
         /// <summary>
         /// Parses one CSV line with support for quoted fields and escaped quotes.
         /// </summary>
-        private static List<string> ParseCsvLine(string line)
+        private List<string> ParseCsvLine(string line)
         {
-            var fields = new List<string>();
-            var sb = new StringBuilder();
-            bool inQuotes = false;
-            for (int i = 0; i < line.Length; i++)
-            {
-                char c = line[i];
-                if (inQuotes)
-                {
-                    if (c == '"')
-                    {
-                        // Check for escaped quote
-                        if (i < line.Length - 1 && line[i + 1] == '"')
-                        {
-                            sb.Append('"');
-                            i++; // Skip next quote
-                        }
-                        else
-                        {
-                            inQuotes = false;
-                        }
-                    }
-                    else
-                    {
-                        sb.Append(c);
-                    }
-                }
-                else
-                {
-                    if (c == '"') inQuotes = true;
-                    else if (c == ',') { fields.Add(sb.ToString()); sb.Clear(); }
-                    else sb.Append(c);
-                }
-            }
-            fields.Add(sb.ToString());
-            return fields;
+            return ImportExportHelpers.ParseCsvLine(line, LogNonFatalMessage);
         }
 
         private void SendSummary_Click(object sender, RoutedEventArgs e)
@@ -4235,7 +3866,7 @@ namespace CrispyBills
             sb.AppendLine("<head>");
             sb.AppendLine("  <meta charset='utf-8' />");
             sb.AppendLine("  <meta name='viewport' content='width=device-width, initial-scale=1' />");
-            sb.AppendLine($"  <title>Crispy Bills Financial Summary {Html(CurrentYear)}</title>");
+            sb.AppendLine($"  <title>Crispy_Bills Financial Summary {Html(CurrentYear)}</title>");
             sb.AppendLine("  <style>");
             sb.AppendLine("    :root {");
             sb.AppendLine("      --bg: #f3f6fb;");
@@ -4323,7 +3954,7 @@ namespace CrispyBills
             sb.AppendLine("  <div class='wrap'>");
             sb.AppendLine("    <section class='hero'>");
             sb.AppendLine("      <div>");
-            sb.AppendLine($"        <h1>Crispy Bills - Financial Summary {Html(CurrentYear)}</h1>");
+            sb.AppendLine($"        <h1>Crispy_Bills - Financial Summary {Html(CurrentYear)}</h1>");
             sb.AppendLine("        <p>A complete month-by-month operational view with payment health, utilization, and category concentration.</p>");
             sb.AppendLine("      </div>");
             sb.AppendLine("      <div class='meta'>");
@@ -4415,7 +4046,7 @@ namespace CrispyBills
             sb.AppendLine("      </section>");
             sb.AppendLine("    </section>");
 
-            sb.AppendLine("    <div class='footer'>Generated by Crispy Bills on " + Html(generatedAt) + "</div>");
+            sb.AppendLine("    <div class='footer'>Generated by Crispy_Bills on " + Html(generatedAt) + "</div>");
             sb.AppendLine("  </div>");
             sb.AppendLine("</body>");
             sb.AppendLine("</html>");
@@ -4546,85 +4177,4 @@ namespace CrispyBills
         }
     }
 
-    public class Bill : INotifyPropertyChanged
-    {
-        private Guid _id = Guid.NewGuid();
-        public Guid Id { get => _id; set { if (_id != value) { _id = value; OnPropertyChanged(); } } }
-
-        private string _name = "";
-        public string Name { get => _name; set { if (_name != value) { _name = value; OnPropertyChanged(); } } }
-
-        private decimal _amount;
-        public decimal Amount { get => _amount; set { if (_amount != value) { _amount = value; OnPropertyChanged(); } } }
-
-        private string _category = "General";
-        public string Category { get => _category; set { if (_category != value) { _category = value; OnPropertyChanged(); } } }
-
-        private DateTime _dueDate = DateTime.Now;
-        public DateTime DueDate
-        {
-            get => _dueDate;
-            set
-            {
-                if (_dueDate != value)
-                {
-                    _dueDate = value;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(IsPastDue));
-                }
-            }
-        }
-
-        private bool _isPaid;
-        public bool IsPaid
-        {
-            get => _isPaid;
-            set
-            {
-                if (_isPaid != value)
-                {
-                    _isPaid = value;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(IsPastDue));
-                }
-            }
-        }
-
-        private bool _isRecurring;
-        public bool IsRecurring
-        {
-            get => _isRecurring;
-            set
-            {
-                if (_isRecurring != value)
-                {
-                    _isRecurring = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
-
-        private DateTime _contextPeriodStart = new(DateTime.Now.Year, DateTime.Now.Month, 1);
-        public DateTime ContextPeriodStart
-        {
-            get => _contextPeriodStart;
-            set
-            {
-                var normalized = new DateTime(value.Year, value.Month, 1);
-                if (_contextPeriodStart != normalized)
-                {
-                    _contextPeriodStart = normalized;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(IsPastDue));
-                }
-            }
-        }
-
-        public bool IsPastDue => !IsPaid &&
-            (DueDate.Date < DateTime.Today || DueDate.Date < ContextPeriodStart.Date);
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-        protected void OnPropertyChanged([CallerMemberName] string? name = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-    }
 }

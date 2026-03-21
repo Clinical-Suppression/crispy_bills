@@ -21,7 +21,7 @@
 		<Nullable>enable</Nullable>
 
 		<!-- Display name -->
-		<ApplicationTitle>Crispy Bills Mobile</ApplicationTitle>
+		<ApplicationTitle>Crispy_Bills Mobile</ApplicationTitle>
 
 		<!-- App Identifier -->
 		<ApplicationId>com.crispybills.mobile.android</ApplicationId>

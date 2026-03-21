@@ -15,7 +15,6 @@ public sealed class BillingService
     private YearData _currentData = new();
     // Session-only guards for destructive debug tools (Android)
     private bool _debugDestructiveDeletesEnabled = false;
-    private bool _debugEnableWarningShown = false;
 
     public BillingService(IBillingRepository repository)
     {
@@ -230,6 +229,7 @@ public sealed class BillingService
         try
         {
             var dbPath = _repository.GetYearDatabasePath(year);
+            ReportDiagnostic("DebugDeleteYear", $"Attempting to delete year {year}. DB path: {dbPath}");
 
             // Backup first
             try
@@ -241,6 +241,11 @@ public sealed class BillingService
                     var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
                     var dest = Path.Combine(backupDir, $"CrispyBills_{year}_{timestamp}.db");
                     File.Copy(dbPath, dest, overwrite: true);
+                    ReportDiagnostic("DebugDeleteYear backup", $"Backup created at: {dest}");
+                }
+                else
+                {
+                    ReportDiagnostic("DebugDeleteYear backup", $"No DB file to backup at: {dbPath}");
                 }
             }
             catch (Exception ex)
@@ -250,13 +255,33 @@ public sealed class BillingService
 
             try
             {
-                if (File.Exists(dbPath)) File.Delete(dbPath);
+                if (File.Exists(dbPath))
+                {
+                    File.Delete(dbPath);
+                    ReportDiagnostic("DebugDeleteYear delete", $"Deleted DB file: {dbPath}");
+                }
+                else
+                {
+                    ReportDiagnostic("DebugDeleteYear delete", $"DB file not found for deletion: {dbPath}");
+                }
                 var wal = dbPath + "-wal";
                 var shm = dbPath + "-shm";
-                if (File.Exists(wal)) File.Delete(wal);
-                if (File.Exists(shm)) File.Delete(shm);
+                if (File.Exists(wal))
+                {
+                    File.Delete(wal);
+                    ReportDiagnostic("DebugDeleteYear delete", $"Deleted WAL file: {wal}");
+                }
+                if (File.Exists(shm))
+                {
+                    File.Delete(shm);
+                    ReportDiagnostic("DebugDeleteYear delete", $"Deleted SHM file: {shm}");
+                }
                 var bak = dbPath + ".prewrite.bak";
-                if (File.Exists(bak)) File.Delete(bak);
+                if (File.Exists(bak))
+                {
+                    File.Delete(bak);
+                    ReportDiagnostic("DebugDeleteYear delete", $"Deleted BAK file: {bak}");
+                }
             }
             catch (Exception ex)
             {
