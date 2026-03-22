@@ -58,7 +58,7 @@ if ($aheadCount -ne 0) {
 if (-not $AllowDirty) {
     $status = Get-GitOutput -Args @('status', '--porcelain') -WorkingDirectory $root
     if ($status) {
-        throw 'Working tree is not clean. Commit or stash changes before publish.'
+        throw "Working tree has uncommitted changes. To proceed, run the wizard with -AllowDirty or commit/stash changes before publishing."
     }
     Write-Host 'Preflight working-tree check: clean'
 }

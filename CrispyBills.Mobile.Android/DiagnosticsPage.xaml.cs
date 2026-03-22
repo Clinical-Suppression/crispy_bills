@@ -17,13 +17,13 @@ public partial class DiagnosticsPage : ContentPage
         _service = service;
     }
 
-    protected override async Task OnAppearing()
+    protected override async void OnAppearing()
     {
-        await base.OnAppearing();
+        base.OnAppearing();
         await LoadAsync();
     }
 
-    private async Task OnRefreshClicked(object? sender, EventArgs e)
+    private async void OnRefreshClicked(object? sender, EventArgs e)
     {
         await LoadAsync();
     }

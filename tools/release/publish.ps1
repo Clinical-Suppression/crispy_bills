@@ -5,8 +5,11 @@ param(
     [switch]$NoPush,
     [switch]$AllowDirty,
     [switch]$AllowNonMain,
+    [switch]$NonInteractive,
+    [string]$ResponsesFile,
     [bool]$AutoCommitChanges = $true,
     [ValidateSet('feat', 'fix', 'perf', 'refactor', 'docs', 'test', 'build', 'ci', 'chore')][string]$AutoCommitType = 'chore',
+    [string]$AutoCommitScope,
     [string]$AutoCommitDescription = 'prepare release changes'
 )
 
@@ -14,6 +17,13 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'common.ps1')
+$helpersPath = Join-Path $PSScriptRoot 'prompt-helpers.ps1'
+if (Test-Path $helpersPath) {
+    . $helpersPath
+    if (Get-Command -Name Initialize-ReleasePromptContext -ErrorAction SilentlyContinue) {
+        Initialize-ReleasePromptContext -ResponsesFile $ResponsesFile -NonInteractive:$NonInteractive
+    }
+}
 
 Reset-TaskDiagnostics
 
@@ -301,12 +311,33 @@ function Select-CommitTypeAndDescription {
     param(
         [string[]]$ChangedFiles,
         [string]$DefaultType,
+        [string]$DefaultScope,
         [string]$DefaultDescription,
+        [bool]$HasExplicitType,
+        [bool]$HasExplicitScope,
+        [bool]$HasExplicitDescription,
         [string]$Target
     )
 
     $typeOptions = @('feat', 'fix', 'perf', 'refactor', 'docs', 'test', 'build', 'ci', 'chore')
     $detectedType = Resolve-AutoCommitType -Files $ChangedFiles -Fallback $DefaultType
+    $resolvedType = $DefaultType
+    if ([string]::IsNullOrWhiteSpace($resolvedType)) {
+        $resolvedType = $detectedType
+    }
+
+    $resolvedDescription = $DefaultDescription
+    if ([string]::IsNullOrWhiteSpace($resolvedDescription)) {
+        $resolvedDescription = Resolve-AutoCommitDescription -Files $ChangedFiles -Target $Target -CommitType $resolvedType -Fallback $DefaultDescription
+    }
+
+    if ($HasExplicitType -and $HasExplicitDescription -and -not [string]::IsNullOrWhiteSpace($resolvedType) -and -not [string]::IsNullOrWhiteSpace($resolvedDescription)) {
+        return @{
+            Type = $resolvedType
+            Scope = if ($HasExplicitScope) { $DefaultScope } else { $null }
+            Description = $resolvedDescription
+        }
+    }
 
     Write-Host ''
     Write-Host 'Pre-publish commit selection:' -ForegroundColor Cyan
@@ -316,31 +347,45 @@ function Select-CommitTypeAndDescription {
     }
 
     $selectedType = $null
-    while (-not $selectedType) {
-        $choice = (Read-Host "Select commit type number (default 0)").Trim()
-        if ([string]::IsNullOrWhiteSpace($choice) -or $choice -eq '0') {
-            $selectedType = $detectedType
-            break
-        }
+    if (-not (Test-IsInteractive)) {
+        $respType = Get-Response -ScriptName 'publish' -Key 'Type' -Default $resolvedType
+        if ($null -ne $respType -and $typeOptions -contains $respType) { $selectedType = $respType }
+        else { $selectedType = $detectedType }
 
-        $index = 0
-        if ([int]::TryParse($choice, [ref]$index) -and $index -ge 1 -and $index -le $typeOptions.Count) {
-            $selectedType = $typeOptions[$index - 1]
-            break
-        }
-
-        Write-Host 'Invalid selection. Enter 0-9.' -ForegroundColor Yellow
+        $defaultDesc = Resolve-AutoCommitDescription -Files $ChangedFiles -Target $Target -CommitType $selectedType -Fallback $DefaultDescription
+        $description = Get-Response -ScriptName 'publish' -Key 'Description' -Default $defaultDesc
+        $scope = Get-Response -ScriptName 'publish' -Key 'Scope' -Default $DefaultScope
     }
+    else {
+        while (-not $selectedType) {
+            $choice = (Read-Host "Select commit type number (default 0)").Trim()
+            if ([string]::IsNullOrWhiteSpace($choice) -or $choice -eq '0') {
+                $selectedType = $detectedType
+                break
+            }
 
-    $defaultDesc = Resolve-AutoCommitDescription -Files $ChangedFiles -Target $Target -CommitType $selectedType -Fallback $DefaultDescription
+            $index = 0
+            if ([int]::TryParse($choice, [ref]$index) -and $index -ge 1 -and $index -le $typeOptions.Count) {
+                $selectedType = $typeOptions[$index - 1]
+                break
+            }
 
-    $description = (Read-Host "Commit description (Enter for auto: $defaultDesc)").Trim()
-    if ([string]::IsNullOrWhiteSpace($description)) {
-        $description = $defaultDesc
+            Write-Host 'Invalid selection. Enter 0-9.' -ForegroundColor Yellow
+        }
+
+        $defaultDesc = Resolve-AutoCommitDescription -Files $ChangedFiles -Target $Target -CommitType $selectedType -Fallback $DefaultDescription
+
+        $description = (Read-Host "Commit description (Enter for auto: $defaultDesc)").Trim()
+        if ([string]::IsNullOrWhiteSpace($description)) { $description = $defaultDesc }
+
+        $scopeDefaultText = if ([string]::IsNullOrWhiteSpace($DefaultScope)) { 'none' } else { $DefaultScope }
+        $scope = (Read-Host "Optional scope (Enter for default: $scopeDefaultText)").Trim()
+        if ([string]::IsNullOrWhiteSpace($scope)) { $scope = $DefaultScope }
     }
 
     return @{
         Type = $selectedType
+        Scope = $scope
         Description = $description
     }
 }
@@ -356,14 +401,22 @@ $prePublishCommit = $null
 $initialStatus = Get-WorkingTreeStatus
 $hasWorkingChanges = -not [string]::IsNullOrWhiteSpace($initialStatus)
 
+if ($NonInteractive -and $hasWorkingChanges -and -not $DryRun -and -not $AutoCommitChanges) {
+    throw 'Non-interactive publish cannot continue with uncommitted changes when AutoCommitChanges is disabled.'
+}
+
 if ($hasWorkingChanges -and -not $DryRun) {
     if (-not $AutoCommitChanges) {
         throw 'Working tree has uncommitted changes. Enable AutoCommitChanges or commit manually before publish.'
     }
 
     $changedFiles = Get-ChangedFiles
-    $selection = Select-CommitTypeAndDescription -ChangedFiles $changedFiles -DefaultType $AutoCommitType -DefaultDescription $AutoCommitDescription -Target $Target
-    $preCommitMessage = "$($selection.Type): $($selection.Description)"
+    $selection = Select-CommitTypeAndDescription -ChangedFiles $changedFiles -DefaultType $AutoCommitType -DefaultScope $AutoCommitScope -DefaultDescription $AutoCommitDescription -HasExplicitType:$PSBoundParameters.ContainsKey('AutoCommitType') -HasExplicitScope:$PSBoundParameters.ContainsKey('AutoCommitScope') -HasExplicitDescription:$PSBoundParameters.ContainsKey('AutoCommitDescription') -Target $Target
+    $preCommitMessage = $selection.Type
+    if (-not [string]::IsNullOrWhiteSpace($selection.Scope)) {
+        $preCommitMessage += "($($selection.Scope))"
+    }
+    $preCommitMessage += ": $($selection.Description)"
     Write-Host "Auto-commit enabled. Creating pre-publish commit: $preCommitMessage"
 
     Invoke-LoggedCommand -Command 'git' -Arguments @('add', '-A') -WorkingDirectory $root
@@ -608,6 +661,7 @@ $summary = [PSCustomObject]@{
     Tag = $tag
     PreviousTag = $previousTag
     PrePublishCommit = $prePublishCommit
+    ReleaseCommit = $releaseCommitSha
     Artifacts = $artifacts
     ArtifactManifest = $artifactManifestPath
     Notes = $notesPath

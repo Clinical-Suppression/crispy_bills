@@ -47,7 +47,7 @@ Scripts are under tools/release.
 1. Validate git and GitHub auth preconditions.
 2. Compute next semantic version from Conventional Commit history.
 3. Generate release notes and update CHANGELOG.md.
-4. If working tree is dirty on real publish, prompt for commit type (auto-detect option), auto-generate description, and allow user override.
+4. If working tree is dirty on real publish, the wizard can gather pre-publish commit choices first and pass them into `publish.ps1`; if those choices were not supplied, `publish.ps1` prompts for commit type, optional scope, and description.
 5. Produce release artifacts.
 6. Update VERSION file.
 7. Commit release metadata.
@@ -72,6 +72,17 @@ Scripts are under tools/release.
 12. Enhanced publish failure output: full multi-line command error text is printed.
 13. Tag sync before versioning (`git fetch --tags`) to reduce stale local tag decisions.
 14. Automatic release recovery attempt when push succeeded but release creation/upload failed.
+15. The release wizard runs `recover-missing-release.ps1` in advisory `-DryRun` mode before publish tasks so recovery diagnostics do not mutate release state during orchestration.
+
+## Release Wizard Behavior
+
+The release wizard is a coordinator, not a replacement for `publish.ps1`.
+
+1. The wizard owns task selection, prompt flow, parameter forwarding, final confirmation, and any wizard-level collection of commit choices for publish tasks.
+2. `publish.ps1` remains responsible for performing the pre-publish auto-commit, release commit/tag creation, push, GitHub release creation, and recovery behavior.
+3. By default, the wizard allows a dirty working tree for flows that support it. Use `-RequireCleanTree` on the wizard to enforce a clean working tree.
+4. `-NoCommit` on the wizard disables wizard-managed commit steps and instructs publish wrappers to disable publish auto-commit as well.
+5. When the wizard is dot-sourced for tests, it loads helper functions without executing the interactive flow.
 
 ## Validation Checklist
 
@@ -92,6 +103,8 @@ If publish fails after remote push but before release completion:
 4. If the release tag is missing, create and push it pointing to the pushed release commit.
 5. Create the GitHub release for that tag using the generated release notes file in publish/logs.
 6. Upload generated assets from `publish/releases/<version>/...` if they are missing on the release.
+
+When invoked from the release wizard, this recovery script is run first in advisory `-DryRun` mode. A warning from this check should be investigated, but it is not treated as a blocking publish failure by itself.
 
 ## Commit Convention Requirement
 

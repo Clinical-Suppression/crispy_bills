@@ -1,6 +1,26 @@
+param(
+    [ValidateSet('feat','fix','perf','refactor','docs','test','build','ci','chore')] [string]$Type,
+    [string]$Scope,
+    [string]$Description,
+    [string]$Body,
+    [switch]$Breaking,
+    [switch]$Auto,
+    [switch]$DryRun,
+    [switch]$SkipPrompt,
+    [switch]$NonInteractive,
+    [string]$ResponsesFile
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-
+ 
+$helpersPath = Join-Path $PSScriptRoot 'prompt-helpers.ps1'
+if (Test-Path $helpersPath) {
+    . $helpersPath
+    if (Get-Command -Name Initialize-ReleasePromptContext -ErrorAction SilentlyContinue) {
+        Initialize-ReleasePromptContext -ResponsesFile $ResponsesFile -NonInteractive:$NonInteractive
+    }
+}
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Push-Location $root
 try {
@@ -21,76 +41,141 @@ try {
         [PSCustomObject]@{ Key = 'chore'; Description = 'Maintenance tasks' }
     )
 
-    Write-Host ''
-    Write-Host 'Select commit type:'
-    for ($i = 0; $i -lt $types.Count; $i++) {
-        Write-Host ("[{0}] {1} - {2}" -f ($i + 1), $types[$i].Key, $types[$i].Description)
-    }
-
-    $selectedType = $null
-    while (-not $selectedType) {
-        $selection = Read-Host 'Type number'
-        $num = 0
-        if ([int]::TryParse($selection, [ref]$num) -and $num -ge 1 -and $num -le $types.Count) {
-            $selectedType = $types[$num - 1].Key
+    if ($Auto -and -not $Type) { $Type = 'chore' }
+    if (-not $Type) {
+        if (-not (Test-IsInteractive)) {
+            $respType = Get-Response -ScriptName 'conventional-commit' -Key 'Type' -Default $null
+            if ($null -ne $respType -and $types.Key -contains $respType) { $Type = $respType }
+            else { $Type = 'chore' }
+        }
+        elseif (Get-Command -Name Prompt-Select -ErrorAction SilentlyContinue) {
+            $Type = Prompt-Select -PromptText 'Select commit type:' -Options $types.Key -ScriptName 'conventional-commit' -Key 'Type' -DefaultIndex 8
         }
         else {
-            Write-Host 'Invalid selection. Enter a valid number.' -ForegroundColor Yellow
+            Write-Host ''
+            Write-Host 'Select commit type:'
+            for ($i = 0; $i -lt $types.Count; $i++) {
+                Write-Host ("[{0}] {1} - {2}" -f ($i + 1), $types[$i].Key, $types[$i].Description)
+            }
+
+            $selectedType = $null
+            while (-not $selectedType) {
+                $selection = Read-Host 'Type number'
+                $num = 0
+                if ([int]::TryParse($selection, [ref]$num) -and $num -ge 1 -and $num -le $types.Count) {
+                    $selectedType = $types[$num - 1].Key
+                }
+                else {
+                    Write-Host 'Invalid selection. Enter a valid number.' -ForegroundColor Yellow
+                }
+            }
+
+            $Type = $selectedType
         }
     }
 
-    $scope = (Read-Host 'Optional scope (example: billing, mobile, release)').Trim()
-
-    $description = ''
-    while ([string]::IsNullOrWhiteSpace($description)) {
-        $description = (Read-Host 'Commit description (required)').Trim()
-        if ([string]::IsNullOrWhiteSpace($description)) {
-            Write-Host 'Description cannot be empty.' -ForegroundColor Yellow
+    if ($Auto -and -not $Description) { $Description = 'automated release commit' }
+    if (-not $Description) {
+        if (-not (Test-IsInteractive)) {
+            $Description = Get-Response -ScriptName 'conventional-commit' -Key 'Description' -Default $Description
+        }
+        elseif (Get-Command -Name Prompt-Text -ErrorAction SilentlyContinue) {
+            $Description = (Prompt-Text -PromptText 'Commit description (required)' -ScriptName 'conventional-commit' -Key 'Description' -Default '').Trim()
+            while ([string]::IsNullOrWhiteSpace($Description)) {
+                Write-Host 'Description cannot be empty.' -ForegroundColor Yellow
+                $Description = (Prompt-Text -PromptText 'Commit description (required)' -ScriptName 'conventional-commit' -Key 'Description' -Default '').Trim()
+            }
+        }
+        else {
+            $Description = (Read-Host 'Commit description (required)').Trim()
+            while ([string]::IsNullOrWhiteSpace($Description)) {
+                Write-Host 'Description cannot be empty.' -ForegroundColor Yellow
+                $Description = (Read-Host 'Commit description (required)').Trim()
+            }
         }
     }
 
-    $body = (Read-Host 'Optional commit body (single line, press Enter to skip)').Trim()
+    if ($Auto -and -not $Scope) { $Scope = '' }
+    if (-not $Scope -and !$Auto) {
+        if (-not (Test-IsInteractive)) {
+            $Scope = Get-Response -ScriptName 'conventional-commit' -Key 'Scope' -Default $Scope
+        }
+        elseif (Get-Command -Name Prompt-Text -ErrorAction SilentlyContinue) {
+            $Scope = (Prompt-Text -PromptText 'Optional scope (example: billing, mobile, release)' -ScriptName 'conventional-commit' -Key 'Scope' -Default '').Trim()
+        }
+        else { $Scope = (Read-Host 'Optional scope (example: billing, mobile, release)').Trim() }
+    }
 
-    $breakingInput = (Read-Host 'Breaking change? (y/N)').Trim().ToLowerInvariant()
-    $isBreaking = $breakingInput -eq 'y' -or $breakingInput -eq 'yes'
+    if ($Auto -and -not $Body) { $Body = '' }
+    if (-not $Body -and !$Auto) {
+        if (-not (Test-IsInteractive)) {
+            $Body = Get-Response -ScriptName 'conventional-commit' -Key 'Body' -Default $Body
+        }
+        elseif (Get-Command -Name Prompt-Text -ErrorAction SilentlyContinue) {
+            $Body = (Prompt-Text -PromptText 'Optional commit body (single line, press Enter to skip)' -ScriptName 'conventional-commit' -Key 'Body' -Default '').Trim()
+        }
+        else { $Body = (Read-Host 'Optional commit body (single line, press Enter to skip)').Trim() }
+    }
+
+    if ($Auto -and -not $Breaking) { $isBreaking = $false } else { $isBreaking = $Breaking }
 
     $breakingNote = ''
     if ($isBreaking) {
-        $breakingNote = (Read-Host 'BREAKING CHANGE note (required)').Trim()
-        while ([string]::IsNullOrWhiteSpace($breakingNote)) {
-            $breakingNote = (Read-Host 'Please provide BREAKING CHANGE note').Trim()
+        if ($Auto) {
+            $breakingNote = 'Automated BREAKING CHANGE generated by release wizard.'
+        }
+        else {
+            if (-not (Test-IsInteractive)) {
+                $breakingNote = Get-Response -ScriptName 'conventional-commit' -Key 'BreakingNote' -Default ''
+            }
+            elseif (Get-Command -Name Prompt-Text -ErrorAction SilentlyContinue) {
+                $breakingNote = (Prompt-Text -PromptText 'BREAKING CHANGE note (required)' -ScriptName 'conventional-commit' -Key 'BreakingNote' -Default '').Trim()
+                while ([string]::IsNullOrWhiteSpace($breakingNote)) {
+                    $breakingNote = (Prompt-Text -PromptText 'Please provide BREAKING CHANGE note' -ScriptName 'conventional-commit' -Key 'BreakingNote' -Default '').Trim()
+                }
+            }
+            else {
+                $breakingNote = (Read-Host 'BREAKING CHANGE note (required)').Trim()
+                while ([string]::IsNullOrWhiteSpace($breakingNote)) {
+                    $breakingNote = (Read-Host 'Please provide BREAKING CHANGE note').Trim()
+                }
+            }
         }
     }
 
-    $header = $selectedType
-    if (-not [string]::IsNullOrWhiteSpace($scope)) {
-        $header += "($scope)"
+    $header = $Type
+    if (-not [string]::IsNullOrWhiteSpace($Scope)) {
+        $header += "($Scope)"
     }
-    if ($isBreaking) {
-        $header += '!'
-    }
-    $header += ": $description"
+    if ($isBreaking) { $header += '!' }
+    $header += ": $Description"
 
     Write-Host ''
     Write-Host 'Generated commit message:' -ForegroundColor Cyan
     Write-Host $header
-    if (-not [string]::IsNullOrWhiteSpace($body)) {
+    if (-not [string]::IsNullOrWhiteSpace($Body)) {
         Write-Host ''
-        Write-Host $body
+        Write-Host $Body
     }
     if ($isBreaking) {
         Write-Host ''
         Write-Host ("BREAKING CHANGE: {0}" -f $breakingNote)
     }
 
-    $stageInput = (Read-Host 'Stage all changes with git add -A? (Y/n)').Trim().ToLowerInvariant()
-    $stageAll = -not ($stageInput -eq 'n' -or $stageInput -eq 'no')
+    $stageAll = $true
+    if (-not ($Auto -or $SkipPrompt)) {
+        if (Get-Command -Name Prompt-YesNo -ErrorAction SilentlyContinue) {
+            $stageAll = Prompt-YesNo 'Stage all changes with git add -A? (Y/n)' 'conventional-commit' 'StageAll' $true
+        }
+        else {
+            $stageInput = (Read-Host 'Stage all changes with git add -A? (Y/n)').Trim().ToLowerInvariant()
+            $stageAll = -not ($stageInput -eq 'n' -or $stageInput -eq 'no')
+        }
+    }
 
     if ($stageAll) {
         & git add -A
-        if ($LASTEXITCODE -ne 0) {
-            throw 'git add -A failed.'
-        }
+        if ($LASTEXITCODE -ne 0) { throw 'git add -A failed.' }
     }
 
     $staged = (& git diff --cached --name-only | Out-String).Trim()
@@ -102,25 +187,29 @@ try {
     Write-Host 'Staged files:' -ForegroundColor Cyan
     Write-Host $staged
 
-    $confirmInput = (Read-Host 'Create commit now? (Y/n)').Trim().ToLowerInvariant()
-    $confirm = -not ($confirmInput -eq 'n' -or $confirmInput -eq 'no')
-    if (-not $confirm) {
-        Write-Host 'Commit canceled.' -ForegroundColor Yellow
-        exit 0
+    if (-not ($Auto -or $SkipPrompt)) {
+        if (Get-Command -Name Prompt-YesNo -ErrorAction SilentlyContinue) {
+            $confirm = Prompt-YesNo 'Create commit now? (Y/n)' 'conventional-commit' 'Confirm' $true
+            if (-not $confirm) { Write-Host 'Commit canceled.' -ForegroundColor Yellow; exit 0 }
+        }
+        else {
+            $confirmInput = (Read-Host 'Create commit now? (Y/n)').Trim().ToLowerInvariant()
+            $confirm = -not ($confirmInput -eq 'n' -or $confirmInput -eq 'no')
+            if (-not $confirm) { Write-Host 'Commit canceled.' -ForegroundColor Yellow; exit 0 }
+        }
+    }
+
+    if ($DryRun) {
+        Write-Host "DRY-RUN: git commit -m '$header'"
+        return
     }
 
     $args = @('commit', '-m', $header)
-    if (-not [string]::IsNullOrWhiteSpace($body)) {
-        $args += @('-m', $body)
-    }
-    if ($isBreaking) {
-        $args += @('-m', ("BREAKING CHANGE: {0}" -f $breakingNote))
-    }
+    if (-not [string]::IsNullOrWhiteSpace($Body)) { $args += @('-m', $Body) }
+    if ($isBreaking) { $args += @('-m', ("BREAKING CHANGE: {0}" -f $breakingNote)) }
 
     & git @args
-    if ($LASTEXITCODE -ne 0) {
-        throw 'git commit failed.'
-    }
+    if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
 
     Write-Host 'Conventional commit created successfully.' -ForegroundColor Green
 }

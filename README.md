@@ -75,6 +75,28 @@ Recommended sequence before a real release:
 1. Run `publish both (dryrun)`
 2. Run `publish both`
 
+## Release Wizard
+
+The repository also includes an interactive release wizard at `tools/release/wizard.ps1`.
+
+Typical dry-run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "Projects/Crispy_Bills/tools/release/wizard.ps1" -DryRun
+```
+
+Useful wizard flags:
+
+- `-AutoConfirm` selects non-interactive defaults for prompts that support it.
+- `-RequireCleanTree` opts out of the wizard's default dirty-tree allowance and enforces a clean working tree where supported.
+- `-NoCommit` disables wizard-managed commit steps and tells publish wrappers not to auto-commit dirty working-tree changes.
+
+Wizard contract:
+
+1. The wizard coordinates selection, prompts, parameter forwarding, and publish commit-choice collection.
+2. The publish scripts remain responsible for release-affecting operations such as performing the pre-publish auto-commit, release commit/tag creation, push, and GitHub release upload.
+3. Before publish tasks, the wizard runs `recover-missing-release.ps1` in advisory dry-run mode so recovery issues are surfaced without mutating remote release state.
+
 ## Local Publish Automation Behavior
 
 On a real publish, scripts do the following:

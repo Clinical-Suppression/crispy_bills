@@ -3,8 +3,8 @@ using CrispyBills.Mobile.Android.Services;
 namespace CrispyBills.Mobile.Android;
 
 public partial class NotesPage : ContentPage
-    private bool _unsubscribed = false;
 {
+    private bool _unsubscribed = false;
     private readonly BillingService _service;
 
     public NotesPage(BillingService service)
@@ -14,9 +14,9 @@ public partial class NotesPage : ContentPage
         NotesEditor.TextChanged += OnNotesChanged;
     }
 
-    protected override async Task OnAppearing()
+    protected override async void OnAppearing()
     {
-        await base.OnAppearing();
+        base.OnAppearing();
         NotesEditor.Text = await _service.LoadNotesAsync();
         UpdateLineCount();
         _unsubscribed = false;
@@ -32,7 +32,7 @@ public partial class NotesPage : ContentPage
         }
     }
 
-    private async Task OnSaveClicked(object? sender, EventArgs e)
+    private async void OnSaveClicked(object? sender, EventArgs e)
     {
         await _service.SaveNotesAsync(NotesEditor.Text ?? string.Empty);
         await DisplayAlert("Saved", "Notes updated.", "OK");

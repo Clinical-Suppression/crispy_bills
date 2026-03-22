@@ -84,13 +84,13 @@ public partial class BillEditorPage : ContentPage
         }
     }
 
-    private async Task OnCancelClicked(object? sender, EventArgs e)
+    private async void OnCancelClicked(object? sender, EventArgs e)
     {
         _tcs.TrySetResult(null);
         await Navigation.PopAsync();
     }
 
-    private async Task OnSaveClicked(object? sender, EventArgs e)
+    private async void OnSaveClicked(object? sender, EventArgs e)
     {
         if (!ValidateInputs(showValidation: true))
         {

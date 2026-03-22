@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory = $true)][string]$Version,
+    [string]$Version,
     [string]$PreviousTag,
     [string]$OutNotesFile
 )
@@ -99,6 +99,30 @@ $range = if ($PreviousTag) { "$PreviousTag..HEAD" } else { 'HEAD' }
 $commits = @(Parse-CommitRecords -Range $range)
 if (@($commits).Count -eq 0) {
     throw 'No commits found to include in changelog.'
+}
+
+# If no version was supplied, try to compute it automatically to avoid prompting.
+if (-not $Version) {
+    Write-Host 'No Version parameter supplied to changelog; attempting to compute via version.ps1' -ForegroundColor Yellow
+    $tempOut = [IO.Path]::GetTempFileName()
+    try {
+        & pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'version.ps1') -OutFile $tempOut -AllowNoCommits | Out-Null
+        if (Test-Path $tempOut) {
+            try {
+                $json = Get-Content -Raw $tempOut | ConvertFrom-Json -ErrorAction Stop
+                if ($json -and $json.Version) { $Version = $json.Version }
+            } catch {
+                Write-Host 'Warning: Unable to parse version output; changelog will default to "dev"' -ForegroundColor Yellow
+            }
+        }
+    } finally {
+        if (Test-Path $tempOut) { Remove-Item $tempOut -Force -ErrorAction SilentlyContinue }
+    }
+
+    if (-not $Version) {
+        Write-Host 'Warning: unable to determine a version automatically; using "dev" as fallback.' -ForegroundColor Yellow
+        $Version = 'dev'
+    }
 }
 
 $notes = Build-ReleaseNotes -Version $Version -Commits $commits

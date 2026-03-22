@@ -38,7 +38,7 @@ public partial class MainPage : ContentPage
 		BillsCollection.ItemsSource = _visibleBills;
 	}
 
-	protected override async Task OnAppearing()
+	protected override async void OnAppearing()
 	{
 		base.OnAppearing();
 		try
@@ -171,7 +171,7 @@ public partial class MainPage : ContentPage
 		return Color.FromArgb(fallback);
 	}
 
-	private async Task OnPrevYearClicked(object? sender, EventArgs e)
+	private async void OnPrevYearClicked(object? sender, EventArgs e)
 	{
 		try
 		{
@@ -188,7 +188,7 @@ public partial class MainPage : ContentPage
 		}
 	}
 
-	private async Task OnNextYearClicked(object? sender, EventArgs e)
+	private async void OnNextYearClicked(object? sender, EventArgs e)
 	{
 		try
 		{
@@ -205,7 +205,7 @@ public partial class MainPage : ContentPage
 		}
 	}
 
-	private async Task OnPrevMonthClicked(object? sender, EventArgs e)
+	private async void OnPrevMonthClicked(object? sender, EventArgs e)
 	{
 		try
 		{
@@ -307,7 +307,7 @@ public partial class MainPage : ContentPage
 		}
 	}
 
-	private async Task OnNextMonthClicked(object? sender, EventArgs e)
+	private async void OnNextMonthClicked(object? sender, EventArgs e)
 	{
 		try
 		{
@@ -321,7 +321,7 @@ public partial class MainPage : ContentPage
 		}
 	}
 
-	private async Task OnMonthSelectClicked(object? sender, EventArgs e)
+	private async void OnMonthSelectClicked(object? sender, EventArgs e)
 	{
 		try
 		{
@@ -352,7 +352,7 @@ public partial class MainPage : ContentPage
 		}
 	}
 
-	private async Task OnYearSelectClicked(object? sender, EventArgs e)
+	private async void OnYearSelectClicked(object? sender, EventArgs e)
 	{
 		try
 		{
@@ -421,7 +421,7 @@ public partial class MainPage : ContentPage
 		await ReloadMonthAsync();
 	}
 
-	private async Task OnAddClicked(object? sender, EventArgs e)
+	private async void OnAddClicked(object? sender, EventArgs e)
 	{
 		try
 		{

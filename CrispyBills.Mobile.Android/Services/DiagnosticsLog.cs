@@ -3,8 +3,8 @@ using System.Text;
 namespace CrispyBills.Mobile.Android.Services;
 
 public static class DiagnosticsLog
-    private const int LogRetentionDays = 30;
 {
+    private const int LogRetentionDays = 30;
     private static readonly string LogDirectory = Path.Combine(FileSystem.Current.AppDataDirectory, "CrispyBills", "logs");
 
     public static string CurrentLogPath => Path.Combine(LogDirectory, $"mobile_{DateTime.Now:yyyyMMdd}.log");
@@ -37,7 +37,7 @@ public static class DiagnosticsLog
                     if (dt < threshold)
                     {
                         try { File.Delete(file); }
-                        catch (Exception ex) { await WriteAsync("DiagnosticsLogFileDelete", ex); }
+                        catch (Exception innerEx) { await WriteAsync("DiagnosticsLogFileDelete", innerEx); }
                     }
                 }
             }

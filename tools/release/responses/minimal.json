@@ -1,0 +1,20 @@
+{
+  "wizard": {
+    "Tasks": ["preflight.ps1"],
+    "DryRun": true,
+    "DoCommit": false,
+    "Proceed": true
+  },
+  "publish": {
+    "Type": "chore",
+    "Description": "prepare release changes",
+    "Scope": "release"
+  },
+  "conventional-commit": {
+    "Type": "chore",
+    "Description": "automated release commit",
+    "Scope": "release",
+    "StageAll": true,
+    "Confirm": true
+  }
+}

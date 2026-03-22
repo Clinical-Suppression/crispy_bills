@@ -1,0 +1,72 @@
+{
+  "preflight.ps1": {
+    "mayPrompt": false,
+    "supportsNonInteractive": false,
+    "supportsResponsesFile": false
+  },
+  "build-both.ps1": {
+    "mayPrompt": false,
+    "supportsNonInteractive": false,
+    "supportsResponsesFile": false
+  },
+  "build-windows.ps1": {
+    "mayPrompt": false,
+    "supportsNonInteractive": false,
+    "supportsResponsesFile": false
+  },
+  "build-mobile.ps1": {
+    "mayPrompt": false,
+    "supportsNonInteractive": false,
+    "supportsResponsesFile": false
+  },
+  "version.ps1": {
+    "mayPrompt": false,
+    "supportsNonInteractive": false,
+    "supportsResponsesFile": false
+  },
+  "changelog.ps1": {
+    "mayPrompt": false,
+    "supportsNonInteractive": false,
+    "supportsResponsesFile": false
+  },
+  "release-both.ps1": {
+    "mayPrompt": false,
+    "supportsNonInteractive": false,
+    "supportsResponsesFile": false
+  },
+  "release-windows.ps1": {
+    "mayPrompt": false,
+    "supportsNonInteractive": false,
+    "supportsResponsesFile": false
+  },
+  "release-mobile.ps1": {
+    "mayPrompt": false,
+    "supportsNonInteractive": false,
+    "supportsResponsesFile": false
+  },
+  "publish-both.ps1": {
+    "mayPrompt": true,
+    "supportsNonInteractive": true,
+    "supportsResponsesFile": true
+  },
+  "publish-windows.ps1": {
+    "mayPrompt": true,
+    "supportsNonInteractive": true,
+    "supportsResponsesFile": true
+  },
+  "publish-mobile.ps1": {
+    "mayPrompt": true,
+    "supportsNonInteractive": true,
+    "supportsResponsesFile": true
+  },
+  "recover-missing-release.ps1": {
+    "mayPrompt": false,
+    "supportsNonInteractive": false,
+    "supportsResponsesFile": false
+  },
+  "conventional-commit.ps1": {
+    "mayPrompt": true,
+    "supportsNonInteractive": true,
+    "supportsResponsesFile": true
+  }
+}
