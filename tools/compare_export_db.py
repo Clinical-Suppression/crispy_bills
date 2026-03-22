@@ -1,3 +1,13 @@
+"""
+compare_export_db.py
+
+Compare rows parsed from an exported `auto_export_*.csv` against test
+SQLite databases created by the auto-test harness. Produces a per-row
+diff report and a small preview for debugging import/persistence issues.
+
+Usage: python compare_export_db.py --csv-path <path> [--test-db-dir <dir>]
+"""
+
 import argparse
 import csv
 import os
