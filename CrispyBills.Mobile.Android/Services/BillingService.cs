@@ -6,6 +6,11 @@ using System.Threading.Tasks;
 
 namespace CrispyBills.Mobile.Android.Services;
 
+/// <summary>
+/// High-level orchestration around bill data for the mobile app.
+/// Loads/saves year data via an <see cref="IBillingRepository"/>, provides business
+/// operations such as creating drafts, adding/updating bills, and generating reports.
+/// </summary>
 public sealed class BillingService
 {
     private readonly SemaphoreSlim _loadYearSemaphore = new(1, 1);
@@ -23,6 +28,8 @@ public sealed class BillingService
 
     public int CurrentYear { get; private set; } = DateTime.Today.Year;
 
+    /// <summary>Load data for the specified year into the service and normalize state.</summary>
+    /// <param name="year">Year to load.</param>
     public async Task LoadYearAsync(int year)
     {
         await _loadYearSemaphore.WaitAsync();
@@ -39,6 +46,8 @@ public sealed class BillingService
         }
     }
 
+    /// <summary>Return the list of bills for the specified month, ordered for display.</summary>
+    /// <param name="month">Month number (1-12).</param>
     public IReadOnlyList<BillItem> GetBills(int month)
     {
         return _currentData.BillsByMonth[month]
@@ -47,21 +56,29 @@ public sealed class BillingService
             .ToList();
     }
 
+    /// <summary>Get the configured income for the specified month.</summary>
+    /// <param name="month">Month number (1-12).</param>
     public decimal GetIncome(int month)
     {
         return _currentData.IncomeByMonth.TryGetValue(month, out var income) ? income : 0m;
     }
 
+    /// <summary>Return the list of years available from the repository.</summary>
     public IReadOnlyList<int> GetAvailableYears()
     {
         return _repository.GetAvailableYears();
     }
 
+    /// <summary>Return available bill templates for creating drafts.</summary>
     public IReadOnlyList<BillTemplate> GetTemplates()
     {
         return BillTemplateCatalog.GetAll();
     }
 
+    /// <summary>Create a draft <see cref="BillItem"/> from a template for a specific year/month.</summary>
+    /// <param name="template">Source template.</param>
+    /// <param name="year">Target year.</param>
+    /// <param name="month">Target month.</param>
     public BillItem CreateDraftFromTemplate(BillTemplate template, int year, int month)
     {
         var dueDay = Math.Clamp(template.SuggestedDueDay, 1, DateTime.DaysInMonth(year, month));
@@ -81,6 +98,7 @@ public sealed class BillingService
         };
     }
 
+    /// <summary>Return archived years stored in app metadata.</summary>
     public async Task<IReadOnlyList<int>> GetArchivedYearsAsync()
     {
         var raw = await _repository.GetAppMetaAsync(ArchivedYearsMetaKey);
@@ -97,6 +115,7 @@ public sealed class BillingService
             .ToList();
     }
 
+    /// <summary>Mark or unmark a year as archived in app metadata.</summary>
     public async Task SetYearArchivedAsync(int year, bool archived)
     {
         var current = (await GetArchivedYearsAsync()).ToHashSet();
@@ -113,6 +132,8 @@ public sealed class BillingService
         await _repository.SetAppMetaAsync(ArchivedYearsMetaKey, packed);
     }
 
+    /// <summary>Find groups of recurring bills that appear duplicated for a month.</summary>
+    /// <param name="month">Month number (1-12).</param>
     public IReadOnlyList<IReadOnlyList<BillItem>> FindDuplicateRecurringRules(int month)
     {
         return _currentData.BillsByMonth[month]
@@ -123,6 +144,7 @@ public sealed class BillingService
             .ToList();
     }
 
+    /// <summary>Create an in-memory snapshot copy of the currently loaded year data.</summary>
     public YearData CreateYearSnapshot()
     {
         var snapshot = new YearData();
@@ -135,6 +157,7 @@ public sealed class BillingService
         return snapshot;
     }
 
+    /// <summary>Restore in-memory state from a previously created snapshot and persist it.</summary>
     public async Task RestoreYearSnapshotAsync(YearData snapshot)
     {
         _currentData = new YearData();
@@ -149,6 +172,7 @@ public sealed class BillingService
         await SaveAsync();
     }
 
+    /// <summary>Set income value for the specified month and persist the change.</summary>
     public async Task SetIncomeAsync(int month, decimal income)
     {
         var clamped = Math.Max(0, income);
@@ -161,11 +185,13 @@ public sealed class BillingService
     }
 
     // Expose a programmatic toggle for destructive debug tools (session-only)
+    /// <summary>Enable or disable session-only destructive debug operations.</summary>
     public void SetDebugDestructiveDeletesEnabled(bool enabled)
     {
         _debugDestructiveDeletesEnabled = enabled;
     }
 
+    /// <summary>Return whether destructive debug operations are currently enabled.</summary>
     public bool IsDebugDestructiveDeletesEnabled() => _debugDestructiveDeletesEnabled;
 
     /// <summary>
@@ -173,6 +199,8 @@ public sealed class BillingService
     /// Creates a file backup before performing the operation. Returns true if the deletion completed.
     /// This operation requires the debug destructive toggle to be enabled for the session.
     /// </summary>
+    /// <summary>Debug helper: permanently delete all data for a month (requires debug toggle).</summary>
+    /// <returns>True if deletion completed successfully.</returns>
     public async Task<bool> DeleteMonthAsync(int month)
     {
         if (!_debugDestructiveDeletesEnabled) return false;
@@ -222,6 +250,9 @@ public sealed class BillingService
     /// attempts to fall back to another available year and load it.
     /// Requires the debug destructive toggle to be enabled for the session.
     /// </summary>
+    /// <summary>Debug helper: permanently delete on-disk data for a year (requires debug toggle).</summary>
+    /// <param name="year">Year to delete.</param>
+    /// <returns>True if the operation completed successfully.</returns>
     public async Task<bool> DeleteYearAsync(int year)
     {
         if (!_debugDestructiveDeletesEnabled) return false;
@@ -313,6 +344,7 @@ public sealed class BillingService
         }
     }
 
+    /// <summary>Compute a simple financial summary for the loaded year.</summary>
     public (decimal income, decimal expenses, decimal remaining, int billCount) GetYearSummary()
     {
         var income = Enumerable.Range(1, 12).Sum(m => GetIncome(m));
@@ -321,6 +353,7 @@ public sealed class BillingService
         return (income, expenses, income - expenses, billCount);
     }
 
+    /// <summary>Return aggregated totals per category for a month.</summary>
     public IReadOnlyList<(string category, decimal total)> GetCategoryTotals(int month)
     {
         return _currentData.BillsByMonth[month]
@@ -349,6 +382,7 @@ public sealed class BillingService
         "Miscellaneous"
     };
 
+    /// <summary>Add a bill to the specified month, optionally expanding recurring instances.</summary>
     public async Task AddBillAsync(int month, BillItem draft)
     {
         ValidateBill(draft);
@@ -383,6 +417,7 @@ public sealed class BillingService
         await SaveAsync();
     }
 
+    /// <summary>Update an existing bill by id in the specified month.</summary>
     public async Task UpdateBillAsync(int month, Guid id, BillItem edited)
     {
         ValidateBill(edited);
@@ -435,6 +470,7 @@ public sealed class BillingService
         await SaveAsync();
     }
 
+    /// <summary>Delete a bill (and its future recurring instances) by id for a month.</summary>
     public async Task DeleteBillAsync(int month, Guid id)
     {
         var current = _currentData.BillsByMonth[month].FirstOrDefault(x => x.Id == id);
@@ -456,6 +492,7 @@ public sealed class BillingService
         await SaveAsync();
     }
 
+    /// <summary>Toggle the paid state of a bill and persist the change.</summary>
     public async Task TogglePaidAsync(int month, Guid id)
     {
         var bill = _currentData.BillsByMonth[month].FirstOrDefault(x => x.Id == id);
@@ -468,6 +505,7 @@ public sealed class BillingService
         await SaveAsync();
     }
 
+    /// <summary>Roll unpaid bills from the given month into the following month.</summary>
     public async Task RolloverUnpaidAsync(int month)
     {
         if (month >= 12)
@@ -499,6 +537,7 @@ public sealed class BillingService
         await SaveAsync();
     }
 
+    /// <summary>Import structured CSV data into the given year from a file path.</summary>
     public async Task ImportStructuredCsvForYearAsync(string csvPath, int year, bool replaceYear)
     {
         var parsed = ParseStructuredCsvByYear(await File.ReadAllLinesAsync(csvPath));
@@ -548,6 +587,7 @@ public sealed class BillingService
     }
 
     // Overload used by tests to import CSV content from lines instead of a file path.
+    /// <summary>Import structured CSV data into the given year from an enumerable of lines.</summary>
     public async Task ImportStructuredCsvForYearAsync(IEnumerable<string> lines, int year, bool replaceYear)
     {
         var parsed = ParseStructuredCsvByYear(lines);
@@ -596,6 +636,7 @@ public sealed class BillingService
         await SaveAsync();
     }
 
+    /// <summary>Create a new year database from recurring templates found in December.</summary>
     public async Task<bool> CreateNewYearFromDecemberAsync()
     {
         var newYear = CurrentYear + 1;
@@ -663,6 +704,7 @@ public sealed class BillingService
         return true;
     }
 
+    /// <summary>Return a summary tuple for a specific month.</summary>
     public (decimal total, decimal paid, decimal unpaid, decimal remaining, int billCount) GetMonthSummary(int month)
     {
         var bills = _currentData.BillsByMonth[month];
@@ -673,6 +715,7 @@ public sealed class BillingService
         return (total, paid, unpaid, remaining, bills.Count);
     }
 
+    /// <summary>Return a list of categories merged with built-in defaults.</summary>
     public IReadOnlyList<string> Categories()
     {
         // Merge stored categories with the common household defaults from the desktop app
@@ -692,6 +735,7 @@ public sealed class BillingService
         return merged;
     }
 
+    /// <summary>Export the given year's data to a structured CSV file and return its path.</summary>
     public async Task<string> ExportStructuredCsvAsync(int year)
     {
         var sb = new StringBuilder();
@@ -724,17 +768,20 @@ public sealed class BillingService
         return filePath;
     }
 
+    /// <summary>Load stored notes from the repository.</summary>
     public Task<string> LoadNotesAsync()
     {
         return _repository.LoadNotesAsync();
     }
 
+    /// <summary>Save notes to persistent storage (normalizes line count).</summary>
     public Task SaveNotesAsync(string notes)
     {
         var normalized = string.Join("\n", notes.Split('\n').Take(500));
         return _repository.SaveNotesAsync(normalized);
     }
 
+    /// <summary>Run an integrity scan of the loaded year, repair simple issues, and persist changes.</summary>
     public async Task<IntegrityCheckReport> RunIntegrityCheckAndRepairAsync()
     {
         var report = new IntegrityCheckReport();

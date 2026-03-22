@@ -6,6 +6,7 @@ param(
     [switch]$AllowNonMain,
     [switch]$NonInteractive,
     [string]$ResponsesFile,
+    [switch]$ApproveMajorVersion,
     [bool]$AutoCommitChanges = $true,
     [ValidateSet('feat', 'fix', 'perf', 'refactor', 'docs', 'test', 'build', 'ci', 'chore')][string]$AutoCommitType = 'chore',
     [string]$AutoCommitScope,
@@ -15,5 +16,5 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-& (Join-Path $PSScriptRoot 'publish.ps1') -Target both -Branch $Branch -DryRun:$DryRun -NoPush:$NoPush -AllowDirty:$AllowDirty -AllowNonMain:$AllowNonMain -NonInteractive:$NonInteractive -ResponsesFile $ResponsesFile -AutoCommitChanges:$AutoCommitChanges -AutoCommitType $AutoCommitType -AutoCommitScope $AutoCommitScope -AutoCommitDescription $AutoCommitDescription
+& (Join-Path $PSScriptRoot 'publish.ps1') -Target both -Branch $Branch -DryRun:$DryRun -NoPush:$NoPush -AllowDirty:$AllowDirty -AllowNonMain:$AllowNonMain -NonInteractive:$NonInteractive -ResponsesFile $ResponsesFile -ApproveMajorVersion:$ApproveMajorVersion -AutoCommitChanges:$AutoCommitChanges -AutoCommitType $AutoCommitType -AutoCommitScope $AutoCommitScope -AutoCommitDescription $AutoCommitDescription
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

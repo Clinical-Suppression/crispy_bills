@@ -3,6 +3,11 @@ using Microsoft.Data.Sqlite;
 
 namespace CrispyBills.Mobile.Android.Services;
 
+/// <summary>
+/// Concrete on-device repository implementation using SQLite files stored under
+/// the application's data folder. Provides per-year DB access, notes/meta storage,
+/// and simple recovery/backup behavior used by <see cref="BillingService"/>.
+/// </summary>
 public sealed class BillingRepository : IBillingRepository
 {
     private const string NotesDatabaseName = "CrispyBills_Notes.db";
@@ -15,11 +20,14 @@ public sealed class BillingRepository : IBillingRepository
         Directory.CreateDirectory(_dataRoot);
     }
 
+    /// <summary>Return the full path to the SQLite database file for a given year.</summary>
+    /// <param name="year">Target year.</param>
     public string GetYearDatabasePath(int year)
     {
         return Path.Combine(_dataRoot, $"CrispyBills_{year}.db");
     }
 
+    /// <summary>Enumerate years that have persisted database files available.</summary>
     public IReadOnlyList<int> GetAvailableYears()
     {
         var years = new List<int>();
@@ -47,6 +55,7 @@ public sealed class BillingRepository : IBillingRepository
         return years.Distinct().OrderBy(x => x).ToList();
     }
 
+    /// <summary>Ensure the per-year database exists and contains expected schema.</summary>
     public async Task InitializeYearAsync(int year)
     {
         var connectionString = BuildConnectionString(GetYearDatabasePath(year));
@@ -90,6 +99,8 @@ CREATE TABLE IF NOT EXISTS Income (
         await EnsureBillsColumnAsync(connection, "RecurrenceMaxOccurrences", "INTEGER NULL");
     }
 
+    /// <summary>Load year data from disk into a <see cref="YearData"/> instance.</summary>
+    /// <param name="year">Year to load.</param>
     public async Task<YearData> LoadYearAsync(int year)
     {
         await InitializeYearAsync(year);
@@ -179,6 +190,8 @@ WHERE Year = $year;";
         return data;
     }
 
+    /// <summary>Persist the provided <see cref="YearData"/> to the on-disk database.
+    /// Creates a backup before writing and performs the save in a transaction.</summary>
     public async Task SaveYearAsync(int year, YearData data)
     {
         await InitializeYearAsync(year);
@@ -284,6 +297,7 @@ VALUES ($month, $year, $amount);";
         }
     }
 
+    /// <summary>Load the free-form notes string from the notes database.</summary>
     public async Task<string> LoadNotesAsync()
     {
         await InitializeNotesAsync();
@@ -299,6 +313,7 @@ VALUES ($month, $year, $amount);";
         return result?.ToString() ?? string.Empty;
     }
 
+    /// <summary>Persist free-form notes to the notes metadata store.</summary>
     public async Task SaveNotesAsync(string notes)
     {
         await InitializeNotesAsync();
@@ -318,6 +333,7 @@ ON CONFLICT(Key) DO UPDATE SET Value = excluded.Value;";
         await cmd.ExecuteNonQueryAsync();
     }
 
+    /// <summary>Read an application-level metadata value by key.</summary>
     public async Task<string?> GetAppMetaAsync(string key)
     {
         await InitializeNotesAsync();
@@ -332,6 +348,7 @@ ON CONFLICT(Key) DO UPDATE SET Value = excluded.Value;";
         return result?.ToString();
     }
 
+    /// <summary>Set an application-level metadata key/value pair.</summary>
     public async Task SetAppMetaAsync(string key, string value)
     {
         await InitializeNotesAsync();
@@ -349,6 +366,7 @@ ON CONFLICT(Key) DO UPDATE SET Value = excluded.Value;";
         await cmd.ExecuteNonQueryAsync();
     }
 
+    /// <summary>Root directory used for storing DB files and notes.</summary>
     public string DataRoot => _dataRoot;
 
     private async Task InitializeNotesAsync()

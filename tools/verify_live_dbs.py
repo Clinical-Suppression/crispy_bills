@@ -1,15 +1,35 @@
+"""
+verify_live_dbs.py
+
+Quick helper to inspect live per-year SQLite databases under the
+user's Documents/CrispyBills folder and write a small diagnostics
+report showing bill counts and income per month. Intended for manual
+verification and local troubleshooting.
+
+Adjust `root` or the `year` tuple below when running against different
+targets.
+"""
+
 import sqlite3
 import os
 from datetime import datetime
 
+# Base path where per-year DB files are expected (user Documents/CrispyBills)
 root = r"C:\Users\Chris\Documents\CrispyBills"
-months = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+
+# Human-friendly month names used in on-disk exports and reports
+months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+]
+
 report_lines = []
 now = datetime.now().strftime('%Y%m%d_%H%M%S')
 report_path = os.path.join(root, "db_backups", "import_diagnostics", f"live_db_verify_{now}.txt")
 os.makedirs(os.path.dirname(report_path), exist_ok=True)
 
-for year in ("2026","2027"):
+# Years to inspect - update as needed for your environment
+for year in ("2026", "2027"):
     db = os.path.join(root, f"CrispyBills_{year}.db")
     report_lines.append(f"Year: {year} | DB: {db}\n")
     if not os.path.exists(db):

@@ -3,8 +3,16 @@ param(
     [string]$Version = 'dev',
     [string]$OutFile
 )
+<#
+Top-level release orchestration.
 
-Set-StrictMode -Version Latest
+This script coordinates building, versioning, changelog generation, and
+publishing across targets. It is intended for maintainers running local
+releases and for CI jobs that perform automated releases.
+
+Run the `wizard.ps1` for an interactive guided flow instead of invoking this
+script directly when performing manual releases.
+#>
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'common.ps1')

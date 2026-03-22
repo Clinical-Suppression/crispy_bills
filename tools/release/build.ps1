@@ -1,6 +1,17 @@
+<#
+Build helper script used by the wizard and CI.
+
+Usage:
+    pwsh build.ps1 -Target windows -Configuration Release
+
+This script wraps platform-specific build entry points and integrates with
+`common.ps1` diagnostics counting. It also uses a simple lockfile to avoid
+concurrent builds on the same workspace.
+#>
+
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('windows', 'mobile', 'both')][string]$Target,
-    [string]$Configuration = 'Debug'
+        [Parameter(Mandatory = $true)][ValidateSet('windows', 'mobile', 'both')][string]$Target,
+        [string]$Configuration = 'Debug'
 )
 
 Set-StrictMode -Version Latest

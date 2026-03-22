@@ -7,6 +7,10 @@ using System.Text;
 
 namespace CrispyBills
 {
+    /// <summary>
+    /// Container for structured import results produced by the CSV parsing helpers.
+    /// Holds per-year data and an optional notes section.
+    /// </summary>
     public sealed class StructuredImportPackage
     {
         public Dictionary<string, StructuredYearImportData> Years { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -14,6 +18,9 @@ namespace CrispyBills
         public string NotesText { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    /// Holds import data for a single year: bills by month and income by month.
+    /// </summary>
     public sealed class StructuredYearImportData
     {
         public Dictionary<string, List<Bill>> BillsByMonth { get; }
@@ -28,6 +35,10 @@ namespace CrispyBills
 
     public static class ImportExportHelpers
     {
+        /// <summary>
+        /// Parse a single CSV line into fields, handling quoted values and doubled quotes.
+        /// Calls <paramref name="onWarning"/> when non-fatal parse issues are encountered.
+        /// </summary>
         public static List<string> ParseCsvLine(string line, Action<string>? onWarning = null)
         {
             var fields = new List<string>();
@@ -83,6 +94,10 @@ namespace CrispyBills
             return fields;
         }
 
+        /// <summary>
+        /// Parse a structured export/diagnostic CSV (desktop format) into an import package.
+        /// Returns a <see cref="StructuredImportPackage"/> containing per-year data and optional notes.
+        /// </summary>
         public static StructuredImportPackage ParseStructuredReportCsv(
             string[] lines,
             IReadOnlyList<string> months,
@@ -284,6 +299,9 @@ namespace CrispyBills
             return package;
         }
 
+        /// <summary>
+        /// Helper to get or create the year import container for the given year.
+        /// </summary>
         public static StructuredYearImportData GetOrCreateYearImportData(StructuredImportPackage package, string year, IReadOnlyList<string> months)
         {
             if (!package.Years.TryGetValue(year, out var yearData))

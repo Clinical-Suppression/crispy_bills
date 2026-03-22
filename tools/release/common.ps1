@@ -1,14 +1,37 @@
+<#
+Common helpers for the release tooling.
+
+This file exposes utility functions used by the release scripts (wizard, version,
+preflight, publish, etc.). Keep helpers small and well-documented; do not perform
+interactive work here — prefer to return data for callers to display or act on.
+#>
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:TaskWarningCount = 0
 $script:TaskErrorCount = 0
 
+<#
+Reset-TaskDiagnostics
+
+Reset the in-memory counters used to accumulate warnings and errors
+observed from invoked child commands. Useful to clear diagnostics
+between independent tasks.
+#>
 function Reset-TaskDiagnostics {
     $script:TaskWarningCount = 0
     $script:TaskErrorCount = 0
 }
 
+<#
+Add-TaskDiagnosticsFromOutput
+
+Parse a command's combined stdout/stderr text for common warning/error
+summaries and increment the global diagnostic counters. Accepts the
+`$Command` that produced the output (used to apply heuristics) and the
+raw `$OutputText` to inspect.
+#>
 function Add-TaskDiagnosticsFromOutput {
     param(
         [Parameter(Mandatory = $true)][string]$Command,
@@ -40,6 +63,13 @@ function Add-TaskDiagnosticsFromOutput {
     }
 }
 
+<#
+Get-TaskDiagnostics
+
+Return a PSCustomObject containing the current `Warnings` and `Errors`
+counts accumulated by helper functions. This is intended for reporting
+and test assertions.
+#>
 function Get-TaskDiagnostics {
     return [PSCustomObject]@{
         Warnings = $script:TaskWarningCount
@@ -47,6 +77,12 @@ function Get-TaskDiagnostics {
     }
 }
 
+<#
+Write-TaskDiagnostics
+
+Write the current task diagnostics to host output using an optional
+`$Prefix` to clarify context (for example, "Build", "Publish").
+#>
 function Write-TaskDiagnostics {
     param([string]$Prefix = 'Task')
 
@@ -54,6 +90,13 @@ function Write-TaskDiagnostics {
     Write-Host "$Prefix diagnostics: warnings=$($diag.Warnings) errors=$($diag.Errors)"
 }
 
+<#
+Get-WorkspaceRoot
+
+Return the workspace root path by resolving two levels above the
+script directory. Callers should treat the returned value as a
+string path suitable for joining with project-specific subpaths.
+#>
 function Get-WorkspaceRoot {
     $resolved = Resolve-Path (Join-Path $PSScriptRoot '..\..')
     if ($resolved -is [System.Array]) {
@@ -62,6 +105,13 @@ function Get-WorkspaceRoot {
     return $resolved.Path
 }
 
+<#
+Get-FirstPathValue
+
+Accept a value that may be a single path or an array of path-like
+values and return the first non-empty, non-null string. Returns `$null`
+if no usable value is found.
+#>
 function Get-FirstPathValue {
     param([Parameter(Mandatory = $true)]$Value)
 
@@ -86,6 +136,13 @@ function Get-FirstPathValue {
     return [string]$Value
 }
 
+<#
+ConvertTo-CommandLineArgument
+
+Quote and escape a single command-line argument so it can be safely
+passed through a single string invocation to Start-Process. Always
+returns a string suitable for concatenation into an argument list.
+#>
 function ConvertTo-CommandLineArgument {
     param([AllowEmptyString()][string]$Value)
 
@@ -106,6 +163,15 @@ function ConvertTo-CommandLineArgument {
     return '"' + $escaped + '"'
 }
 
+<#
+Invoke-LoggedCommand
+
+Start a process and capture its stdout/stderr to temporary files, echo
+the combined output to the host, and update task diagnostics based on
+the output. Throws on non-zero exit codes with captured output for
+diagnosis. Parameters: `$Command` (executable), `$Arguments` (string[]),
+and optional `$WorkingDirectory`.
+#>
 function Invoke-LoggedCommand {
     param(
         [Parameter(Mandatory = $true)][string]$Command,
@@ -171,6 +237,13 @@ function Invoke-LoggedCommand {
     }
 }
 
+<#
+Get-JavaAndAndroidSdk
+
+Detect a usable JDK (preferring `$env:JAVA_HOME` or OpenJDK under
+`%LOCALAPPDATA%`) and an Android SDK (preferring `$env:ANDROID_SDK_ROOT`).
+Throws with a helpful message when detection fails.
+#>
 function Get-JavaAndAndroidSdk {
     # Prefer explicit environment variables when provided
     $jdkCandidates = @()
@@ -240,6 +313,13 @@ function Get-JavaAndAndroidSdk {
     }
 }
 
+<#
+Get-GitOutput
+
+Run `git` with the provided argument array in the specified working
+directory (defaults to workspace root) and return the trimmed combined
+output as a string. Throws if the git command exits non-zero.
+#>
 function Get-GitOutput {
     param(
         [Parameter(Mandatory = $true)][string[]]$Args,
@@ -264,6 +344,12 @@ function Get-GitOutput {
     }
 }
 
+<#
+Ensure-Directory
+
+Ensure that the directory at `$Path` exists, creating parent
+directories as required. Does nothing if the directory already exists.
+#>
 function Ensure-Directory {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -272,6 +358,13 @@ function Ensure-Directory {
     }
 }
 
+<#
+Get-ReleasePaths
+
+Given a release `$Version` string, ensure and return a map of paths
+used for publishing: `WorkspaceRoot`, `ReleaseRoot`, and `LogsRoot`.
+Creates directories as needed.
+#>
 function Get-ReleasePaths {
     param(
         [Parameter(Mandatory = $true)][string]$Version
@@ -291,6 +384,12 @@ function Get-ReleasePaths {
     }
 }
 
+<#
+Write-JsonFile
+
+Serialize an object to JSON (UTF8) and write it to the specified
+file path. Uses `ConvertTo-Json -Depth 8` to preserve nested structures.
+#>
 function Write-JsonFile {
     param(
         [Parameter(Mandatory = $true)]$Object,

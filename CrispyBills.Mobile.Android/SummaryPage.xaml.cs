@@ -6,6 +6,10 @@ using Microsoft.Maui.Graphics;
 
 namespace CrispyBills.Mobile.Android;
 
+/// <summary>
+/// Summary dashboard page showing year and month financial summaries and a
+/// pie chart of category totals.
+/// </summary>
 public partial class SummaryPage : ContentPage
 {
     // Palette will be populated from resource colors at runtime for consistency with theme
