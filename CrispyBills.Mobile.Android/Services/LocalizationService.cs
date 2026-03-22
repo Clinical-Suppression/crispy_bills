@@ -2,6 +2,10 @@ using System.Globalization;
 
 namespace CrispyBills.Mobile.Android.Services;
 
+/// <summary>
+/// Provides culture selection and simple formatting helpers used by the mobile UI.
+/// Persists preferred language as app metadata via <see cref="IBillingRepository"/>.
+/// </summary>
 public sealed class LocalizationService
 {
     private const string LanguageMetaKey = "PreferredLanguage";
@@ -13,8 +17,10 @@ public sealed class LocalizationService
         _repository = repository;
     }
 
+    /// <summary>The currently selected culture used for formatting.</summary>
     public CultureInfo CurrentCulture { get; private set; } = CultureInfo.CurrentCulture;
 
+    /// <summary>Initialize the service by loading persisted preferred language if present.</summary>
     public async Task InitializeAsync()
     {
         var preferred = await _repository.GetAppMetaAsync(LanguageMetaKey);
@@ -24,17 +30,20 @@ public sealed class LocalizationService
         }
     }
 
+    /// <summary>Set the culture and persist the preference.</summary>
     public async Task SetCultureAsync(string cultureName)
     {
         SetCulture(cultureName);
         await _repository.SetAppMetaAsync(LanguageMetaKey, cultureName);
     }
 
+    /// <summary>Format a currency amount using the current culture.</summary>
     public string FormatCurrency(decimal amount)
     {
         return amount.ToString("C2", CurrentCulture);
     }
 
+    /// <summary>Format a date using the current culture's short date pattern.</summary>
     public string FormatDate(DateTime date)
     {
         return date.ToString("d", CurrentCulture);

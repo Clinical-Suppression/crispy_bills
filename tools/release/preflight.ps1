@@ -1,7 +1,22 @@
+<#
+Preflight checks for release automation.
+
+Purpose:
+    Verify that required tools, credentials, and repository state are present
+    before running release or publish scripts. Intended to be safe to run in CI
+    and locally. Prefer `-DryRun` on downstream scripts to prevent side-effects.
+
+Usage:
+    pwsh preflight.ps1 -Branch main
+
+This script performs Git and GitHub CLI checks and will throw if validation
+fails. Callers should handle exceptions and present user-friendly guidance.
+#>
+
 param(
-    [string]$Branch = 'main',
-    [switch]$AllowDirty,
-    [switch]$AllowNonMain
+        [string]$Branch = 'main',
+        [switch]$AllowDirty,
+        [switch]$AllowNonMain
 )
 
 Set-StrictMode -Version Latest

@@ -2,6 +2,11 @@ using CrispyBills.Mobile.Android.Services;
 
 namespace CrispyBills.Mobile.Android;
 
+/// <summary>
+/// Diagnostics page showing startup issues and the runtime diagnostics log.
+/// Provides helpers to run integrity checks where a <see cref="BillingService"/>
+/// context is available.
+/// </summary>
 public partial class DiagnosticsPage : ContentPage
 {
     private readonly BillingService? _service;

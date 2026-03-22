@@ -2,6 +2,10 @@ using CrispyBills.Mobile.Android.Models;
 
 namespace CrispyBills.Mobile.Android;
 
+/// <summary>
+/// Page used to edit or create a <see cref="BillItem"/> in the mobile UI.
+/// Exposes an async <see cref="WaitForResultAsync"/> pattern so callers can await the user's result.
+/// </summary>
 public partial class BillEditorPage : ContentPage
 {
     private readonly TaskCompletionSource<BillItem?> _tcs = new();

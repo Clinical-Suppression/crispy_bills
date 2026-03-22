@@ -9,6 +9,10 @@ using System.Globalization;
 
 namespace CrispyBills.Mobile.Android;
 
+/// <summary>
+/// Mobile main page: loads year data, presents bill lists, filters, and
+/// navigation to editing, diagnostics, and summary pages.
+/// </summary>
 public partial class MainPage : ContentPage
 {
 	private readonly BillingRepository _repository = new();

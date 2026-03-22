@@ -9,6 +9,10 @@ using System.Windows.Media;
 
 namespace CrispyBills
 {
+    /// <summary>
+    /// Dialog allowing the user to select which months/years to import from a structured
+    /// CSV package. Presents tri-state year checkboxes and per-month selections.
+    /// </summary>
     public partial class ImportSelectionDialog : Window
     {
         private sealed record MonthTag(string Year, string Month);
@@ -19,7 +23,10 @@ namespace CrispyBills
         private readonly bool _notesAvailable;
         private readonly Dictionary<string, Dictionary<string, (int BillCount, decimal Expense, decimal Income)>>? _monthlySummary;
 
+        /// <summary>Months selected by year to import. Keys are year strings.</summary>
         public Dictionary<string, List<string>> SelectedMonthsByYear { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Whether the notes section (if available) should be imported.</summary>
         public bool ImportNotes => _notesAvailable && ImportNotesCheckBox.IsChecked == true;
 
         public ImportSelectionDialog(

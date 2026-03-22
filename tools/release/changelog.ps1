@@ -4,6 +4,12 @@ param(
     [string]$OutNotesFile
 )
 
+Usage:
+    pwsh changelog.ps1 -From v1.0.0 -To HEAD -OutFile CHANGELOG.md
+
+Notes:
+    - This script attempts to build a human-readable changelog from commits.
+    - It expects conventional commit formatted messages for best results.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 

@@ -1,6 +1,16 @@
+<#
+Generate semantic version guidance based on conventional commits and git tags.
+
+Usage:
+    pwsh version.ps1 -OutFile version.json
+
+The script emits a JSON blob when invoked with -OutFile. Callers should prefer
+reading the file rather than parsing stdout to avoid non-JSON noise.
+#>
+
 param(
-    [string]$OutFile,
-    [switch]$AllowNoCommits
+        [string]$OutFile,
+        [switch]$AllowNoCommits
 )
 
 Set-StrictMode -Version Latest
@@ -15,14 +25,14 @@ function Get-LatestVersionTag {
     }
 
     $tags = $tagsText -split "`r?`n" | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' }
-    if (-not $tags -or $tags.Count -eq 0) {
+    if ((@($tags)).Count -eq 0) {
         return $null
     }
 
-    $sorted = $tags | Sort-Object {
+    $sorted = @($tags | Sort-Object {
         $parts = $_.TrimStart('v').Split('.')
         [Version]::new([int]$parts[0], [int]$parts[1], [int]$parts[2])
-    }
+    })
 
     return $sorted[-1]
 }
@@ -60,6 +70,20 @@ function Parse-CommitRecords {
     return @($records)
 }
 
+function Get-ConventionalCommitType {
+    param([string]$Subject)
+
+    if ([string]::IsNullOrWhiteSpace($Subject)) {
+        return $null
+    }
+
+    if ($Subject -match '^([a-zA-Z]+)(\([^)]+\))?(!)?:') {
+        return $Matches[1].ToLowerInvariant()
+    }
+
+    return $null
+}
+
 function Get-BumpLevel {
     param([object[]]$Commits)
 
@@ -72,17 +96,16 @@ function Get-BumpLevel {
             return 'major'
         }
 
-        if ($subject -match '^feat(\([^)]+\))?:') {
+        $commitType = Get-ConventionalCommitType -Subject $subject
+        if ($commitType -eq 'feat') {
             if ($level -ne 'major') {
                 $level = 'minor'
             }
             continue
         }
 
-        if ($subject -match '^(fix|perf|refactor)(\([^)]+\))?:') {
-            if ($level -eq 'patch') {
-                $level = 'patch'
-            }
+        if ($commitType -in @('fix', 'perf', 'refactor', 'docs', 'test', 'build', 'ci', 'chore')) {
+            continue
         }
     }
 
@@ -116,6 +139,10 @@ function Get-NextVersion {
     return "v$major.$minor.$patch"
 }
 
+if ($MyInvocation.InvocationName -eq '.') {
+    return
+}
+
 $latestTag = Get-LatestVersionTag
 $range = if ($latestTag) { "$latestTag..HEAD" } else { $null }
 $commits = @(Parse-CommitRecords -Range $range)
@@ -128,9 +155,11 @@ if (@($commits).Count -eq 0) {
     $noChangeResult = [PSCustomObject]@{
         HasChanges = $false
         CurrentTag = $latestTag
+        CurrentVersion = if ($latestTag) { $latestTag.TrimStart('v') } else { $null }
         NextTag = $null
         Version = $null
         Bump = 'none'
+        RequiresApproval = $false
         CommitCount = 0
     }
 
@@ -149,9 +178,11 @@ $version = $nextTag.TrimStart('v')
 $result = [PSCustomObject]@{
     HasChanges = $true
     CurrentTag = $latestTag
+    CurrentVersion = if ($latestTag) { $latestTag.TrimStart('v') } else { $null }
     NextTag = $nextTag
     Version = $version
     Bump = $bump
+    RequiresApproval = ($bump -eq 'major')
     CommitCount = @($commits).Count
 }
 

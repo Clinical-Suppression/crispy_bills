@@ -2,6 +2,10 @@ using CrispyBills.Mobile.Android.Models;
 
 namespace CrispyBills.Mobile.Android.Services;
 
+/// <summary>
+/// Provides a small catalog of common bill templates used to seed new drafts.
+/// Templates are static and intended for quick creation of common recurring bills.
+/// </summary>
 public static class BillTemplateCatalog
 {
     private static readonly IReadOnlyList<BillTemplate> Templates = new List<BillTemplate>
@@ -18,6 +22,7 @@ public static class BillTemplateCatalog
         new("Annual Membership", "Subscriptions", 120m, 5, true, 12, RecurrenceEndMode.None, null, null)
     };
 
+    /// <summary>Return all built-in bill templates.</summary>
     public static IReadOnlyList<BillTemplate> GetAll()
     {
         return Templates;

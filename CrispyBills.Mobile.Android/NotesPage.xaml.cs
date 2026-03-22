@@ -2,6 +2,10 @@ using CrispyBills.Mobile.Android.Services;
 
 namespace CrispyBills.Mobile.Android;
 
+/// <summary>
+/// Simple editor page for application-wide notes persisted by the repository.
+/// Handles line-count enforcement and save interactions.
+/// </summary>
 public partial class NotesPage : ContentPage
 {
     private bool _unsubscribed = false;

@@ -1,3 +1,15 @@
+# <#
+# Publish helper that drives the platform-specific publish scripts.
+# 
+# Usage:
+#   pwsh publish.ps1 -Platform windows -DryRun
+# 
+# This script coordinates packaging and upload steps by invoking
+# `publish-windows.ps1`, `publish-mobile.ps1`, or `publish-both.ps1`.
+# It honors `-DryRun` and propagates diagnostics into `common.ps1` counters.
+# For automated CI, ensure required environment variables and credentials
+# are present before invoking the script.
+#>
 param(
     [Parameter(Mandatory = $true)][ValidateSet('windows', 'mobile', 'both')][string]$Target,
     [string]$Branch = 'main',
@@ -7,6 +19,7 @@ param(
     [switch]$AllowNonMain,
     [switch]$NonInteractive,
     [string]$ResponsesFile,
+    [switch]$ApproveMajorVersion,
     [bool]$AutoCommitChanges = $true,
     [ValidateSet('feat', 'fix', 'perf', 'refactor', 'docs', 'test', 'build', 'ci', 'chore')][string]$AutoCommitType = 'chore',
     [string]$AutoCommitScope,
@@ -440,6 +453,31 @@ $usedSyntheticVersion = $false
 
 Invoke-LoggedCommand -Command 'powershell' -Arguments @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'version.ps1'), '-OutFile', $versionInfoPath, '-AllowNoCommits') -WorkingDirectory $root
 $versionInfo = Get-Content -Path $versionInfoPath -Raw | ConvertFrom-Json
+
+if ($versionInfo.HasChanges) {
+    $currentVersionText = if ([string]::IsNullOrWhiteSpace($versionInfo.CurrentVersion)) { 'none' } else { $versionInfo.CurrentVersion }
+    Write-Host "Semantic version plan: $currentVersionText -> $($versionInfo.Version) ($($versionInfo.Bump))"
+}
+
+if ($versionInfo.HasChanges -and $versionInfo.Bump -eq 'major' -and -not $DryRun) {
+    $majorApproved = [bool]$ApproveMajorVersion
+    if (-not $majorApproved) {
+        if (Get-Command -Name Prompt-YesNo -ErrorAction SilentlyContinue) {
+            $majorApproved = Prompt-YesNo -PromptText "Major release detected ($($versionInfo.CurrentTag) -> $($versionInfo.NextTag)). Approve publish? (y/N)" -ScriptName 'publish' -Key 'ApproveMajorVersion' -Default $false
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($ResponsesFile) -or $NonInteractive) {
+            $majorApproved = [bool](Get-Response -ScriptName 'publish' -Key 'ApproveMajorVersion' -Default $false)
+        }
+        else {
+            $approvalInput = (Read-Host "Major release detected ($($versionInfo.CurrentTag) -> $($versionInfo.NextTag)). Approve publish? (y/N)").Trim().ToLowerInvariant()
+            $majorApproved = ($approvalInput -eq 'y' -or $approvalInput -eq 'yes')
+        }
+    }
+
+    if (-not $majorApproved) {
+        throw 'Major version bump detected but not explicitly approved. Re-run with -ApproveMajorVersion or approve the publish prompt.'
+    }
+}
 
 if (-not $versionInfo.HasChanges) {
     if (-not $DryRun) {

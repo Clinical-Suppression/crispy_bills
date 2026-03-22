@@ -1,10 +1,18 @@
 <#
 Interactive release wizard for local-first release orchestration.
 
-This script is an orchestrator that delegates to the existing scripts in this
-folder (build-*.ps1, publish-*.ps1, release-*.ps1, preflight.ps1, etc.). It
-keeps the original scripts as the execution engines and only provides an
-interactive selection, dry-run, commit synthesis, and confirmation checkpoints.
+Usage:
+    pwsh wizard.ps1 -All -DryRun
+
+This orchestrator delegates to the scripts in this folder (build-*, publish-*,
+release-*, preflight.ps1, etc.). It provides an interactive selection UI,
+dry-run mode, commit synthesis, and confirmation checkpoints.
+
+Automation notes:
+    - For non-interactive automation, provide a responses JSON and use
+        -NonInteractive -RequireNonInteractiveReady.
+    - Prefer reading machine output (version.ps1 -OutFile) rather than parsing
+        stdout when automating.
 #>
 
 param(
@@ -25,6 +33,7 @@ param(
     [string]$CommitMessage,
     [string]$CommitBody,
     [switch]$BreakingChange,
+    [switch]$ApproveMajorVersion,
     [switch]$SkipVersion,
     [string]$ResponsesFile
 )
@@ -93,6 +102,131 @@ function Get-WizardResponse {
     }
 
     return $Default
+}
+
+function Get-DetectedVersionFromScript {
+    param(
+        [switch]$AllowNoCommits
+    )
+
+    $tempOut = [IO.Path]::GetTempFileName()
+    try {
+        $versionScriptPath = Join-Path $PSScriptRoot 'version.ps1'
+        $versionArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $versionScriptPath, '-OutFile', $tempOut)
+        if ($AllowNoCommits) {
+            $versionArgs += '-AllowNoCommits'
+        }
+
+        & pwsh @versionArgs | Out-Null
+
+        if (-not (Test-Path $tempOut)) {
+            return $null
+        }
+
+        $json = Get-Content -Path $tempOut -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        if ($json -and $json.Version) {
+            return [string]$json.Version
+        }
+
+        return $null
+    }
+    catch {
+        Write-Host "Warning: Unable to detect version via version.ps1: $($_.Exception.Message)" -ForegroundColor Yellow
+        return $null
+    }
+    finally {
+        if (Test-Path $tempOut) {
+            Remove-Item $tempOut -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Get-VersionInfoFromScript {
+    param(
+        [switch]$AllowNoCommits
+    )
+
+    $tempOut = [IO.Path]::GetTempFileName()
+    try {
+        $versionScriptPath = Join-Path $PSScriptRoot 'version.ps1'
+        $versionArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $versionScriptPath, '-OutFile', $tempOut)
+        if ($AllowNoCommits) {
+            $versionArgs += '-AllowNoCommits'
+        }
+
+        & pwsh @versionArgs | Out-Null
+
+        if (-not (Test-Path $tempOut)) {
+            return $null
+        }
+
+        return (Get-Content -Path $tempOut -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop)
+    }
+    catch {
+        Write-Host "Warning: Unable to read version info via version.ps1: $($_.Exception.Message)" -ForegroundColor Yellow
+        return $null
+    }
+    finally {
+        if (Test-Path $tempOut) {
+            Remove-Item $tempOut -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Confirm-MajorVersionApproval {
+    param(
+        $VersionInfo,
+        [bool]$DryRun,
+        [bool]$ExplicitApproval
+    )
+
+    if ($null -eq $VersionInfo -or -not $VersionInfo.HasChanges -or $VersionInfo.Bump -ne 'major') {
+        return $false
+    }
+
+    if ($DryRun) {
+        Write-Host 'Dry-run: major version proposal detected; approval will be required for a real publish.' -ForegroundColor Yellow
+        return $false
+    }
+
+    if ($ExplicitApproval) {
+        Write-Host 'Major version approved via explicit flag.' -ForegroundColor Yellow
+        return $true
+    }
+
+    $currentTag = if ([string]::IsNullOrWhiteSpace($VersionInfo.CurrentTag)) { 'none' } else { $VersionInfo.CurrentTag }
+    $nextTag = if ([string]::IsNullOrWhiteSpace($VersionInfo.NextTag)) { 'unknown' } else { $VersionInfo.NextTag }
+    $approvalMessage = "Major release detected ($currentTag -> $nextTag). Approve this major version publish?"
+
+    if (-not (Is-Interactive)) {
+        $approved = [bool](Get-WizardResponse -Key 'ApproveMajorVersion' -Default $false)
+        if (-not $approved) {
+            throw 'Major version bump detected but not explicitly approved. Re-run with -ApproveMajorVersion or provide wizard.ApproveMajorVersion=true.'
+        }
+        return $true
+    }
+
+    $approved = Prompt-YesNo -Message $approvalMessage -Key 'ApproveMajorVersion' -Default $false
+    if (-not $approved) {
+        throw 'Major version bump was not approved. Aborting before publish.'
+    }
+
+    return $true
+}
+
+function Show-WarningBlock {
+    param(
+        [string]$Title,
+        [string[]]$Lines
+    )
+
+    Write-Host ''
+    Write-Host ('=' * 72) -ForegroundColor Red
+    Write-Host $Title -ForegroundColor Red
+    foreach ($line in @($Lines)) {
+        Write-Host $line -ForegroundColor Yellow
+    }
+    Write-Host ('=' * 72) -ForegroundColor Red
 }
 
 function Get-TaskMetadata {
@@ -244,21 +378,48 @@ function Prompt-YesNo {
     }
 }
 
+function ConvertFrom-GitStatusLines {
+    param([string[]]$Lines)
+
+    $Lines = @($Lines)
+    $files = New-Object System.Collections.Generic.List[string]
+    foreach ($line in @($Lines)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+
+        $trimmedLine = $line.TrimEnd()
+        if ($trimmedLine -notmatch '^(?<status>[ MADRCU?!]{1,2})\s+(?<path>.+)$') { continue }
+
+        $pathPart = $Matches['path'].Trim()
+        if ([string]::IsNullOrWhiteSpace($pathPart)) { continue }
+
+        if ($pathPart -match ' -> ') {
+            $pathPart = ($pathPart -split ' -> ')[-1].Trim()
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($pathPart)) {
+            $files.Add($pathPart)
+        }
+    }
+
+    $sortedFiles = @($files | Sort-Object -Unique)
+    return $sortedFiles
+}
+
 function Get-ChangedFiles {
     $root = Get-WorkspaceRoot
     $status = Get-GitOutput -Args @('status', '--porcelain') -WorkingDirectory $root
     if (-not $status) { return @() }
-    $lines = $status -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-    $files = $lines | ForEach-Object { $_ -replace '^[ MADRCU?!]+', '' }
-    return $files | Sort-Object -Unique
+    $lines = $status -split "`n" | ForEach-Object { $_.TrimEnd() } | Where-Object { $_.Trim().Length -gt 0 }
+    return @(ConvertFrom-GitStatusLines -Lines $lines)
 }
 
 function Get-RecommendedCommitType {
     param([string[]]$files)
 
-    if (-not $files -or $files.Count -eq 0) { return 'chore' }
+    $files = @($files | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_) })
+    if ($files.Count -eq 0) { return 'chore' }
 
-    $lower = $files | ForEach-Object { $_.ToLowerInvariant() }
+    $lower = @($files | ForEach-Object { $_.ToLowerInvariant() })
     if ($lower -match '\bdocs?\b' -or $lower -match '\bmd$' -or $lower -match 'readme') {
         return 'docs'
     }
@@ -363,11 +524,10 @@ function Prompt-CommitMetadata {
 
 function Check-VersionAgreements {
     $root = Get-WorkspaceRoot
-    $local = & pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'version.ps1') -OutFile ([IO.Path]::GetTempFileName()) | Out-String
+    $localData = Get-VersionInfoFromScript -AllowNoCommits
     $tags = Get-GitOutput -Args @('ls-remote', '--tags', 'origin') -WorkingDirectory $root
     $remoteTag = $tags -split "`n" | Where-Object { $_ -match 'refs/tags/v\d+\.\d+\.\d+$' } | ForEach-Object { ($_ -split '\s+')[1] -replace 'refs/tags/', '' } | Sort-Object {[Version]($_.TrimStart('v'))} | Select-Object -Last 1
 
-    $localData = $local | ConvertFrom-Json -ErrorAction SilentlyContinue
     if ($localData -and $localData.NextTag) {
         $localNext = $localData.NextTag
         if ($remoteTag) {
@@ -482,9 +642,9 @@ function Show-DirtySummary {
     $root = Get-WorkspaceRoot
     $dirty = Get-GitOutput -Args @('status', '--porcelain') -WorkingDirectory $root
     if (-not [string]::IsNullOrWhiteSpace($dirty)) {
-        $files = $dirty -split "`n" | ForEach-Object { ($_.Trim() -replace '^[ MADRCU?!]+', '') } | Where-Object { $_ }
+        $files = @(ConvertFrom-GitStatusLines -Lines @($dirty -split "`n"))
         Write-Host "Release summary: working tree dirty ($($files.Count) files changed)" -ForegroundColor Yellow
-        $files | Select-Object -First 10 | ForEach-Object { Write-Host " - $_" }
+        @($files | Select-Object -First 10) | ForEach-Object { Write-Host " - $_" }
         if ($files.Count -gt 10) { Write-Host " - ... and $($files.Count - 10) more" -ForegroundColor Yellow }
     }
     else {
@@ -506,7 +666,8 @@ function Get-WizardTaskArguments {
         [string]$DetectedVersion,
         [string]$PublishCommitType,
         [string]$PublishCommitScope,
-        [string]$PublishCommitDescription
+        [string]$PublishCommitDescription,
+        [bool]$ApproveMajorVersion = $false
     )
 
     $extraArgs = @()
@@ -525,6 +686,9 @@ function Get-WizardTaskArguments {
     }
 
     if ($ScriptName -like 'publish-*') {
+        if ($ApproveMajorVersion) {
+            $extraArgs += '-ApproveMajorVersion'
+        }
         if ($DisablePublishAutoCommit) {
             $extraArgs += '-AutoCommitChanges:$false'
         }
@@ -692,36 +856,23 @@ $chosen = @()
 
 $taskList = @(@($Tasks) | Where-Object { $_ -and ($_.ToString()).Trim().Length -gt 0 })
 if ($taskList.Count -gt 0) {
-    $lowerAvailable = $available | ForEach-Object { $_.ToLowerInvariant() }
-    $hasAllToken = (@($taskList | Where-Object { $_.ToString().Trim().ToLowerInvariant() -eq 'all' })).Count -gt 0
-    if ($All -or $hasAllToken) {
-        $chosen = $available
-    } else {
-        foreach ($t in $taskList) {
-            if (-not $t) { continue }
-            $ttrim = $t.ToString().Trim()
-            if (-not $ttrim) { continue }
-            if ($lowerAvailable -contains $ttrim.ToLowerInvariant()) {
-                $chosen += $available[$lowerAvailable.IndexOf($ttrim.ToLowerInvariant())]
-            } else {
-                Write-Host "Unknown task specified: $ttrim" -ForegroundColor Yellow
-            }
-        }
-
-        if ($chosen.Count -eq 0) {
-            Write-Host 'No valid tasks provided via -Tasks; falling back to interactive selection.' -ForegroundColor Yellow
-            $taskList = @()
-        }
+    $resolvedSelection = @(Resolve-TaskSelectionValue -Selection $taskList -Options $available)
+    if ($resolvedSelection.Count -gt 0) {
+        $chosen = @($resolvedSelection | ForEach-Object { $available[$_] })
+    }
+    else {
+        Write-Host 'No valid tasks provided via -Tasks; falling back to interactive selection.' -ForegroundColor Yellow
+        $taskList = @()
     }
 }
 
-if ($taskList.Count -eq 0 -and $chosen.Count -eq 0) {
+if ($taskList.Count -eq 0 -and @($chosen).Count -eq 0) {
     $sel = @((Prompt-MultiSelect -Options $available -Key 'Tasks'))
     if ($sel.Count -eq 0) {
         Write-Host 'No tasks selected; exiting.' -ForegroundColor Yellow
         exit 0
     }
-    $chosen = $sel | ForEach-Object { $available[$_] }
+    $chosen = @($sel | ForEach-Object { $available[$_] })
 }
 
 $chosen = @($chosen)
@@ -730,14 +881,16 @@ Write-Host "Selected tasks:" -ForegroundColor Green
 $chosen | ForEach-Object { Write-Host " - $_" }
 
 $containsPublishTask = (@($chosen | Where-Object { $_ -like 'publish-*' })).Count -gt 0
-$wizardChangedFiles = Get-ChangedFiles
+$wizardChangedFiles = @(Get-ChangedFiles)
 $publishAutoCommitDisabled = [bool]$NoCommit
 $publishCommitType = $CommitType
 $publishCommitScope = $CommitScope
 $publishCommitDescription = $CommitMessage
+$plannedVersionInfo = $null
+$majorApprovalGranted = [bool]$ApproveMajorVersion
 
 # Provide total count early so pre-checks can report progress
-$total = $chosen.Count
+$total = @($chosen).Count
 
 if ($NoCommit) {
     Write-Host 'NoCommit requested; skipping commit step.' -ForegroundColor Yellow
@@ -760,7 +913,7 @@ elseif ($containsPublishTask) {
         $dryRun = Prompt-YesNo -Message 'Run in dry-run mode (show commands but do not execute)?' -Default $false -Key 'DryRun'
     }
 
-    if ($wizardChangedFiles.Count -gt 0) {
+    if (@($wizardChangedFiles).Count -gt 0) {
         $allowPublishAutoCommit = Prompt-YesNo -Message 'If publish needs a pre-publish commit for current changes, let it create one?' -Default $true -Key 'AllowPublishAutoCommit'
         $publishAutoCommitDisabled = -not $allowPublishAutoCommit
 
@@ -797,6 +950,21 @@ else {
     Write-Host 'Clean working tree is required for this wizard flow.' -ForegroundColor Yellow
 }
 
+if ($containsPublishTask) {
+    $plannedVersionInfo = Get-VersionInfoFromScript -AllowNoCommits
+    if ($null -ne $plannedVersionInfo -and $plannedVersionInfo.HasChanges) {
+        if ($plannedVersionInfo.Bump -eq 'major') {
+            Show-WarningBlock -Title 'MAJOR VERSION PROPOSAL' -Lines @(
+                "Current tag: $(if ([string]::IsNullOrWhiteSpace($plannedVersionInfo.CurrentTag)) { 'none' } else { $plannedVersionInfo.CurrentTag })",
+                "Next tag: $($plannedVersionInfo.NextTag)",
+                'Major releases require explicit approval before a real publish.'
+            )
+        }
+
+        $majorApprovalGranted = Confirm-MajorVersionApproval -VersionInfo $plannedVersionInfo -DryRun:$dryRun -ExplicitApproval:$ApproveMajorVersion
+    }
+}
+
 if ($doCommit) {
     if (Test-Path (Join-Path $PSScriptRoot 'conventional-commit.ps1')) {
         Write-Host 'Will run conventional-commit.ps1 during the flow.'
@@ -821,6 +989,10 @@ if ($containsPublishTask -and (Test-Path (Join-Path $PSScriptRoot 'recover-missi
     }
 }
 
+if ($containsPublishTask -and -not $dryRun) {
+    Write-Host 'Warning: dry-run is off. Publish tasks may create commits, build release artifacts, push tags, and create GitHub releases.' -ForegroundColor Red
+}
+
 if (-not $AutoConfirm) {
     if (-not (Prompt-YesNo -Message 'Proceed with the selected operations?' -Default $true -Key 'Proceed')) {
         Write-Host 'Aborted by user.' -ForegroundColor Yellow
@@ -831,38 +1003,19 @@ if (-not $AutoConfirm) {
 }
 
 try {
-    $total = $chosen.Count
+    $total = @($chosen).Count
     $detectedVersion = $null
 
     for ($index = 0; $index -lt $total; $index++) {
         $s = $chosen[$index]
         Write-Host "`n=== Running: $s ===" -ForegroundColor Cyan
 
-        $extraArgs = Get-WizardTaskArguments -ScriptName $s -AllowDirty:$allowDirtyForFlow -DisablePublishAutoCommit:$publishAutoCommitDisabled -DetectedVersion $detectedVersion -PublishCommitType $publishCommitType -PublishCommitScope $publishCommitScope -PublishCommitDescription $publishCommitDescription
+        $extraArgs = Get-WizardTaskArguments -ScriptName $s -AllowDirty:$allowDirtyForFlow -DisablePublishAutoCommit:$publishAutoCommitDisabled -DetectedVersion $detectedVersion -PublishCommitType $publishCommitType -PublishCommitScope $publishCommitScope -PublishCommitDescription $publishCommitDescription -ApproveMajorVersion:$majorApprovalGranted
 
         if ($s -eq 'changelog.ps1' -and [string]::IsNullOrWhiteSpace($detectedVersion)) {
                 Write-Host 'changelog requires a Version. Computing suggested version using version.ps1...'
 
-                # Ensure version.ps1 is executed (run it now) and write clean JSON to a temp file
-                $tempOut = [IO.Path]::GetTempFileName()
-                try {
-                    $verArgs = @('-OutFile', $tempOut, '-AllowNoCommits')
-                    $verRunSucceeded = Run-ScriptByName -ScriptName 'version.ps1' -DryRun:$dryRun -CurrentStep ($index + 1) -TotalSteps $total -ExtraArgs $verArgs
-                    if ($verRunSucceeded -and -not $dryRun) {
-                        try {
-                            if (Test-Path $tempOut) {
-                                $json = Get-Content -Raw $tempOut | ConvertFrom-Json -ErrorAction Stop
-                                if ($json -and $json.Version) { $detectedVersion = $json.Version }
-                            } else {
-                                Write-Host 'Warning: version output file not found.' -ForegroundColor Yellow
-                            }
-                        } catch {
-                            Write-Host 'Warning: Unable to parse version output from file.' -ForegroundColor Yellow
-                        }
-                    }
-                } finally {
-                    if (Test-Path $tempOut) { Remove-Item $tempOut -Force -ErrorAction SilentlyContinue }
-                }
+                $detectedVersion = Get-DetectedVersionFromScript -AllowNoCommits
 
                 if (-not [string]::IsNullOrWhiteSpace($detectedVersion)) {
                     if (-not $AutoConfirm) {
@@ -891,7 +1044,7 @@ try {
                 }
 
                 if (-not [string]::IsNullOrWhiteSpace($detectedVersion)) {
-                    $extraArgs = Get-WizardTaskArguments -ScriptName $s -AllowDirty:$allowDirtyForFlow -DisablePublishAutoCommit:$publishAutoCommitDisabled -DetectedVersion $detectedVersion -PublishCommitType $publishCommitType -PublishCommitScope $publishCommitScope -PublishCommitDescription $publishCommitDescription
+                    $extraArgs = Get-WizardTaskArguments -ScriptName $s -AllowDirty:$allowDirtyForFlow -DisablePublishAutoCommit:$publishAutoCommitDisabled -DetectedVersion $detectedVersion -PublishCommitType $publishCommitType -PublishCommitScope $publishCommitScope -PublishCommitDescription $publishCommitDescription -ApproveMajorVersion:$majorApprovalGranted
                 }
         }
 
@@ -926,7 +1079,7 @@ try {
         # Version checks before commit
         Check-VersionAgreements
 
-        $changedFiles = Get-ChangedFiles
+        $changedFiles = @(Get-ChangedFiles)
         $recommendedType = Get-RecommendedCommitType -files $changedFiles
         $recommendedMessage = Get-RecommendedCommitMessage -type $recommendedType -files $changedFiles
 
@@ -944,6 +1097,7 @@ try {
                 }
                 else {
                     $bodyInput = Read-Host 'Optional commit body (single line, press Enter to skip)'
+                    Write-Host 'Breaking changes trigger a major release and require explicit approval before publish.' -ForegroundColor Yellow
                     $breakingInput = Prompt-YesNo -Message 'Breaking change? (y/N)' -Default $false -Key 'CommitBreaking'
                 }
 

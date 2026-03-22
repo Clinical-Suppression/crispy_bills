@@ -1,15 +1,27 @@
 <#
 Prompt helpers for release scripts
 
-Provides: Load-ResponsesFile, Get-Response, Test-IsInteractive,
-and Prompt-* helpers that return responses from a responses JSON
-when running non-interactively.
+Purpose:
+    Provide a small interactive abstraction used by the wizard and other
+    release scripts. Supports reading a JSON `responses` file for non-interactive
+    automation and exposing `Prompt-*` helpers that fall back to the responses.
+
+Provided functions:
+    - Initialize-ReleasePromptContext
+    - Load-ResponsesFile
+    - Get-Response
+    - Test-IsInteractive
+    - Prompt-Text / Prompt-YesNo / Prompt-Select / Prompt-MultiSelect
 
 Responses JSON schema (example):
 {
-  "conventional-commit": { "Type": "fix", "Description": "ci: runner" },
-  "publish": { "Type": "chore", "Description": "prepare release", "Scope": "release" }
+    "conventional-commit": { "Type": "fix", "Description": "ci: runner" },
+    "publish": { "Type": "chore", "Description": "prepare release", "Scope": "release" }
 }
+
+Automation note:
+    When running in CI prefer providing a `ResponsesFile` and using the
+    `-NonInteractive`/`-RequireNonInteractiveReady` flags on the wizard.
 #>
 
 Set-StrictMode -Version Latest
@@ -18,6 +30,16 @@ $ErrorActionPreference = 'Stop'
 $script:ReleasePromptNonInteractive = $false
 $global:RELEASE_RESPONSES = @{}
 
+<#
+Initialize-ReleasePromptContext
+
+Initialize the prompt system for release scripts. Optionally load a
+`ResponsesFile` (JSON) for non-interactive automation and set the
+`-NonInteractive` flag to force prompt helpers to prefer responses.
+Parameters:
+  - `$ResponsesFile`: path to a JSON responses file.
+  - `-NonInteractive`: switch to disable interactive prompts.
+#>
 function Initialize-ReleasePromptContext {
     param(
         [string]$ResponsesFile,
@@ -30,6 +52,13 @@ function Initialize-ReleasePromptContext {
     }
 }
 
+<#
+Load-ResponsesFile
+
+Load a JSON responses file into the global `RELEASE_RESPONSES` map.
+If the file is missing or invalid the function resets `RELEASE_RESPONSES`
+to an empty map and returns `$null`.
+#>
 function Load-ResponsesFile {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) {
@@ -49,6 +78,14 @@ function Load-ResponsesFile {
     }
 }
 
+<#
+Get-Response
+
+Retrieve a value from the loaded responses for a given `$ScriptName`
+and `$Key`. Returns `$Default` when the value is missing or the
+responses map is not available. Handles common JSON-to-PSObject
+representations.
+#>
 function Get-Response {
     param(
         [string]$ScriptName,
@@ -92,6 +129,13 @@ function Get-Response {
     return $Default
 }
 
+<#
+Test-IsInteractive
+
+Return `$true` when the current host appears interactive and prompts
+should be used. Honors the `ReleasePromptNonInteractive` flag and the
+`CRISPYBILLS_NONINTERACTIVE` environment variable.
+#>
 function Test-IsInteractive {
     try {
         if ($script:ReleasePromptNonInteractive -or $env:CRISPYBILLS_NONINTERACTIVE) {
@@ -104,6 +148,12 @@ function Test-IsInteractive {
     }
 }
 
+<#
+Prompt-Text
+
+Prompt for a single-line text value. When non-interactive, the value
+is retrieved from the responses file using `Get-Response`.
+#>
 function Prompt-Text {
     param(
         [string]$PromptText,
@@ -119,6 +169,13 @@ function Prompt-Text {
     return (Read-Host $PromptText).Trim()
 }
 
+<#
+Prompt-YesNo
+
+Prompt for a boolean yes/no answer. When non-interactive attempts to
+coerce the response from the responses file into a boolean. Returns the
+provided `$Default` when no response is available.
+#>
 function Prompt-YesNo {
     param(
         [string]$PromptText,
@@ -142,6 +199,13 @@ function Prompt-YesNo {
     return -not ($input -eq 'n' -or $input -eq 'no')
 }
 
+<#
+Prompt-Select
+
+Display a numbered selection list and return the chosen option. When
+non-interactive, attempt to match the responses file value to an option
+or fall back to the specified `$DefaultIndex`.
+#>
 function Prompt-Select {
     param(
         [string]$PromptText,
@@ -170,6 +234,13 @@ function Prompt-Select {
     }
 }
 
+<#
+Prompt-MultiSelect
+
+Prompt the user to select multiple items from a list. Returns an array
+of chosen options. When non-interactive attempts to coerce the response
+into an enumerable result from the responses file.
+#>
 function Prompt-MultiSelect {
     param(
         [string]$PromptText,
