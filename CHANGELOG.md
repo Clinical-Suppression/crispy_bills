@@ -395,6 +395,10 @@ All notable changes to this project will be documented in this file.
 
 ## 1.6.0 - 2026-03-22
 
+### Fixes
+- fix(wizard): fixes to build/release/publish wizard (3d93e3f)
+
 ### Features
 - feat: fixes to build/release/publish wizard (546dd20)
+
 
