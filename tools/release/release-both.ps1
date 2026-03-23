@@ -16,7 +16,7 @@ param(
 	[switch]$AllowNonMain,
 	[switch]$NonInteractive,
 	[string]$ResponsesFile,
-	[string]$Version
+	[Parameter(Mandatory = $false)][ValidateNotNullOrEmpty()][string]$Version = ''
 )
 
 Set-StrictMode -Version Latest

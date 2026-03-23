@@ -19,6 +19,12 @@ $ErrorActionPreference = 'Stop'
 
 Reset-TaskDiagnostics
 
+# Lightweight trace for debugging/version propagation
+if ($PSBoundParameters.Count -gt 0) {
+    Write-Verbose "TRACE: release.ps1 invoked with parameters: $($PSBoundParameters.Keys -join ', ')"
+}
+Write-Verbose "TRACE: Version='$Version' Target='$Target' Branch='$Branch' DryRun='$DryRun'"
+
 $root = Get-WorkspaceRoot
 $paths = Get-ReleasePaths -Version $Version
 $windowsProject = Join-Path $root 'CrispyBills.csproj'
