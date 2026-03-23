@@ -23,7 +23,9 @@ Reset-TaskDiagnostics
 if ($PSBoundParameters.Count -gt 0) {
     Write-Verbose "TRACE: release.ps1 invoked with parameters: $($PSBoundParameters.Keys -join ', ')"
 }
-Write-Verbose "TRACE: Version='$Version' Target='$Target' Branch='$Branch' DryRun='$DryRun'"
+$branchStr = if ($PSBoundParameters.ContainsKey('Branch')) { $Branch } else { '' }
+$dryRunStr = if ($PSBoundParameters.ContainsKey('DryRun')) { $DryRun } else { $false }
+Write-Verbose "TRACE: Version='$Version' Target='$Target' Branch='$branchStr' DryRun='$dryRunStr'"
 
 $root = Get-WorkspaceRoot
 $paths = Get-ReleasePaths -Version $Version

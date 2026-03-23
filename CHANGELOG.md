@@ -393,4 +393,8 @@ All notable changes to this project will be documented in this file.
 - docs: complete documentation sweep ΓÇö add summaries, headers, python docstrings, and template READMEs (2a9b8b7)
 - docs: documentation pass ΓÇö add summaries and release helper comments (7a3a6ad)
 
+## 1.6.0 - 2026-03-22
+
+### Features
+- feat: fixes to build/release/publish wizard (546dd20)
 
