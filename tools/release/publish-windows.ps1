@@ -15,16 +15,6 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-<#
-Publish Windows artifacts.
-
-Usage:
-  pwsh publish-windows.ps1 -Configuration Release -DryRun
-
-This script packages and publishes Windows-specific assets. It is invoked by
-`publish.ps1` and honors `-DryRun` to perform a non-destructive run for CI.
-#>
-
 
 & (Join-Path $PSScriptRoot 'publish.ps1') -Target windows -Branch $Branch -DryRun:$DryRun -NoPush:$NoPush -AllowDirty:$AllowDirty -AllowNonMain:$AllowNonMain -NonInteractive:$NonInteractive -ResponsesFile $ResponsesFile -ApproveMajorVersion:$ApproveMajorVersion -AutoCommitChanges:$AutoCommitChanges -AutoCommitType $AutoCommitType -AutoCommitScope $AutoCommitScope -AutoCommitDescription $AutoCommitDescription
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

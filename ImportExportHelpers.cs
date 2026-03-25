@@ -114,6 +114,7 @@ namespace CrispyBills
             int totalLines = 0;
             int totalDetailRows = 0;
             int skippedRows = 0;
+            var monthsArray = months.ToArray();
 
             foreach (var rawLine in lines)
             {
@@ -208,7 +209,7 @@ namespace CrispyBills
                     continue;
                 }
 
-                if (Array.IndexOf(months.ToArray(), rowMonth) < 0)
+                if (Array.IndexOf(monthsArray, rowMonth) < 0)
                 {
                     skippedRows++;
                     logNonFatal?.Invoke($"ParseStructuredReportCsv: skipping row with invalid month '{rowMonth}' at line {totalLines}.");
@@ -245,7 +246,7 @@ namespace CrispyBills
 
                 if (int.TryParse(rowYear, out int yearValue))
                 {
-                    int monthIndex = Array.IndexOf(months.ToArray(), rowMonth);
+                    int monthIndex = Array.IndexOf(monthsArray, rowMonth);
                     if (monthIndex >= 0)
                     {
                         bill.ContextPeriodStart = new DateTime(yearValue, monthIndex + 1, 1);

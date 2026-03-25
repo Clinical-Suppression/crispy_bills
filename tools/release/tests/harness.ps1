@@ -29,10 +29,12 @@ function Get-Classification {
     param(
         [int]$ExitCode,
         [bool]$TimedOut,
-        [string[]]$Output
+        [string[]]$Output,
+        [string[]]$ErrorOutput
     )
 
     $joined = ($Output -join "`n")
+    $errJoined = ($ErrorOutput -join "`n")
     if ($TimedOut) {
         if ($joined -match 'stub-prompt waiting') {
             return 'prompt-blocked'
@@ -47,6 +49,9 @@ function Get-Classification {
     }
 
     if ($ExitCode -eq 0) {
+        if ($errJoined -match 'Exception:' -or $errJoined -match 'Write-Error:' -or $joined -match 'failed with exit code') {
+            return 'delegated-failure'
+        }
         return 'completed'
     }
 
@@ -115,8 +120,7 @@ exit 0
 
 $failStub = @"
 Write-Host 'stub-fail start'
-Write-Error 'stub-fail forced error'
-exit 1
+throw 'stub-fail forced error'
 "@
 
 foreach ($name in $stubScripts) {
@@ -141,40 +145,37 @@ exit 0
 }
 
 $stdinPath = Join-Path $work 'stdin.txt'
-$inputs = @('1')
-if ($NoCommit) {
+$inputs = @()
+if ($StubMode -ne 'prompt') {
+    $inputs += '1'
+    if ($NoCommit) {
+        $inputs += 'n'
+    }
+    else {
+        $inputs += 'y'
+    }
     $inputs += 'n'
-}
-else {
     $inputs += 'y'
 }
-$inputs += 'n'
-$inputs += 'y'
 Set-Content -Path $stdinPath -Value $inputs -Encoding ASCII
 
 $stdoutPath = Join-Path $work 'wizard.stdout.txt'
 $stderrPath = Join-Path $work 'wizard.stderr.txt'
+Set-Content -Path $stdoutPath -Value '' -Encoding UTF8
+Set-Content -Path $stderrPath -Value '' -Encoding UTF8
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
-$psi.FileName = 'powershell'
-$psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$work\wizard.ps1`""
+$psi.FileName = 'cmd.exe'
+$wizardCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$work\wizard.ps1`" < `"$stdinPath`" 1> `"$stdoutPath`" 2> `"$stderrPath`""
+$psi.Arguments = "/d /s /c `"$wizardCommand`""
 $psi.WorkingDirectory = $work
 $psi.UseShellExecute = $false
-$psi.RedirectStandardOutput = $true
-$psi.RedirectStandardError = $true
-$psi.RedirectStandardInput = $true
 $psi.CreateNoWindow = $true
 
 $proc = New-Object System.Diagnostics.Process
 $proc.StartInfo = $psi
 
 $null = $proc.Start()
-
-foreach ($line in (Get-Content -Path $stdinPath)) {
-    $proc.StandardInput.WriteLine($line)
-    Start-Sleep -Milliseconds 200
-}
-$proc.StandardInput.Close()
 
 $allOut = New-Object System.Collections.Generic.List[string]
 $allErr = New-Object System.Collections.Generic.List[string]
@@ -188,26 +189,25 @@ if (-not $finished) {
     Add-Content -Path $stderrPath -Value "watchdog: killed after $TimeoutSeconds seconds"
 }
 
-$stdoutText = $proc.StandardOutput.ReadToEnd()
-$stderrText = $proc.StandardError.ReadToEnd()
+$proc.WaitForExit()
+$stdoutText = Get-Content -Path $stdoutPath -Raw -ErrorAction SilentlyContinue
+$stderrText = Get-Content -Path $stderrPath -Raw -ErrorAction SilentlyContinue
 
 if (-not [string]::IsNullOrWhiteSpace($stdoutText)) {
     foreach ($line in ($stdoutText -split "`r?`n")) {
         $allOut.Add($line)
-        Add-Content -Path $stdoutPath -Value $line
     }
 }
 
 if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
     foreach ($line in ($stderrText -split "`r?`n")) {
         $allErr.Add($line)
-        Add-Content -Path $stderrPath -Value $line
     }
 }
 
 $end = Get-Date
 $exitCode = if ($proc.HasExited) { $proc.ExitCode } else { -1 }
-$classification = Get-Classification -ExitCode $exitCode -TimedOut:$timedOut -Output @($allOut)
+$classification = Get-Classification -ExitCode $exitCode -TimedOut:$timedOut -Output @($allOut) -ErrorOutput @($allErr)
 $lastOutput = if ($allOut.Count -gt 0) { $allOut[$allOut.Count - 1] } else { '' }
 
 $ledger = [PSCustomObject]@{

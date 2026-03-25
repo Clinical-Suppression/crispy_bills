@@ -1,0 +1,36 @@
+<Window x:Class="CrispyBills.BulkBillsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Bulk add bills"
+        Height="520" Width="880"
+        WindowStartupLocation="CenterOwner"
+        MinHeight="400" MinWidth="640"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Foreground="{DynamicResource WindowForegroundBrush}">
+    <DockPanel Margin="12">
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,10"
+                   Text="Enter one row per bill. Empty rows are skipped. Default recurrence is monthly when 'Recurring' is checked." />
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Save all" Width="96" Margin="6,0" Click="Ok_Click" IsDefault="True" />
+            <Button Content="Cancel" Width="96" Margin="6,0" Click="Cancel_Click" IsCancel="True" />
+        </StackPanel>
+        <DataGrid x:Name="BillsGrid"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False"
+                  CanUserDeleteRows="False"
+                  HeadersVisibility="Column"
+                  ItemsSource="{Binding Rows}"
+                  CellEditEnding="BillsGrid_CellEditEnding"
+                  Background="{DynamicResource ControlBackgroundBrush}"
+                  Foreground="{DynamicResource ControlForegroundBrush}">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Name" Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="2*" />
+                <DataGridTextColumn Header="Amount" Binding="{Binding Amount, UpdateSourceTrigger=PropertyChanged}" Width="*" />
+                <DataGridTextColumn Header="Category" Binding="{Binding Category, UpdateSourceTrigger=PropertyChanged}" Width="*" />
+                <DataGridTextColumn Header="Due (yyyy-MM-dd)" Binding="{Binding DueDateText, UpdateSourceTrigger=PropertyChanged}" Width="1.5*" />
+                <DataGridCheckBoxColumn Header="Paid" Binding="{Binding IsPaid}" Width="Auto" />
+                <DataGridCheckBoxColumn Header="Recurring" Binding="{Binding IsRecurring}" Width="Auto" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>

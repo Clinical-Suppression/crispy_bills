@@ -47,6 +47,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "tools\apply_testdbs.ps1" -R
 - Category combo edit in DataGrid commits correctly on Enter/Tab and does not reopen unexpectedly.
 - Due date paste rejects invalid formats and normalizes valid values.
 
+## 3.0) Android crash diagnosis (splash then closes)
+
+When the app shows the MAUI/.NET splash and then exits, capture the fatal exception from the device:
+
+```powershell
+adb logcat -c
+# Launch the app on the phone/emulator, then:
+adb logcat -d | findstr /i "AndroidRuntime FATAL EXCEPTION mono-rt maui xaml crispy CrispyBills"
+```
+
+- Prefer a **Debug** build first so stacks include managed symbols.
+- Also check the in-app diagnostics log path (written under app private storage) after a failed start if the app shows the **Startup error** fallback page.
+
 ## 3.1) Mobile Parity Regression Cases
 
 - New Year creation guardrail when next year already has data:
@@ -100,3 +113,20 @@ Post-publish checks:
 4. If publish fails, terminal output includes full multi-line root-failure details.
 
 If publish partially succeeds (remote push completed but release is missing), use the recovery flow in [docs/RELEASE_AUTOMATION_PLAN.md](RELEASE_AUTOMATION_PLAN.md).
+
+## 6) Release wizard (Pester + harness)
+
+Automated checks for `tools/release/wizard.ps1` live beside the script.
+
+**Pester** — [tools/release/wizard.tests.ps1](../tools/release/wizard.tests.ps1) (single `Describe 'Crispy_Bills Release Wizard'` block). Covers task selection parsing (`Prompt-MultiSelect`, `Resolve-TaskSelectionValue`), `Prompt-YesNo` / non-interactive responses, `Get-WizardTaskArguments` for changelog and publish scripts (including `-NonInteractive` / `-ResponsesFile` / `-ApproveMajorVersion`), major-version approval, git status line parsing (`ConvertFrom-GitStatusLines`), recovery script argument rules, `Check-VersionAgreements`, commit-type heuristics, and related helpers.
+
+```powershell
+# Requires Pester (e.g. Install-Module Pester -Scope CurrentUser)
+Invoke-Pester -Path "tools\release\wizard.tests.ps1"
+```
+
+**Harness** — [tools/release/tests/harness.ps1](../tools/release/tests/harness.ps1) runs a copy of the wizard against stubbed release scripts under `publish\logs\wizard-tests\`, with scripted stdin and a timeout watchdog (exit `124` if the run exceeds `-TimeoutSeconds`). Use `-StubMode` (`heartbeat`, `quiet`, `prompt`, `fail`) to vary the `preflight.ps1` stub; use `-NoCommit` for the no-commit stdin path. See [tools/release/README.md](../tools/release/README.md) for parameter summary.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "tools\release\tests\harness.ps1" -StubMode heartbeat -TimeoutSeconds 60
+```

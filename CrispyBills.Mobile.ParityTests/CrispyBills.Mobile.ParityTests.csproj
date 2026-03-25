@@ -21,15 +21,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Crispy_Bills\CrispyBills.csproj" />
-    <Compile Include="..\CrispyBills.Mobile.Android\Models\BillItem.cs" Link="Source\BillItem.cs" />
-    <Compile Include="..\CrispyBills.Mobile.Android\Models\BillTemplate.cs" Link="Source\BillTemplate.cs" />
-    <Compile Include="..\CrispyBills.Mobile.Android\Models\RecurrenceEndMode.cs" Link="Source\RecurrenceEndMode.cs" />
-    <Compile Include="..\CrispyBills.Mobile.Android\Models\IntegrityCheckReport.cs" Link="Source\IntegrityCheckReport.cs" />
-    <Compile Include="..\CrispyBills.Mobile.Android\Models\YearData.cs" Link="Source\YearData.cs" />
-    <Compile Include="..\CrispyBills.Mobile.Android\Services\MonthNames.cs" Link="Source\MonthNames.cs" />
-    <Compile Include="..\CrispyBills.Mobile.Android\Services\BillTemplateCatalog.cs" Link="Source\BillTemplateCatalog.cs" />
-    <Compile Include="..\CrispyBills.Mobile.Android\Services\IBillingRepository.cs" Link="Source\IBillingRepository.cs" />
-    <Compile Include="..\CrispyBills.Mobile.Android\Services\BillingService.cs" Link="Source\BillingService.cs" />
+    <ProjectReference Include="..\..\Crispy_Bills\CrispyBills.csproj">
+      <Aliases>Wpf</Aliases>
+    </ProjectReference>
+    <ProjectReference Include="..\CrispyBills.Core\CrispyBills.Core.csproj" />
   </ItemGroup>
 </Project>

@@ -1,26 +1,31 @@
 # Crispy_Bills
 
-Crispy_Bills is a local-first bill manager with a Windows desktop app (WPF) and an Android app (.NET MAUI). It helps track monthly bills, recurring entries, and yearly planning with SQLite-backed data.
+Crispy_Bills is a local-first bill manager with a Windows desktop app (WPF, .NET 8) and companion apps built with .NET MAUI (.NET 9), including Android. It helps track monthly bills, recurring entries, and yearly planning with SQLite-backed data.
 
 ## What This Repository Includes
 
 - Desktop app: .NET 8 WPF (`CrispyBills.csproj`)
-- Mobile app: .NET MAUI Android (`CrispyBills.Mobile.Android`)
+- Mobile app: .NET MAUI (`CrispyBills.Mobile.Android`; Android is the primary documented target—the project also lists iOS, Mac Catalyst, and Windows when building on Windows)
 - Parity tests and utility scripts for validation and regression
 - Local release automation for build, release artifact generation, and GitHub publish
 
 ## Key Features
 
 - Year/month bill tracking with inline edits
+- Undo/redo, light/dark theme, and grid editing options such as font size (desktop)
+- Monthly income alongside bills (desktop and mobile)
 - Recurring bill propagation into future months
 - Paid/unpaid/past-due status workflows
 - Category summary and pie-chart support
+- Global notes (desktop panel and mobile Notes flow; included in structured CSV import/export when present)
 - CSV import/export and verification tooling
+- Mobile: search and category filters, bill templates, year archive, export, and optional diagnostics logging
 
 ## Requirements
 
-- Windows
-- .NET SDK (desktop + MAUI workloads used by this repo)
+- Windows (desktop app and typical Android dev/publish workflow)
+- .NET SDK 8 or newer for the WPF project (`net8.0-windows` in `CrispyBills.csproj`)
+- .NET SDK 9 with the **.NET MAUI** workload for the mobile project (`net9.0-android` and other targets in `CrispyBills.Mobile.Android.csproj`; install with `dotnet workload install maui` if needed)
 - For Android build/publish:
 	- OpenJDK under `%LOCALAPPDATA%\Programs\OpenJDK`
 	- Android SDK under `%LOCALAPPDATA%\Android\Sdk`
@@ -31,7 +36,7 @@ Crispy_Bills is a local-first bill manager with a Windows desktop app (WPF) and 
 
 ## Quick Start (Desktop)
 
-Build solution:
+Build solution (WPF app and `CrispyBills.Mobile.ParityTests` only—the MAUI project is not in the solution file):
 
 ```powershell
 dotnet build CrispyBills.sln
@@ -43,7 +48,11 @@ Run desktop app from Debug output:
 Start-Process -FilePath "bin\Debug\net8.0-windows\CrispyBills.exe" -WorkingDirectory "$PWD"
 ```
 
-## Android Build and Publish (CLI)
+## Building the Mobile App
+
+The MAUI project lives at `CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj` and is **not** included in `CrispyBills.sln`. Build or publish it with `dotnet` as below (paths assume your current directory is the repository root).
+
+### Android (CLI)
 
 Build Android:
 
@@ -53,13 +62,15 @@ $sdkPath=Join-Path $env:LOCALAPPDATA 'Android\Sdk'
 dotnet build '.\CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -p:JavaSdkDirectory="$jdkPath" -p:AndroidSdkDirectory="$sdkPath"
 ```
 
-Publish Android APK:
+### Publish Android APK
 
 ```powershell
 $jdkPath=(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\OpenJDK') -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
 $sdkPath=Join-Path $env:LOCALAPPDATA 'Android\Sdk'
 dotnet publish '.\CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -o '.\publish\net9.0-android' -p:AndroidPackageFormats=apk -p:JavaSdkDirectory="$jdkPath" -p:AndroidSdkDirectory="$sdkPath"
 ```
+
+Other target frameworks in the same project (for example `net9.0-ios` on a Mac) follow the usual `dotnet build` / `dotnet publish` `-f` workflow for that platform.
 
 ## VS Code Task Flows
 
@@ -79,10 +90,10 @@ Recommended sequence before a real release:
 
 The repository also includes an interactive release wizard at `tools/release/wizard.ps1`.
 
-Typical dry-run:
+Typical dry-run (from repository root):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "Projects/Crispy_Bills/tools/release/wizard.ps1" -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\tools\release\wizard.ps1" -DryRun
 ```
 
 Useful wizard flags:

@@ -1,16 +1,19 @@
 using System;
+using Microsoft.Maui.Graphics;
 
 namespace CrispyBills.Mobile.Android.Models;
 
 /// <summary>
 /// Read-only projection of a bill suitable for list display.
-/// Contains computed status text for quick UI consumption.
+/// Contains computed status text and badge colors for touch UI.
 /// </summary>
 public sealed class BillListItem
 {
     public Guid Id { get; }
     public string Name { get; }
     public decimal Amount { get; }
+    /// <summary>Pre-formatted amount for binding (culture-aware currency).</summary>
+    public string AmountDisplay { get; }
     public string Category { get; }
     public DateTime DueDate { get; }
     public bool IsPaid { get; }
@@ -19,16 +22,40 @@ public sealed class BillListItem
     /// <summary>Short status label used in list views.</summary>
     public string StatusText => IsPaid ? "Paid" : (IsPastDue ? "Past Due" : "Open");
 
+    /// <summary>Background for the status pill (touch-optimized list).</summary>
+    public Color StatusBadgeBackground { get; }
+
+    /// <summary>Foreground for the status pill.</summary>
+    public Color StatusBadgeTextColor { get; }
+
     /// <summary>Constructs a projection from a <see cref="BillItem"/> instance.</summary>
     /// <param name="bill">Source bill to project.</param>
-    public BillListItem(BillItem bill)
+    /// <param name="amountDisplay">Optional formatted currency string; defaults to invariant F2.</param>
+    public BillListItem(BillItem bill, string? amountDisplay = null)
     {
         Id = bill.Id;
         Name = bill.Name;
         Amount = bill.Amount;
+        AmountDisplay = amountDisplay ?? bill.Amount.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
         Category = bill.Category;
         DueDate = bill.DueDate;
         IsPaid = bill.IsPaid;
         IsPastDue = bill.IsPastDue;
+
+        if (bill.IsPaid)
+        {
+            StatusBadgeBackground = Color.FromArgb("#DCFCE7");
+            StatusBadgeTextColor = Color.FromArgb("#16A34A");
+        }
+        else if (bill.IsPastDue)
+        {
+            StatusBadgeBackground = Color.FromArgb("#FEE2E2");
+            StatusBadgeTextColor = Color.FromArgb("#991B1B");
+        }
+        else
+        {
+            StatusBadgeBackground = Color.FromArgb("#DBEAFE");
+            StatusBadgeTextColor = Color.FromArgb("#1E3A8A");
+        }
     }
 }

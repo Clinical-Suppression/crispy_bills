@@ -1,6 +1,9 @@
+extern alias Wpf;
+
 using System;
 using System.Linq;
 using Xunit;
+using ImportExportHelpers = Wpf::CrispyBills.ImportExportHelpers;
 
 namespace CrispyBills.Mobile.ParityTests;
 
@@ -10,7 +13,7 @@ public sealed class ImportExportHelpersTests
     public void ParseCsvLine_HandlesQuotedCommasAndEscapedQuotes()
     {
         var line = "Name,Category,\"Amount,USD\",\"Note with \"\"quoted\"\" text\"";
-        var fields = CrispyBills.ImportExportHelpers.ParseCsvLine(line, _ => { });
+        var fields = ImportExportHelpers.ParseCsvLine(line, _ => { });
 
         Assert.Equal(4, fields.Count);
         Assert.Equal("Name", fields[0]);
@@ -38,7 +41,7 @@ public sealed class ImportExportHelpersTests
             "Internet,Utilities,80,02/15/2027,DUE,No,No,February,2027"
         };
 
-        var pkg = CrispyBills.ImportExportHelpers.ParseStructuredReportCsv(lines, new[]
+        var pkg = ImportExportHelpers.ParseStructuredReportCsv(lines, new[]
         {
             "January","February","March","April","May","June","July","August","September","October","November","December"
         }, "C:\\Temp", _ => { }, writeDiagnostics: false);

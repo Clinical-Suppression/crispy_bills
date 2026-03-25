@@ -24,10 +24,16 @@ public sealed class LocalizationService
     public async Task InitializeAsync()
     {
         var preferred = await _repository.GetAppMetaAsync(LanguageMetaKey);
-        if (!string.IsNullOrWhiteSpace(preferred))
+        if (preferred is not null)
         {
             SetCulture(preferred);
         }
+    }
+
+    /// <summary>Raw stored culture name, or empty when following system default.</summary>
+    public async Task<string?> GetPersistedLanguageCodeAsync()
+    {
+        return await _repository.GetAppMetaAsync(LanguageMetaKey);
     }
 
     /// <summary>Set the culture and persist the preference.</summary>
@@ -53,10 +59,23 @@ public sealed class LocalizationService
     {
         try
         {
-            CurrentCulture = CultureInfo.GetCultureInfo(cultureName);
+            if (string.IsNullOrWhiteSpace(cultureName))
+            {
+                CultureInfo.DefaultThreadCurrentCulture = null;
+                CultureInfo.DefaultThreadCurrentUICulture = null;
+                CurrentCulture = CultureInfo.CurrentCulture;
+            }
+            else
+            {
+                CurrentCulture = CultureInfo.GetCultureInfo(cultureName);
+                CultureInfo.DefaultThreadCurrentCulture = CurrentCulture;
+                CultureInfo.DefaultThreadCurrentUICulture = CurrentCulture;
+            }
         }
         catch
         {
+            CultureInfo.DefaultThreadCurrentCulture = null;
+            CultureInfo.DefaultThreadCurrentUICulture = null;
             CurrentCulture = CultureInfo.CurrentCulture;
         }
     }

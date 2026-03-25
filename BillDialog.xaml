@@ -17,6 +17,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <Grid Grid.Row="0" Margin="0,0,0,8">
@@ -66,11 +67,58 @@
         <CheckBox x:Name="IsPaidCheck" Content="Paid" Grid.Row="3" Margin="0,6,0,6"
                   Background="Transparent" Foreground="{DynamicResource WindowForegroundBrush}"/>
 
-        <!-- Recurring label simplified -->
-        <CheckBox x:Name="RecurringCheck" Content="Recurring (Repeat each month.)" Grid.Row="4" Margin="0,6,0,6"
-                  Background="Transparent" Foreground="{DynamicResource WindowForegroundBrush}"/>
+        <CheckBox x:Name="RecurringCheck" Content="Recurring" Grid.Row="4" Margin="0,6,0,6"
+                  Background="Transparent" Foreground="{DynamicResource WindowForegroundBrush}"
+                  Checked="RecurringCheck_Changed" Unchecked="RecurringCheck_Changed"/>
 
-        <StackPanel Orientation="Horizontal" Grid.Row="5" HorizontalAlignment="Right">
+        <Grid x:Name="RecurringDetailsGrid" Grid.Row="5" Visibility="Collapsed" Margin="0,0,0,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Repeat:" VerticalAlignment="Center"/>
+            <ComboBox x:Name="RecurrenceFrequencyBox" Grid.Column="1" Margin="0,0,0,6"
+                      SelectionChanged="RecurrenceFrequencyBox_SelectionChanged"
+                      Background="{DynamicResource ControlBackgroundBrush}"
+                      Foreground="{DynamicResource ControlForegroundBrush}">
+                <ComboBoxItem Content="Weekly"/>
+                <ComboBoxItem Content="Bi-weekly"/>
+                <ComboBoxItem Content="Monthly (interval)"/>
+            </ComboBox>
+            <TextBlock x:Name="EveryMonthsLabel" Grid.Row="1" Text="Every:" VerticalAlignment="Center"/>
+            <ComboBox x:Name="RecurrenceEveryBox" Grid.Row="1" Grid.Column="1" Margin="0,0,0,6"
+                      Background="{DynamicResource ControlBackgroundBrush}"
+                      Foreground="{DynamicResource ControlForegroundBrush}">
+                <ComboBoxItem Content="1 month"/>
+                <ComboBoxItem Content="2 months"/>
+                <ComboBoxItem Content="3 months"/>
+                <ComboBoxItem Content="6 months"/>
+                <ComboBoxItem Content="12 months"/>
+            </ComboBox>
+            <TextBlock Grid.Row="2" Text="Ends:" VerticalAlignment="Center"/>
+            <ComboBox x:Name="RecurrenceEndBox" Grid.Row="2" Grid.Column="1" Margin="0,0,0,6"
+                      SelectionChanged="RecurrenceEndBox_SelectionChanged"
+                      Background="{DynamicResource ControlBackgroundBrush}"
+                      Foreground="{DynamicResource ControlForegroundBrush}">
+                <ComboBoxItem Content="Never"/>
+                <ComboBoxItem Content="On date"/>
+                <ComboBoxItem Content="After count"/>
+            </ComboBox>
+            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Vertical">
+                <DatePicker x:Name="RecurrenceEndDatePicker" Visibility="Collapsed" Margin="0,0,0,4"/>
+                <TextBox x:Name="RecurrenceCountBox" Visibility="Collapsed" MinWidth="140" Padding="4,2"
+                         Background="{DynamicResource ControlBackgroundBrush}"
+                         Foreground="{DynamicResource ControlForegroundBrush}"/>
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" Grid.Row="6" HorizontalAlignment="Right">
             <Button Content="OK" Width="84" Margin="6" Click="Ok_Click"/>
             <Button Content="Cancel" Width="84" Margin="6" Click="Cancel_Click"/>
         </StackPanel>

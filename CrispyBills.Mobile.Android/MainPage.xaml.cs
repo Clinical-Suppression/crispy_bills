@@ -1,21 +1,14 @@
-﻿using CrispyBills.Mobile.Android.Models;
+using CrispyBills.Mobile.Android.Models;
 using CrispyBills.Mobile.Android.Services;
-using System.IO;
-using Microsoft.Maui;
-using Microsoft.Maui.Controls;
+using Microsoft.Maui.ApplicationModel.DataTransfer;
 using Microsoft.Maui.Graphics;
 using System.Collections.ObjectModel;
 using System.Globalization;
 
 namespace CrispyBills.Mobile.Android;
 
-/// <summary>
-/// Mobile main page: loads year data, presents bill lists, filters, and
-/// navigation to editing, diagnostics, and summary pages.
-/// </summary>
 public partial class MainPage : ContentPage
 {
-	private readonly BillingRepository _repository = new();
 	private readonly BillingService _service;
 	private readonly LocalizationService _localization;
 	private bool _loaded;
@@ -30,11 +23,11 @@ public partial class MainPage : ContentPage
 	private readonly ObservableCollection<BillListItem> _visibleBills = new();
 	private List<BillItem> _monthBills = new();
 
-	public MainPage()
+	public MainPage(BillingService service, LocalizationService localization)
 	{
 		InitializeComponent();
-		_service = new BillingService(_repository);
-		_localization = new LocalizationService(_repository);
+		_service = service;
+		_localization = localization;
 
 		CategoryPicker.ItemsSource = new List<string> { "All categories" };
 		CategoryPicker.SelectedIndex = 0;
@@ -69,7 +62,162 @@ public partial class MainPage : ContentPage
 		catch (Exception ex)
 		{
 			await DisplayAlert("Error", $"An error occurred during startup: {ex.Message}", "OK");
-			// Optionally log to diagnostics
+		}
+	}
+
+	private async void OnBillsRefreshing(object? sender, EventArgs e)
+	{
+		try
+		{
+			await LoadYearAsync(_currentYear);
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnBillsRefreshing", ex);
+			await DisplayAlert("Refresh failed", ex.Message, "OK");
+		}
+		finally
+		{
+			BillsRefreshView.IsRefreshing = false;
+		}
+	}
+
+	private static BillListItem? BillFromElement(object? sender)
+	{
+		if (sender is not BindableObject b)
+		{
+			return null;
+		}
+
+		var p = b as Element;
+		while (p != null)
+		{
+			if (p is VisualElement ve && ve.BindingContext is BillListItem item)
+			{
+				return item;
+			}
+
+			p = p.Parent;
+		}
+
+		return null;
+	}
+
+	private async void OnSwipeTogglePaid(object? sender, EventArgs e)
+	{
+		var item = BillFromElement(sender);
+		if (item is null)
+		{
+			return;
+		}
+
+		try
+		{
+			await _service.TogglePaidAsync(_currentMonth, item.Id);
+			await ReloadMonthAsync();
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnSwipeTogglePaid", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
+	}
+
+	private async void OnSwipeEdit(object? sender, EventArgs e)
+	{
+		var item = BillFromElement(sender);
+		if (item is null)
+		{
+			return;
+		}
+
+		await EditBillByIdAsync(item.Id);
+	}
+
+	private async void OnSwipeDelete(object? sender, EventArgs e)
+	{
+		var item = BillFromElement(sender);
+		if (item is null)
+		{
+			return;
+		}
+
+		await DeleteBillByIdAsync(item.Id);
+	}
+
+	private async void OnBillCardTapped(object? sender, TappedEventArgs e)
+	{
+		if (sender is not BindableObject b || b.BindingContext is not BillListItem item)
+		{
+			return;
+		}
+
+		await EditBillByIdAsync(item.Id);
+	}
+
+	private async Task EditBillByIdAsync(Guid id)
+	{
+		var existing = _monthBills.FirstOrDefault(x => x.Id == id);
+		if (existing is null)
+		{
+			return;
+		}
+
+		try
+		{
+			var editor = new BillEditorPage(existing.Clone(), _currentYear, _currentMonth, _service.Categories());
+			await Navigation.PushAsync(editor);
+			var result = await editor.WaitForResultAsync();
+			if (result is null)
+			{
+				return;
+			}
+
+			await _service.UpdateBillAsync(_currentMonth, id, result);
+			await ReloadMonthAsync();
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("EditBillByIdAsync", ex);
+			await DisplayAlert("Could not open bill editor", ex.Message, "OK");
+		}
+	}
+
+	private async Task DeleteBillByIdAsync(Guid id)
+	{
+		var existing = _monthBills.FirstOrDefault(x => x.Id == id);
+		if (existing is null)
+		{
+			return;
+		}
+
+		var warning = existing.IsRecurring
+			? "Delete this recurring bill from this and future months?"
+			: "Delete this bill?";
+
+		var confirm = await DisplayAlert("Delete Bill", warning, "Delete", "Cancel");
+		if (!confirm)
+		{
+			return;
+		}
+
+		try
+		{
+			var snapshot = _service.CreateYearSnapshot();
+			await _service.DeleteBillAsync(_currentMonth, id);
+			await ReloadMonthAsync();
+
+			var undo = await DisplayActionSheet("Bill deleted.", "Done", null, "Undo");
+			if (undo == "Undo")
+			{
+				await _service.RestoreYearSnapshotAsync(snapshot);
+				await ReloadMonthAsync();
+			}
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("DeleteBillByIdAsync", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
 		}
 	}
 
@@ -96,7 +244,13 @@ public partial class MainPage : ContentPage
 		PrevYearButton.IsEnabled = yearIdx > 0;
 		NextYearButton.IsEnabled = yearIdx >= 0 && yearIdx < _availableYears.Count - 1;
 
-		_monthBills = _service.GetBills(_currentMonth).Select(x => x.Clone()).ToList();
+		var periodStart = new DateTime(_currentYear, _currentMonth, 1);
+		_monthBills = _service.GetBills(_currentMonth).Select(x =>
+		{
+			var c = x.Clone();
+			c.ContextPeriodStart = periodStart;
+			return c;
+		}).ToList();
 
 		UpdateCategoryFilter();
 		ApplyFilters();
@@ -154,7 +308,7 @@ public partial class MainPage : ContentPage
 		_visibleBills.Clear();
 		foreach (var bill in filtered.OrderBy(x => x.DueDate).ThenBy(x => x.Name))
 		{
-			_visibleBills.Add(new BillListItem(bill));
+			_visibleBills.Add(new BillListItem(bill, _localization.FormatCurrency(bill.Amount)));
 		}
 	}
 
@@ -166,13 +320,77 @@ public partial class MainPage : ContentPage
 		RemainingLabel.Text = _localization.FormatCurrency(summary.remaining);
 		BillCountLabel.Text = summary.billCount.ToString();
 		RemainingLabel.TextColor = summary.remaining >= 0 ? GetResourceColor("Success", "#16A34A") : GetResourceColor("Danger", "#991B1B");
+
+		var income = _service.GetIncome(_currentMonth);
+		var expenses = _monthBills.Sum(b => b.Amount);
+		if (income > 0m || expenses > 0m)
+		{
+			IncomeExpenseBarCaption.Text = income > 0m
+				? $"This month: bill total {_localization.FormatCurrency(expenses)} vs income {_localization.FormatCurrency(income)}"
+				: $"This month: bill total {_localization.FormatCurrency(expenses)} (no income set)";
+		}
+		else
+		{
+			IncomeExpenseBarCaption.Text = "Set income and add bills to see the month bar.";
+		}
+
+		IncomeExpenseBarView.Drawable = new IncomeExpenseBarDrawable(
+			income,
+			expenses,
+			GetResourceColor("Danger", "#DC2626"),
+			GetResourceColor("Gray200", "#E2E8F0"));
 	}
 
 	private static Color GetResourceColor(string key, string fallback)
 	{
 		if (Application.Current?.Resources.TryGetValue(key, out var v) == true && v is Color c)
+		{
 			return c;
+		}
+
 		return Color.FromArgb(fallback);
+	}
+
+	private sealed class IncomeExpenseBarDrawable : IDrawable
+	{
+		private readonly decimal _income;
+		private readonly decimal _expenses;
+		private readonly Color _expenseColor;
+		private readonly Color _trackColor;
+
+		public IncomeExpenseBarDrawable(decimal income, decimal expenses, Color expenseColor, Color trackColor)
+		{
+			_income = income;
+			_expenses = expenses;
+			_expenseColor = expenseColor;
+			_trackColor = trackColor;
+		}
+
+		public void Draw(ICanvas canvas, RectF dirtyRect)
+		{
+			canvas.Antialias = true;
+			var pad = 2f;
+			var track = new RectF(dirtyRect.X + pad, dirtyRect.Y + 6f, dirtyRect.Width - (pad * 2f), dirtyRect.Height - 12f);
+			canvas.FillColor = _trackColor;
+			canvas.FillRoundedRectangle(track, 6f);
+
+			if (_income <= 0m && _expenses <= 0m)
+			{
+				return;
+			}
+
+			var ratio = _income > 0m
+				? Math.Min(1d, (double)(_expenses / _income))
+				: 1d;
+			var fillW = (float)(track.Width * ratio);
+			if (fillW < 1f)
+			{
+				fillW = 1f;
+			}
+
+			canvas.FillColor = _expenseColor;
+			canvas.FillRoundedRectangle(new RectF(track.X, track.Y, fillW, track.Height), 6f);
+		}
 	}
 
 	private async void OnPrevYearClicked(object? sender, EventArgs e)
@@ -219,94 +437,6 @@ public partial class MainPage : ContentPage
 		catch (Exception ex)
 		{
 			await DiagnosticsLog.WriteAsync("OnPrevMonthClicked", ex);
-			await DisplayAlert("Error", ex.Message, "OK");
-		}
-	}
-
-	private async void OnDebugToggleToggled(object? sender, ToggledEventArgs e)
-	{
-		try
-		{
-			if (sender is not Switch sw) return;
-			if (e.Value)
-			{
-				var ok = await DisplayAlert("Enable Destructive Tools",
-					"Enabling destructive delete tools will allow permanent removal of data. A backup will be created automatically where possible. Do you want to enable these tools for this session?",
-					"Enable",
-					"Cancel");
-				if (!ok)
-				{
-					sw.IsToggled = false;
-					_service.SetDebugDestructiveDeletesEnabled(false);
-					DebugDeleteMonthButton.IsEnabled = false;
-					DebugDeleteYearButton.IsEnabled = false;
-					return;
-				}
-
-				_service.SetDebugDestructiveDeletesEnabled(true);
-				DebugDeleteMonthButton.IsEnabled = true;
-				DebugDeleteYearButton.IsEnabled = true;
-			}
-			else
-			{
-				_service.SetDebugDestructiveDeletesEnabled(false);
-				DebugDeleteMonthButton.IsEnabled = false;
-				DebugDeleteYearButton.IsEnabled = false;
-			}
-		}
-		catch (Exception ex)
-		{
-			await DiagnosticsLog.WriteAsync("OnDebugToggleToggled", ex);
-			await DisplayAlert("Error", ex.Message, "OK");
-		}
-	}
-
-	private async void OnDebugDeleteMonthClicked(object? sender, EventArgs e)
-	{
-		try
-		{
-			var confirm = await DisplayAlert("Confirm Delete Month",
-				$"Permanently delete all bills and income for {MonthNames.Name(_currentMonth)} in {_currentYear}? A backup will be created where possible.",
-				"Delete",
-				"Cancel");
-			if (!confirm) return;
-
-			var ok = await _service.DeleteMonthAsync(_currentMonth);
-			if (!ok)
-			{
-				await DisplayAlert("Failed", "Month deletion did not complete. See diagnostics.", "OK");
-			}
-			await ReloadMonthAsync();
-		}
-		catch (Exception ex)
-		{
-			await DiagnosticsLog.WriteAsync("OnDebugDeleteMonthClicked", ex);
-			await DisplayAlert("Error", ex.Message, "OK");
-		}
-	}
-
-	private async void OnDebugDeleteYearClicked(object? sender, EventArgs e)
-	{
-		try
-		{
-			var confirm = await DisplayAlert("Confirm Delete Year",
-				$"Permanently delete the database and sidecars for year {_currentYear}? This cannot be undone except from backups. Proceed?",
-				"Delete",
-				"Cancel");
-			if (!confirm) return;
-
-			var ok = await _service.DeleteYearAsync(_currentYear);
-			if (!ok)
-			{
-				await DisplayAlert("Failed", "Year deletion did not complete. See diagnostics.", "OK");
-			}
-
-			// Refresh UI after possible fallback
-			await LoadYearAsync(_currentYear);
-		}
-		catch (Exception ex)
-		{
-			await DiagnosticsLog.WriteAsync("OnDebugDeleteYearClicked", ex);
 			await DisplayAlert("Error", ex.Message, "OK");
 		}
 	}
@@ -384,51 +514,71 @@ public partial class MainPage : ContentPage
 
 	private void OnSearchChanged(object? sender, TextChangedEventArgs e)
 	{
-		ApplyFilters();
+		try { ApplyFilters(); } catch { }
 	}
 
 	private void OnCategoryChanged(object? sender, EventArgs e)
 	{
-		ApplyFilters();
+		try { ApplyFilters(); } catch { }
 	}
 
 	private async void OnSetIncomeClicked(object? sender, EventArgs e)
 	{
-		var currentIncome = _service.GetIncome(_currentMonth).ToString("0.00", CultureInfo.InvariantCulture);
-		var input = await DisplayPromptAsync(
-			"Set Monthly Income",
-			$"Enter income for {MonthNames.Name(_currentMonth)} and future months of {_currentYear}.",
-			"Save",
-			"Cancel",
-			initialValue: currentIncome,
-			keyboard: Keyboard.Numeric);
-
-		if (string.IsNullOrWhiteSpace(input))
+		try
 		{
-			return;
-		}
+			var currentIncome = _service.GetIncome(_currentMonth).ToString("0.00", CultureInfo.InvariantCulture);
+			var input = await DisplayPromptAsync(
+				"Set Monthly Income",
+				$"Enter income for {MonthNames.Name(_currentMonth)} and future months of {_currentYear}.",
+				"Save",
+				"Cancel",
+				initialValue: currentIncome,
+				keyboard: Keyboard.Numeric);
 
-		if (!decimal.TryParse(input,
-			NumberStyles.Currency | NumberStyles.AllowDecimalPoint,
-			CultureInfo.InvariantCulture,
-			out var income)
-			&& !decimal.TryParse(input,
+			if (string.IsNullOrWhiteSpace(input))
+			{
+				return;
+			}
+
+			if (!decimal.TryParse(input,
+				NumberStyles.Currency | NumberStyles.AllowDecimalPoint,
+				CultureInfo.InvariantCulture,
+				out var income)
+				&& !decimal.TryParse(input,
 				NumberStyles.Currency,
 				CultureInfo.CurrentCulture,
 				out income))
-		{
-			await DisplayAlert("Invalid Income", "Enter a valid number.", "OK");
-			return;
-		}
+			{
+				await DisplayAlert("Invalid Income", "Enter a valid number.", "OK");
+				return;
+			}
 
-		await _service.SetIncomeAsync(_currentMonth, income);
-		await ReloadMonthAsync();
+			await _service.SetIncomeAsync(_currentMonth, income);
+			await ReloadMonthAsync();
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnSetIncomeClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
 	}
 
 	private async void OnAddClicked(object? sender, EventArgs e)
 	{
 		try
 		{
+			var mode = await DisplayActionSheet("Add bill", "Cancel", null, "Single bill", "Multiple bills");
+			if (string.IsNullOrEmpty(mode) || mode == "Cancel")
+			{
+				return;
+			}
+
+			if (mode == "Multiple bills")
+			{
+				await Navigation.PushAsync(new BulkBillsPage(_service, _currentYear, _currentMonth, _service.Categories().ToList(), ReloadMonthAsync));
+				return;
+			}
+
 			var seed = new BillItem
 			{
 				Name = string.Empty,
@@ -459,128 +609,6 @@ public partial class MainPage : ContentPage
 		}
 	}
 
-	private async void OnAddTemplateClicked(object? sender, EventArgs e)
-	{
-		try
-		{
-			var templates = _service.GetTemplates();
-			if (templates.Count == 0)
-			{
-				await DisplayAlert("No templates", "No templates are configured.", "OK");
-				return;
-			}
-
-			var options = templates.Select(t => $"{t.Name} ({t.Category})").ToArray();
-			var selected = await DisplayActionSheet("Choose template", "Cancel", null, options);
-			if (string.IsNullOrWhiteSpace(selected) || selected == "Cancel")
-			{
-				return;
-			}
-
-			var idx = Array.IndexOf(options, selected);
-			if (idx < 0)
-			{
-				return;
-			}
-
-			var seed = _service.CreateDraftFromTemplate(templates[idx], _currentYear, _currentMonth);
-			var editor = new BillEditorPage(seed, _currentYear, _currentMonth, _service.Categories());
-			await Navigation.PushAsync(editor);
-			var result = await editor.WaitForResultAsync();
-			if (result is null)
-			{
-				return;
-			}
-
-			await _service.AddBillAsync(_currentMonth, result);
-			await ReloadMonthAsync();
-		}
-		catch (Exception ex)
-		{
-			await DiagnosticsLog.WriteAsync("OnAddTemplateClicked", ex);
-			await DisplayAlert("Template add failed", ex.Message, "OK");
-		}
-	}
-
-	private async void OnEditClicked(object? sender, EventArgs e)
-	{
-		if ((sender as Button)?.CommandParameter is not Guid id)
-		{
-			return;
-		}
-
-		var existing = _monthBills.FirstOrDefault(x => x.Id == id);
-		if (existing is null)
-		{
-			return;
-		}
-
-		try
-		{
-			var editor = new BillEditorPage(existing.Clone(), _currentYear, _currentMonth, _service.Categories());
-			await Navigation.PushAsync(editor);
-			var result = await editor.WaitForResultAsync();
-			if (result is null)
-			{
-				return;
-			}
-
-			await _service.UpdateBillAsync(_currentMonth, id, result);
-			await ReloadMonthAsync();
-		}
-		catch (Exception ex)
-		{
-			await DiagnosticsLog.WriteAsync("OnEditClicked", ex);
-			await DisplayAlert("Could not open bill editor", ex.Message, "OK");
-		}
-	}
-
-	private async void OnDeleteClicked(object? sender, EventArgs e)
-	{
-		if ((sender as Button)?.CommandParameter is not Guid id)
-		{
-			return;
-		}
-
-		var existing = _monthBills.FirstOrDefault(x => x.Id == id);
-		if (existing is null)
-		{
-			return;
-		}
-
-		var warning = existing.IsRecurring
-			? "Delete this recurring bill from this and future months?"
-			: "Delete this bill?";
-
-		var confirm = await DisplayAlert("Delete Bill", warning, "Delete", "Cancel");
-		if (!confirm)
-		{
-			return;
-		}
-
-		var snapshot = _service.CreateYearSnapshot();
-		await _service.DeleteBillAsync(_currentMonth, id);
-		await ReloadMonthAsync();
-
-		var undo = await DisplayActionSheet("Bill deleted.", "Done", null, "Undo");
-		if (undo == "Undo")
-		{
-			await _service.RestoreYearSnapshotAsync(snapshot);
-			await ReloadMonthAsync();
-		}
-	}
-
-	private async void OnTogglePaidClicked(object? sender, EventArgs e)
-	{
-		if ((sender as Button)?.CommandParameter is not Guid id)
-		{
-			return;
-		}
-
-		await _service.TogglePaidAsync(_currentMonth, id);
-		await ReloadMonthAsync();
-	}
-
 	private async void OnRolloverClicked(object? sender, EventArgs e)
 	{
 		if (_currentMonth == 12)
@@ -599,84 +627,63 @@ public partial class MainPage : ContentPage
 			return;
 		}
 
-		var snapshot = _service.CreateYearSnapshot();
-		await _service.RolloverUnpaidAsync(_currentMonth);
-		await ReloadMonthAsync();
-
-		var undo = await DisplayActionSheet("Rollover completed.", "Done", null, "Undo");
-		if (undo == "Undo")
+		try
 		{
-			await _service.RestoreYearSnapshotAsync(snapshot);
+			var snapshot = _service.CreateYearSnapshot();
+			await _service.RolloverUnpaidAsync(_currentMonth);
 			await ReloadMonthAsync();
+
+			var undo = await DisplayActionSheet("Rollover completed.", "Done", null, "Undo");
+			if (undo == "Undo")
+			{
+				await _service.RestoreYearSnapshotAsync(snapshot);
+				await ReloadMonthAsync();
+			}
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnRolloverClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
 		}
 	}
 
 	private async void OnNewYearClicked(object? sender, EventArgs e)
 	{
-		var target = _currentYear + 1;
-		var confirm = await DisplayAlert("Create New Year",
-			$"Create {target} using December recurring templates and unpaid carryovers?",
-			"Create",
-			"Cancel");
-
-		if (!confirm)
-		{
-			return;
-		}
-
-		var created = await _service.CreateNewYearFromDecemberAsync();
-		await RefreshAvailableYearsAsync();
-
-		if (!created)
-		{
-			await DisplayAlert("Year Already Exists", $"{target} already has data. No new year snapshot was created.", "OK");
-			return;
-		}
-
-		var switchYear = await DisplayAlert("Year Created", $"{target} is ready. Switch now?", "Yes", "Stay");
-		if (switchYear)
-		{
-			_currentMonth = 1;
-			await LoadYearAsync(target);
-		}
-	}
-
-	private async void OnExportClicked(object? sender, EventArgs e)
-	{
 		try
 		{
-			var path = await _service.ExportStructuredCsvAsync(_currentYear);
-			await DisplayAlert("Exported", $"Saved CSV to:\n{path}", "OK");
+			var target = _currentYear + 1;
+			var confirm = await DisplayAlert("Create New Year",
+				$"Create {target} using December recurring templates and unpaid carryovers?",
+				"Create",
+				"Cancel");
+
+			if (!confirm)
+			{
+				return;
+			}
+
+			var created = await _service.CreateNewYearFromDecemberAsync();
+			await RefreshAvailableYearsAsync();
+
+			if (!created)
+			{
+				await DisplayAlert("Year Already Exists", $"{target} already has data. No new year snapshot was created.", "OK");
+				return;
+			}
+
+			var switchYear = await DisplayAlert("Year Created", $"{target} is ready. Switch now?", "Yes", "Stay");
+			if (switchYear)
+			{
+				_currentMonth = 1;
+				await LoadYearAsync(target);
+			}
 		}
 		catch (Exception ex)
 		{
-			await DiagnosticsLog.WriteAsync("OnExportClicked", ex);
-			await DisplayAlert("Export failed", ex.Message, "OK");
+			await DiagnosticsLog.WriteAsync("OnNewYearClicked", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
 		}
 	}
-
-	private async void OnNotesClicked(object? sender, EventArgs e)
-	{
-		await Navigation.PushAsync(new NotesPage(_service));
-	}
-
-	private async void OnDiagnosticsClicked(object? sender, EventArgs e)
-	{
-		await Navigation.PushAsync(new DiagnosticsPage(_service));
-	}
-
-	private async void OnSummaryClicked(object? sender, EventArgs e)
-	{
-		try
-		{
-			await Navigation.PushAsync(new SummaryPage(_currentYear, _currentMonth, _service));
-		}
-		catch (Exception ex)
-		{
-			await DiagnosticsLog.WriteAsync("OnSummaryClicked", ex);
-			await DisplayAlert("Could not open summary", ex.Message, "OK");
-		}
-    }
 
 	private async void OnImportClicked(object? sender, EventArgs e)
 	{
@@ -684,7 +691,7 @@ public partial class MainPage : ContentPage
 		{
 			var pick = await FilePicker.Default.PickAsync(new PickOptions
 			{
-				PickerTitle = "Select structured export CSV"
+				PickerTitle = "Select CSV export"
 			});
 
 			if (pick is null)
@@ -692,10 +699,9 @@ public partial class MainPage : ContentPage
 				return;
 			}
 
-			// Read lines from the picked file
-			List<string> lines = new();
+			var lines = new List<string>();
 			await using (var stream = await pick.OpenReadAsync())
-			using (var reader = new System.IO.StreamReader(stream))
+			using (var reader = new StreamReader(stream))
 			{
 				while (!reader.EndOfStream)
 				{
@@ -703,21 +709,103 @@ public partial class MainPage : ContentPage
 				}
 			}
 
-			var mode = await DisplayActionSheet("Import mode", "Cancel", null, "Replace Year", "Merge");
+			if (lines.Count == 0)
+			{
+				await DisplayAlert("Import", "The file is empty.", "OK");
+				return;
+			}
+
+			if (MobileStructuredReportCsv.LooksLikeDesktopStructuredReport(lines))
+			{
+				var package = MobileStructuredReportCsv.Parse(
+					lines.ToArray(),
+					msg => DiagnosticsLog.WriteSync("ImportStructuredCsv", msg),
+					writeDiagnostics: true,
+					dataRootForDiagnostics: _service.DataRoot);
+
+				if (package.Years.Count == 0 && !package.HasNotesSection)
+				{
+					await DisplayAlert("Import", "No importable year, month, or notes were found in this file.", "OK");
+					return;
+				}
+
+				var picker = new ImportSelectionPage(package);
+				await Navigation.PushModalAsync(picker);
+				var choice = await picker.WaitForResultAsync();
+				if (choice is null)
+				{
+					return;
+				}
+
+				var ok = await DisplayAlert(
+					"Confirm import",
+					"Selected months will replace existing data for those months. A database backup is created per affected year when possible. Continue?",
+					"Import",
+					"Cancel");
+				if (!ok)
+				{
+					return;
+				}
+
+				var result = await _service.ApplyStructuredReportImportAsync(
+					package,
+					choice.SelectedMonthsByYear,
+					choice.ImportNotes);
+				await RefreshAvailableYearsAsync();
+				await LoadYearAsync(_currentYear);
+				var notePart = result.NotesImported ? " Notes were updated." : string.Empty;
+				await DisplayAlert(
+					"Import complete",
+					$"Imported {result.ImportedBillCount} bill(s) across {result.ImportedMonthCount} month(s).{notePart}",
+					"OK");
+				return;
+			}
+
+			var mode = await DisplayActionSheet("Portable import (single-year CSV)", "Cancel", null, "Replace Year", "Merge");
 			if (string.IsNullOrWhiteSpace(mode) || mode == "Cancel")
 			{
 				return;
 			}
 
 			var replaceYear = mode == "Replace Year";
-			await _service.ImportStructuredCsvForYearAsync(lines, _currentYear, replaceYear);
+			var report = await _service.ImportStructuredCsvForYearAsync(lines, _currentYear, replaceYear);
 			await LoadYearAsync(_currentYear);
-			await DisplayAlert("Import complete", "CSV import finished.", "OK");
+			await DisplayAlert(
+				"Import complete",
+				$"CSV import finished.\n\nImported bills: {report.ImportedBillRows}\nImported income rows: {report.ImportedIncomeRows}\nSkipped malformed: {report.SkippedMalformed}\nSkipped invalid month: {report.SkippedInvalidMonth}\nSkipped invalid year: {report.SkippedInvalidYear}",
+				"OK");
 		}
 		catch (Exception ex)
 		{
 			await DiagnosticsLog.WriteAsync("OnImportClicked", ex);
 			await DisplayAlert("Import failed", ex.Message, "OK");
+		}
+	}
+
+	private async void OnExportClicked(object? sender, EventArgs e)
+	{
+		try
+		{
+			var path = await _service.ExportFullReportCsvAsync();
+			try
+			{
+				await Share.Default.RequestAsync(new ShareFileRequest
+				{
+					Title = "Crispy Bills export",
+					File = new ShareFile(path)
+				});
+			}
+			catch
+			{
+				// Sharing can be cancelled or unavailable; file is still on disk.
+			}
+
+			await DisplayAlert("Exported", $"Full report saved to:\n{path}", "OK");
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnExportClicked", ex);
+			await DisplayAlert("Export failed", ex.Message, "OK");
 		}
 	}
 
@@ -751,26 +839,73 @@ public partial class MainPage : ContentPage
 		}
 	}
 
+	private async void OnSummaryClicked(object? sender, EventArgs e)
+	{
+		try
+		{
+			await Navigation.PushAsync(new SummaryPage(_currentYear, _currentMonth, _service, _localization));
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnSummaryClicked", ex);
+			await DisplayAlert("Could not open summary", ex.Message, "OK");
+		}
+	}
+
+	private async void OnNotesClicked(object? sender, EventArgs e)
+	{
+		try
+		{
+			await Navigation.PushAsync(new NotesPage(_service));
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnNotesClicked", ex);
+			await DisplayAlert("Could not open notes", ex.Message, "OK");
+		}
+	}
+
+	private async void OnSettingsClicked(object? sender, EventArgs e)
+	{
+		try
+		{
+			await Navigation.PushAsync(new SettingsPage(_service, _currentYear, _currentMonth, ReloadMonthAsync, _localization));
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnSettingsClicked", ex);
+			await DisplayAlert("Could not open settings", ex.Message, "OK");
+		}
+	}
+
 	private async void WarnDuplicateRecurringRules()
 	{
-		var duplicates = _service.FindDuplicateRecurringRules(_currentMonth);
-		if (duplicates.Count == 0)
+		try
 		{
-			_lastDuplicateWarningKey = null;
-			return;
-		}
+			var duplicates = _service.FindDuplicateRecurringRules(_currentMonth);
+			if (duplicates.Count == 0)
+			{
+				_lastDuplicateWarningKey = null;
+				return;
+			}
 
-		var key = $"{_currentYear}:{_currentMonth}:{duplicates.Count}";
-		if (string.Equals(_lastDuplicateWarningKey, key, StringComparison.Ordinal))
+			var key = $"{_currentYear}:{_currentMonth}:{duplicates.Count}";
+			if (string.Equals(_lastDuplicateWarningKey, key, StringComparison.Ordinal))
+			{
+				return;
+			}
+
+			_lastDuplicateWarningKey = key;
+
+			var sample = duplicates.First().First();
+			await DisplayAlert(
+				"Duplicate recurring rules detected",
+				$"Found {duplicates.Count} duplicate recurring rule group(s) for this month. Example: {sample.Name}. Consider deleting duplicates or merging manually.",
+				"OK");
+		}
+		catch (Exception ex)
 		{
-			return;
+			await DiagnosticsLog.WriteAsync("WarnDuplicateRecurringRules", ex);
 		}
-		_lastDuplicateWarningKey = key;
-
-		var sample = duplicates.First().First();
-		await DisplayAlert(
-			"Duplicate recurring rules detected",
-			$"Found {duplicates.Count} duplicate recurring rule group(s) for this month. Example: {sample.Name}. Consider deleting duplicates or merging manually.",
-			"OK");
 	}
 }

@@ -39,3 +39,4 @@
 Notes:
 - Screenshots should be captured on a representative device/emulator for Android (mdpi/hdpi/xxhdpi as needed).
 - Release build may require signing configuration; for CI, provide keystore and msbuild properties.
+- Parity / reliability automation: `dotnet test CrispyBills.Mobile.ParityTests/CrispyBills.Mobile.ParityTests.csproj` (or run the **CrispyBills.Mobile.ParityTests** project from the solution).

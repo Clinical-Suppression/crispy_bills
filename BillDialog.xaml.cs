@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace CrispyBills
 {
@@ -44,6 +45,13 @@ namespace CrispyBills
 
             // Default calendar selection
             InitializeCalendarDefaults(DateTime.Today);
+
+            RecurrenceFrequencyBox.SelectedIndex = 2;
+            RecurrenceEveryBox.SelectedIndex = 0;
+            RecurrenceEndBox.SelectedIndex = 0;
+            UpdateRecurringDetailsVisibility();
+            UpdateMonthlyIntervalVisibility();
+            UpdateRecurrenceEndVisibility();
         }
 
         /// <summary>
@@ -96,6 +104,44 @@ namespace CrispyBills
             DueCalendar.DisplayDate = existing.ContextPeriodStart;
             IsPaidCheck.IsChecked = existing.IsPaid;
             RecurringCheck.IsChecked = isRecurring;
+
+            if (isRecurring)
+            {
+                RecurrenceFrequencyBox.SelectedIndex = existing.RecurrenceFrequency switch
+                {
+                    RecurrenceFrequency.Weekly => 0,
+                    RecurrenceFrequency.BiWeekly => 1,
+                    _ => 2
+                };
+                RecurrenceEveryBox.SelectedIndex = existing.RecurrenceEveryMonths switch
+                {
+                    2 => 1,
+                    3 => 2,
+                    6 => 3,
+                    12 => 4,
+                    _ => 0
+                };
+                RecurrenceEndBox.SelectedIndex = existing.RecurrenceEndMode switch
+                {
+                    RecurrenceEndMode.EndOnDate => 1,
+                    RecurrenceEndMode.EndAfterOccurrences => 2,
+                    _ => 0
+                };
+                RecurrenceEndDatePicker.SelectedDate = existing.RecurrenceEndDate ?? existing.DueDate;
+                RecurrenceCountBox.Text = existing.RecurrenceMaxOccurrences?.ToString() ?? string.Empty;
+            }
+            else
+            {
+                RecurrenceFrequencyBox.SelectedIndex = 2;
+                RecurrenceEveryBox.SelectedIndex = 0;
+                RecurrenceEndBox.SelectedIndex = 0;
+                RecurrenceEndDatePicker.SelectedDate = existing.DueDate;
+                RecurrenceCountBox.Text = string.Empty;
+            }
+
+            UpdateRecurringDetailsVisibility();
+            UpdateMonthlyIntervalVisibility();
+            UpdateRecurrenceEndVisibility();
         }
 
         private void InitializeCalendarDefaults(DateTime contextPeriodStart)
@@ -145,6 +191,47 @@ namespace CrispyBills
             // If we are editing an existing bill keep its Id and Paid state where appropriate
             Guid id = ResultBill?.Id ?? Guid.NewGuid();
             bool paid = IsPaidCheck.IsChecked == true;
+            var prior = ResultBill;
+            var isRecurring = RecurringCheck.IsChecked == true;
+
+            var recurrenceEveryMonths = RecurrenceEveryBox.SelectedIndex switch
+            {
+                1 => 2,
+                2 => 3,
+                3 => 6,
+                4 => 12,
+                _ => 1
+            };
+
+            var endMode = RecurrenceEndBox.SelectedIndex switch
+            {
+                1 => RecurrenceEndMode.EndOnDate,
+                2 => RecurrenceEndMode.EndAfterOccurrences,
+                _ => RecurrenceEndMode.None
+            };
+
+            int? maxOccurrences = null;
+            if (isRecurring && endMode == RecurrenceEndMode.EndAfterOccurrences)
+            {
+                maxOccurrences = int.TryParse(RecurrenceCountBox.Text, out var oc) ? Math.Max(1, oc) : 1;
+            }
+
+            if (isRecurring && endMode == RecurrenceEndMode.EndOnDate && RecurrenceEndDatePicker.SelectedDate is null)
+            {
+                MessageBox.Show("Select an end date for the recurring series.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            DateTime? endDate = isRecurring && endMode == RecurrenceEndMode.EndOnDate
+                ? RecurrenceEndDatePicker.SelectedDate?.Date
+                : null;
+
+            var recurrenceFrequency = RecurrenceFrequencyBox.SelectedIndex switch
+            {
+                0 => RecurrenceFrequency.Weekly,
+                1 => RecurrenceFrequency.BiWeekly,
+                _ => RecurrenceFrequency.MonthlyInterval
+            };
 
             var bill = new Bill
             {
@@ -154,7 +241,13 @@ namespace CrispyBills
                 Category = selectedCategory,
                 DueDate = selectedDate,
                 IsPaid = paid,
-                IsRecurring = IsRecurring
+                IsRecurring = isRecurring,
+                RecurrenceFrequency = isRecurring ? recurrenceFrequency : RecurrenceFrequency.None,
+                RecurrenceEveryMonths = isRecurring ? Math.Max(1, recurrenceEveryMonths) : 1,
+                RecurrenceEndMode = isRecurring ? endMode : RecurrenceEndMode.None,
+                RecurrenceEndDate = isRecurring ? endDate : null,
+                RecurrenceMaxOccurrences = isRecurring ? maxOccurrences : null,
+                RecurrenceGroupId = prior?.RecurrenceGroupId
             };
 
             ResultBill = bill;
@@ -166,6 +259,41 @@ namespace CrispyBills
         {
             DialogResult = false;
             Close();
+        }
+
+        private void RecurringCheck_Changed(object sender, RoutedEventArgs e)
+        {
+            UpdateRecurringDetailsVisibility();
+        }
+
+        private void RecurrenceFrequencyBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateMonthlyIntervalVisibility();
+        }
+
+        private void RecurrenceEndBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateRecurrenceEndVisibility();
+        }
+
+        private void UpdateRecurringDetailsVisibility()
+        {
+            RecurringDetailsGrid.Visibility = RecurringCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void UpdateMonthlyIntervalVisibility()
+        {
+            var monthly = RecurrenceFrequencyBox.SelectedIndex == 2;
+            var v = monthly ? Visibility.Visible : Visibility.Collapsed;
+            EveryMonthsLabel.Visibility = v;
+            RecurrenceEveryBox.Visibility = v;
+        }
+
+        private void UpdateRecurrenceEndVisibility()
+        {
+            var idx = RecurrenceEndBox.SelectedIndex;
+            RecurrenceEndDatePicker.Visibility = idx == 1 ? Visibility.Visible : Visibility.Collapsed;
+            RecurrenceCountBox.Visibility = idx == 2 ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 }

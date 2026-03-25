@@ -1,14 +1,6 @@
-# <#
-# Publish helper that drives the platform-specific publish scripts.
-# 
-# Usage:
-#   pwsh publish.ps1 -Platform windows -DryRun
-# 
-# This script coordinates packaging and upload steps by invoking
-# `publish-windows.ps1`, `publish-mobile.ps1`, or `publish-both.ps1`.
-# It honors `-DryRun` and propagates diagnostics into `common.ps1` counters.
-# For automated CI, ensure required environment variables and credentials
-# are present before invoking the script.
+<#
+Publish orchestration: preflight, version, changelog, release artifacts, tag, push, GitHub release.
+Invokes publish-windows.ps1 / publish-mobile.ps1 / publish-both.ps1; diagnostics flow through common.ps1.
 #>
 param(
     [Parameter(Mandatory = $true)][ValidateSet('windows', 'mobile', 'both')][string]$Target,
@@ -40,22 +32,27 @@ if (Test-Path $helpersPath) {
 
 Reset-TaskDiagnostics
 
-trap {
-    if ($_.Exception) {
-        Write-Host 'Publish fatal error details:' -ForegroundColor Red
-        foreach ($line in (($_.Exception.Message | Out-String).TrimEnd() -split "`r?`n")) {
-            if (-not [string]::IsNullOrWhiteSpace($line)) {
-                Write-Host ("  " + $line) -ForegroundColor Red
-            }
+function Write-PublishIndentedMultiline {
+    param(
+        [Parameter(Mandatory = $true)][string]$Title,
+        [Parameter(Mandatory = $true)]$Text,
+        [System.ConsoleColor]$TitleColor = 'Red',
+        [System.ConsoleColor]$LineColor = 'Red'
+    )
+    Write-Host $Title -ForegroundColor $TitleColor
+    foreach ($line in (($Text | Out-String).TrimEnd() -split "`r?`n")) {
+        if (-not [string]::IsNullOrWhiteSpace($line)) {
+            Write-Host ('  ' + $line) -ForegroundColor $LineColor
         }
     }
+}
+
+trap {
+    if ($_.Exception) {
+        Write-PublishIndentedMultiline -Title 'Publish fatal error details:' -Text $_.Exception.Message
+    }
     if ($_.ScriptStackTrace) {
-        Write-Host 'Publish stack:' -ForegroundColor Red
-        foreach ($line in (($_.ScriptStackTrace | Out-String).TrimEnd() -split "`r?`n")) {
-            if (-not [string]::IsNullOrWhiteSpace($line)) {
-                Write-Host ("  " + $line) -ForegroundColor DarkRed
-            }
-        }
+        Write-PublishIndentedMultiline -Title 'Publish stack:' -Text $_.ScriptStackTrace -LineColor DarkRed
     }
     Write-TaskDiagnostics -Prefix 'Publish task'
     throw
@@ -610,12 +607,7 @@ catch {
 
     Write-Warning "Publish failed for $tag. Attempting rollback of local release state."
     if ($_.Exception) {
-        Write-Host 'Publish root failure details:' -ForegroundColor Red
-        foreach ($line in (($_.Exception.Message | Out-String).TrimEnd() -split "`r?`n")) {
-            if (-not [string]::IsNullOrWhiteSpace($line)) {
-                Write-Host ("  " + $line) -ForegroundColor Red
-            }
-        }
+        Write-PublishIndentedMultiline -Title 'Publish root failure details:' -Text $_.Exception.Message
     }
 
     if ($githubReleaseCreated) {

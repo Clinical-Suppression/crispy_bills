@@ -6,30 +6,41 @@
 
     <ScrollView>
         <VerticalStackLayout Padding="18" Spacing="14">
-            <Label Text="Bill Name" FontAttributes="Bold" />
-            <Entry x:Name="NameEntry" Placeholder="Rent, Water, Insurance..." ReturnType="Next" TextChanged="OnInputChanged" HeightRequest="48" />
+            <Label Text="Bill name" FontAttributes="Bold" FontSize="15" />
+            <Entry x:Name="NameEntry" Placeholder="e.g. Rent, Electric" ReturnType="Next" TextChanged="OnInputChanged" HeightRequest="48" />
 
-            <Label Text="Amount" FontAttributes="Bold" />
+            <Label Text="Amount" FontAttributes="Bold" FontSize="15" />
             <Entry x:Name="AmountEntry" Placeholder="0.00" Keyboard="Numeric" ReturnType="Next" TextChanged="OnInputChanged" HeightRequest="48" />
 
-            <Label Text="Category" FontAttributes="Bold" />
+            <Label Text="Category" FontAttributes="Bold" FontSize="15" />
             <Picker x:Name="CategoryPicker" Title="Choose category" SelectedIndexChanged="OnInputChanged" HeightRequest="48" />
 
-            <Label Text="Due Date" FontAttributes="Bold" />
-            <DatePicker x:Name="DueDatePicker" />
+            <Label Text="Due date" FontAttributes="Bold" FontSize="15" />
+            <DatePicker x:Name="DueDatePicker" HeightRequest="48" />
 
             <HorizontalStackLayout Spacing="12">
-                <CheckBox x:Name="PaidCheckBox" VerticalOptions="Center" />
-                <Label Text="Paid" VerticalOptions="Center" />
+                <Switch x:Name="PaidSwitch" VerticalOptions="Center" />
+                <Label Text="Paid" VerticalOptions="Center" FontSize="16" />
             </HorizontalStackLayout>
 
             <HorizontalStackLayout Spacing="12">
-                <CheckBox x:Name="RecurringCheckBox" VerticalOptions="Center" CheckedChanged="OnRecurringChanged" />
-                <Label Text="Recurring through future months" VerticalOptions="Center" />
+                <Switch x:Name="RecurringSwitch" VerticalOptions="Center" Toggled="OnRecurringToggled" />
+                <Label Text="Recurring in future months" VerticalOptions="Center" FontSize="16" />
             </HorizontalStackLayout>
 
-            <Grid x:Name="RecurringOptionsGrid" IsVisible="False" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+            <Grid x:Name="RecurringOptionsGrid" IsVisible="False" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <Label Text="Repeat" VerticalOptions="Center" />
+                    <Picker Grid.Column="1" x:Name="RecurrenceFrequencyPicker" Title="How it repeats" SelectedIndexChanged="OnRecurrenceFrequencyChanged" HeightRequest="48">
+                        <Picker.Items>
+                            <x:String>Weekly</x:String>
+                            <x:String>Bi-weekly</x:String>
+                            <x:String>Monthly (interval)</x:String>
+                        </Picker.Items>
+                    </Picker>
+                </Grid>
+
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8" x:Name="MonthlyIntervalRow">
                     <Label Text="Every" VerticalOptions="Center" />
                     <Picker Grid.Column="1" x:Name="RecurrenceEveryPicker" SelectedIndexChanged="OnInputChanged" HeightRequest="48">
                         <Picker.Items>
@@ -42,7 +53,7 @@
                     </Picker>
                 </Grid>
 
-                <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="8">
                     <Label Text="Ends" VerticalOptions="Center" />
                     <Picker Grid.Column="1" x:Name="RecurrenceEndModePicker" SelectedIndexChanged="OnEndModeChanged" HeightRequest="48">
                         <Picker.Items>
@@ -53,8 +64,8 @@
                     </Picker>
                 </Grid>
 
-                <DatePicker Grid.Row="2" x:Name="RecurrenceEndDatePicker" IsVisible="False" HeightRequest="48" />
-                <Entry Grid.Row="2" x:Name="RecurrenceCountEntry" IsVisible="False" Keyboard="Numeric" Placeholder="Occurrences (e.g. 6)" HeightRequest="48" TextChanged="OnInputChanged" />
+                <DatePicker Grid.Row="3" x:Name="RecurrenceEndDatePicker" IsVisible="False" HeightRequest="48" />
+                <Entry Grid.Row="3" x:Name="RecurrenceCountEntry" IsVisible="False" Keyboard="Numeric" Placeholder="Occurrences (e.g. 6)" HeightRequest="48" TextChanged="OnInputChanged" />
             </Grid>
 
             <Label x:Name="ValidationLabel" TextColor="{StaticResource ValidationDanger}" IsVisible="False" />

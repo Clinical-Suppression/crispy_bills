@@ -1,9 +1,6 @@
 <#
 Interactive release wizard for local-first release orchestration.
 
-Usage:
-    pwsh wizard.ps1 -All -DryRun
-
 This orchestrator delegates to the scripts in this folder (build-*, publish-*,
 release-*, preflight.ps1, etc.). It provides an interactive selection UI,
 dry-run mode, commit synthesis, and confirmation checkpoints.
@@ -35,13 +32,13 @@ param(
     [switch]$BreakingChange,
     [switch]$ApproveMajorVersion,
     [switch]$SkipVersion,
-    [string]$ResponsesFile
+    [string]$ResponsesFile,
+    [switch]$NoProgressJson
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-#. Load shared helpers (Invoke-LoggedCommand, Get-WorkspaceRoot, etc.)
 . "$PSScriptRoot\common.ps1"
 
 $helpersPath = Join-Path $PSScriptRoot 'prompt-helpers.ps1'
@@ -350,7 +347,6 @@ function Prompt-YesNo {
         [bool]$Default = $false,
         [string]$Key = ''
     )
-    # Clear any lingering progress UI so Read-Host prompt is visible/clickable
     Clear-WizardProgress
     if (-not (Is-Interactive)) {
         $response = Get-WizardResponse -Key $Key -Default $null
@@ -433,7 +429,6 @@ function Get-RecommendedCommitType {
     }
 
     if ($lower -match '\.xaml$' -or $lower -match '\.cs$' -or $lower -match '\.java$') {
-        # inspect diff for explicit fix indicators
         $diff = Get-GitOutput -Args @('diff', '--', $files) -WorkingDirectory (Get-WorkspaceRoot)
         if ($diff -match '(?im)\bfix\b|\bbug\b|\bissue\b') {
             return 'fix'
@@ -480,7 +475,6 @@ function Prompt-CommitMetadata {
     )
 
     if (-not (Is-Interactive)) {
-        # Non-interactive: return recommended values or indicate skip depending on flags
         $skipDefault = $false
         if ($AllowSkip -and -not $AutoCommit -and -not $AutoConfirm) { $skipDefault = $true }
         $skip = [bool](Get-WizardResponse -Key ($ResponsePrefix + 'Skip') -Default $skipDefault)
@@ -544,13 +538,11 @@ function Check-VersionAgreements {
     }
 }
 
-
 function Prompt-MultiSelect {
     param(
         [string[]]$Options,
         [string]$Key = 'Tasks'
     )
-    # Clear any lingering progress UI so terminal input receives focus
     Clear-WizardProgress
 
     if (-not (Is-Interactive)) {
@@ -716,7 +708,8 @@ function Run-ScriptByName {
         [bool]$DryRun = $false,
         [int]$CurrentStep = 0,
         [int]$TotalSteps = 0,
-        [string[]]$ExtraArgs
+        [string[]]$ExtraArgs,
+        $RunState = $null
     )
 
     $scriptPath = Join-Path $PSScriptRoot $ScriptName
@@ -730,16 +723,24 @@ function Run-ScriptByName {
     if ($ExtraArgs) { $args += $ExtraArgs }
 
     if ($DryRun) {
+        if ($RunState -and $CurrentStep -gt 0) {
+            Update-WizardStepState -RunState $RunState -StepIndex $CurrentStep -State 'running' -Message 'Dry-run command preview'
+            Update-WizardStepState -RunState $RunState -StepIndex $CurrentStep -State 'skipped' -ExitCode 0 -Message 'Dry-run mode'
+        }
         Write-Host "DRY-RUN: $command $($args -join ' ')"
         return $true
     }
 
     $activity = "[$CurrentStep/$TotalSteps] Running $ScriptName"
     $progressPercent = if ($TotalSteps -gt 0) { [math]::Floor(($CurrentStep / $TotalSteps) * 100) } else { 0 }
+    if ($RunState -and $CurrentStep -gt 0) {
+        Update-WizardStepState -RunState $RunState -StepIndex $CurrentStep -State 'running' -Message $activity
+    }
     Write-Host "$activity ..."
     Write-Progress -Activity 'Crispy_Bills Release Wizard' -Status $activity -PercentComplete $progressPercent
 
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $stepExitCode = 0
 
     try {
         $scriptTextIsInteractive = $false
@@ -758,14 +759,10 @@ function Run-ScriptByName {
         $requiresAttachedConsole = (Is-Interactive) -and $scriptTextIsInteractive
         $useSpinner = -not $NoSpinner -and -not $requiresAttachedConsole
 
-        # Build a properly quoted commandline so we can reuse for both interactive and non-interactive starts.
+        # Interactive targets must stay attached: Invoke-LoggedCommand redirects streams and breaks Read-Host.
         $quotedArguments = @($args | ForEach-Object { ConvertTo-CommandLineArgument -Value $_ }) -join ' '
 
         if (-not $useSpinner) {
-            # If the target script appears interactive (contains Read-Host or similar),
-            # we must run it attached to the current console WITHOUT redirecting streams
-            # so that Read-Host can receive stdin. Invoke-LoggedCommand redirects output
-            # which breaks interactive prompts, so use Start-Process -Wait for interactive cases.
             try {
                 Write-Progress -Activity 'Crispy_Bills Release Wizard' -Status 'Completed' -Completed -ErrorAction SilentlyContinue
             } catch {}
@@ -776,9 +773,11 @@ function Run-ScriptByName {
                 if ($process.ExitCode -ne 0) {
                     throw "Script $ScriptName failed with exit code $($process.ExitCode)."
                 }
+                $stepExitCode = [int]$process.ExitCode
             }
             else {
                 Invoke-LoggedCommand -Command $command -Arguments $args -WorkingDirectory (Get-WorkspaceRoot)
+                $stepExitCode = [int]$LASTEXITCODE
             }
         } else {
             $process = Start-Process -FilePath $command -ArgumentList $quotedArguments -WorkingDirectory (Get-WorkspaceRoot) -NoNewWindow -PassThru
@@ -795,16 +794,24 @@ function Run-ScriptByName {
             if ($exitCode -ne 0) {
                 throw "Script $ScriptName failed with exit code $exitCode."
             }
+            $stepExitCode = $exitCode
         }
 
         $stopwatch.Stop()
+        if ($RunState -and $CurrentStep -gt 0) {
+            Update-WizardStepState -RunState $RunState -StepIndex $CurrentStep -State 'succeeded' -ExitCode $stepExitCode -Message "Completed in $($stopwatch.Elapsed.TotalSeconds.ToString('F1'))s"
+        }
         Write-Host "`r$activity completed in $($stopwatch.Elapsed.TotalSeconds.ToString('F1'))s.          " -ForegroundColor Green
         return $true
     }
     catch {
         $stopwatch.Stop()
         $msg = $_.Exception.Message
+        if ($RunState -and $CurrentStep -gt 0) {
+            Update-WizardStepState -RunState $RunState -StepIndex $CurrentStep -State 'failed' -ExitCode 1 -Message $msg
+        }
         Write-Host "`n$activity failed in $($stopwatch.Elapsed.TotalSeconds.ToString('F1'))s: $msg" -ForegroundColor Red
+        Write-Host "Failure details: step=$CurrentStep script=$ScriptName elapsed=$($stopwatch.Elapsed.TotalSeconds.ToString('F1'))s" -ForegroundColor Red
         if ($_.Exception.InnerException) {
             Write-Host "Cause: $($_.Exception.InnerException.Message)" -ForegroundColor Red
         }
@@ -854,7 +861,16 @@ Test-WizardNonInteractiveReadiness -ProvidedTasks $Tasks -HasExplicitDryRun:$PSB
 Write-Host "Discovered release scripts (from: $PSScriptRoot):" -ForegroundColor Yellow
 $chosen = @()
 
-$taskList = @(@($Tasks) | Where-Object { $_ -and ($_.ToString()).Trim().Length -gt 0 })
+$taskList = @()
+foreach ($taskToken in @($Tasks)) {
+    if ($null -eq $taskToken) { continue }
+    foreach ($splitToken in @(([string]$taskToken -split ','))) {
+        $trimmedToken = $splitToken.Trim()
+        if ($trimmedToken.Length -gt 0) {
+            $taskList += $trimmedToken
+        }
+    }
+}
 if ($taskList.Count -gt 0) {
     $resolvedSelection = @(Resolve-TaskSelectionValue -Selection $taskList -Options $available)
     if ($resolvedSelection.Count -gt 0) {
@@ -889,8 +905,11 @@ $publishCommitDescription = $CommitMessage
 $plannedVersionInfo = $null
 $majorApprovalGranted = [bool]$ApproveMajorVersion
 
-# Provide total count early so pre-checks can report progress
 $total = @($chosen).Count
+$wizardRunState = $null
+if (Get-Command -Name New-WizardRunState -ErrorAction SilentlyContinue) {
+    $wizardRunState = New-WizardRunState -Steps $chosen -DryRun:$dryRun -NonInteractive:$NonInteractive
+}
 
 if ($NoCommit) {
     Write-Host 'NoCommit requested; skipping commit step.' -ForegroundColor Yellow
@@ -983,7 +1002,7 @@ if ($doCommit) {
 # Run release recovery in advisory mode before publish tasks. This check must stay non-destructive.
 if ($containsPublishTask -and (Test-Path (Join-Path $PSScriptRoot 'recover-missing-release.ps1'))) {
     Write-Host 'Running advisory recovery pre-check (recover-missing-release.ps1 -DryRun)...' -ForegroundColor Cyan
-    $recoveryPreCheckSucceeded = Run-ScriptByName -ScriptName 'recover-missing-release.ps1' -DryRun:$dryRun -CurrentStep 0 -TotalSteps $total -ExtraArgs @('-DryRun')
+    $recoveryPreCheckSucceeded = Run-ScriptByName -ScriptName 'recover-missing-release.ps1' -DryRun:$dryRun -CurrentStep 0 -TotalSteps $total -ExtraArgs @('-DryRun') -RunState $null
     if (-not $recoveryPreCheckSucceeded) {
         Write-Host 'Recovery pre-check reported a problem. Continuing because this check is advisory; run recover-missing-release.ps1 directly for details if needed.' -ForegroundColor Yellow
     }
@@ -1049,7 +1068,7 @@ try {
         }
 
         if ($s -eq 'version.ps1') {
-            $stepSucceeded = Run-ScriptByName -ScriptName $s -DryRun:$dryRun -CurrentStep ($index + 1) -TotalSteps $total -ExtraArgs $extraArgs
+            $stepSucceeded = Run-ScriptByName -ScriptName $s -DryRun:$dryRun -CurrentStep ($index + 1) -TotalSteps $total -ExtraArgs $extraArgs -RunState $wizardRunState
             if (-not $stepSucceeded) {
                 throw "Step failed: $s. Aborting release flow."
             }
@@ -1067,7 +1086,7 @@ try {
             continue
         }
 
-        $stepSucceeded = Run-ScriptByName -ScriptName $s -DryRun:$dryRun -CurrentStep ($index + 1) -TotalSteps $total -ExtraArgs $extraArgs
+        $stepSucceeded = Run-ScriptByName -ScriptName $s -DryRun:$dryRun -CurrentStep ($index + 1) -TotalSteps $total -ExtraArgs $extraArgs -RunState $wizardRunState
         if (-not $stepSucceeded) {
             throw "Step failed: $s. Aborting release flow."
         }
@@ -1076,7 +1095,6 @@ try {
     if ($doCommit -and -not $containsPublishTask) {
         Write-Host "`n=== Commit Step ===" -ForegroundColor Cyan
 
-        # Version checks before commit
         Check-VersionAgreements
 
         $changedFiles = @(Get-ChangedFiles)
@@ -1172,8 +1190,39 @@ try {
         Write-Host 'Warning: Write-TaskDiagnostics not available.' -ForegroundColor Yellow
     }
     Write-Host "`nWizard completed." -ForegroundColor Green
+
+    if ($wizardRunState) {
+        Complete-WizardRunState -RunState $wizardRunState -Status 'succeeded'
+        Write-WizardSummary -RunState $wizardRunState
+        if (-not $NoProgressJson) {
+            try {
+                $progressPath = Write-WizardProgressJson -RunState $wizardRunState
+                if (-not [string]::IsNullOrWhiteSpace($progressPath)) {
+                    Write-Host "Wizard progress JSON: $progressPath" -ForegroundColor Cyan
+                }
+            }
+            catch {
+                Write-Host "Warning: failed to write wizard progress JSON: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
+    }
 }
 catch {
+    if ($wizardRunState) {
+        Complete-WizardRunState -RunState $wizardRunState -Status 'failed'
+        Write-WizardSummary -RunState $wizardRunState
+        if (-not $NoProgressJson) {
+            try {
+                $progressPath = Write-WizardProgressJson -RunState $wizardRunState
+                if (-not [string]::IsNullOrWhiteSpace($progressPath)) {
+                    Write-Host "Wizard progress JSON: $progressPath" -ForegroundColor Cyan
+                }
+            }
+            catch {
+                Write-Host "Warning: failed to write wizard progress JSON: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
+    }
     Write-Host "Wizard failed: $($_.Exception.Message)" -ForegroundColor Red
     if (Get-Command Write-TaskDiagnostics -ErrorAction SilentlyContinue) {
         Write-TaskDiagnostics -Prefix 'Wizard (partial)'

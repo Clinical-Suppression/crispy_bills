@@ -87,9 +87,19 @@ function Release-Mobile {
     else {
         Write-Host 'sdkmanager not found; ensure Android cmdline-tools are installed and on disk.'
     }
-    Invoke-LoggedCommand -Command 'dotnet' -Arguments @('publish', $androidProject, '-f', 'net9.0-android', '-c', 'Release', '-o', $outDir, '-p:AndroidPackageFormats=apk', "-p:JavaSdkDirectory=$($sdk.JdkPath)", "-p:AndroidSdkDirectory=$($sdk.SdkPath)") -WorkingDirectory $root
+    # Publish into a fresh subfolder so we only pick APKs from this run (no stale artifacts).
+    $publishStamp = [DateTime]::UtcNow.ToString('yyyyMMdd_HHmmss')
+    $publishOut = Join-Path $outDir "publish_$publishStamp"
+    Ensure-Directory -Path $publishOut
+    Invoke-LoggedCommand -Command 'dotnet' -Arguments @('publish', $androidProject, '-f', 'net9.0-android', '-c', 'Release', '-o', $publishOut, '-p:AndroidPackageFormats=apk', "-p:JavaSdkDirectory=$($sdk.JdkPath)", "-p:AndroidSdkDirectory=$($sdk.SdkPath)") -WorkingDirectory $root
 
-    $apk = Get-ChildItem -Path $outDir -Recurse -Filter '*.apk' -File | Select-Object -First 1
+    # Prefer the newest signed APK from this publish output only.
+    $apkCandidates = Get-ChildItem -Path $publishOut -Recurse -Filter '*.apk' -File |
+        Sort-Object -Property LastWriteTimeUtc -Descending
+    $apk = $apkCandidates | Where-Object { $_.Name -match '-Signed\.apk$' } | Select-Object -First 1
+    if (-not $apk) {
+        $apk = $apkCandidates | Select-Object -First 1
+    }
     if (-not $apk) {
         throw 'Android publish completed but no apk artifact was found.'
     }

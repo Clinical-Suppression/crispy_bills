@@ -8,6 +8,7 @@ Describe 'Crispy_Bills Release Wizard' {
     }
 
     It 'Prompt-MultiSelect accepts all (case-insensitive)' {
+        Mock -CommandName Is-Interactive -MockWith { $true }
         Mock -CommandName Read-Host -MockWith { 'All' }
         $options = @('a','b','c')
         $result = Prompt-MultiSelect -Options $options
@@ -15,6 +16,7 @@ Describe 'Crispy_Bills Release Wizard' {
     }
 
     It 'Prompt-MultiSelect parses numeric ranges and ignores invalid entries' {
+        Mock -CommandName Is-Interactive -MockWith { $true }
         Mock -CommandName Read-Host -MockWith { '1-2,99,abc,4' }
         $options = @('x','y','z','w')
         $result = Prompt-MultiSelect -Options $options

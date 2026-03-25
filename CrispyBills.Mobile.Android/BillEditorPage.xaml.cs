@@ -2,218 +2,252 @@ using CrispyBills.Mobile.Android.Models;
 
 namespace CrispyBills.Mobile.Android;
 
-/// <summary>
-/// Page used to edit or create a <see cref="BillItem"/> in the mobile UI.
-/// Exposes an async <see cref="WaitForResultAsync"/> pattern so callers can await the user's result.
-/// </summary>
 public partial class BillEditorPage : ContentPage
 {
-    private readonly TaskCompletionSource<BillItem?> _tcs = new();
-    private readonly int _year;
-    private readonly int _month;
+	private readonly TaskCompletionSource<BillItem?> _tcs = new();
+	private readonly int _year;
+	private readonly int _month;
+	private readonly Guid _preservedId;
 
-    public BillEditorPage(BillItem seed, int year, int month, IReadOnlyList<string> categories)
-    {
-        InitializeComponent();
-        _year = year;
-        _month = month;
+	public BillEditorPage(BillItem seed, int year, int month, IReadOnlyList<string> categories)
+	{
+		InitializeComponent();
+		_year = year;
+		_month = month;
+		_preservedId = seed.Id;
 
-        var categoryList = categories
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(x => x)
-            .ToList();
+		var categoryList = categories
+			.Where(x => !string.IsNullOrWhiteSpace(x))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.OrderBy(x => x)
+			.ToList();
 
-        if (!string.IsNullOrWhiteSpace(seed.Category)
-            && !categoryList.Contains(seed.Category, StringComparer.OrdinalIgnoreCase))
-        {
-            categoryList.Add(seed.Category);
-            categoryList = categoryList.OrderBy(x => x).ToList();
-        }
+		if (!string.IsNullOrWhiteSpace(seed.Category)
+			&& !categoryList.Contains(seed.Category, StringComparer.OrdinalIgnoreCase))
+		{
+			categoryList.Add(seed.Category);
+			categoryList = categoryList.OrderBy(x => x).ToList();
+		}
 
-        if (categoryList.Count == 0)
-        {
-            categoryList.Add("General");
-        }
+		if (categoryList.Count == 0)
+		{
+			categoryList.Add("General");
+		}
 
-        CategoryPicker.ItemsSource = categoryList;
+		CategoryPicker.ItemsSource = categoryList;
 
-        NameEntry.Text = seed.Name;
-        AmountEntry.Text = seed.Amount.ToString("0.00");
-        CategoryPicker.SelectedItem = categoryList.FirstOrDefault(x => x.Equals(seed.Category, StringComparison.OrdinalIgnoreCase))
-            ?? "General";
-        DueDatePicker.Date = seed.DueDate == default ? DateTime.Today : seed.DueDate.Date;
-        PaidCheckBox.IsChecked = seed.IsPaid;
-        RecurringCheckBox.IsChecked = seed.IsRecurring;
+		NameEntry.Text = seed.Name;
+		AmountEntry.Text = seed.Amount.ToString("0.00");
+		CategoryPicker.SelectedItem = categoryList.FirstOrDefault(x => x.Equals(seed.Category, StringComparison.OrdinalIgnoreCase))
+			?? "General";
+		DueDatePicker.Date = seed.DueDate == default ? DateTime.Today : seed.DueDate.Date;
+		PaidSwitch.IsToggled = seed.IsPaid;
+		RecurringSwitch.IsToggled = seed.IsRecurring;
 
-        RecurrenceEveryPicker.SelectedIndex = seed.RecurrenceEveryMonths switch
-        {
-            1 => 0,
-            2 => 1,
-            3 => 2,
-            6 => 3,
-            12 => 4,
-            _ => 0
-        };
-        RecurrenceEndModePicker.SelectedIndex = seed.RecurrenceEndMode switch
-        {
-            RecurrenceEndMode.EndOnDate => 1,
-            RecurrenceEndMode.EndAfterOccurrences => 2,
-            _ => 0
-        };
-        RecurrenceEndDatePicker.Date = seed.RecurrenceEndDate ?? DueDatePicker.Date;
-        RecurrenceCountEntry.Text = seed.RecurrenceMaxOccurrences?.ToString() ?? string.Empty;
+		RecurrenceFrequencyPicker.SelectedIndex = !seed.IsRecurring
+			? 2
+			: seed.RecurrenceFrequency switch
+			{
+				RecurrenceFrequency.Weekly => 0,
+				RecurrenceFrequency.BiWeekly => 1,
+				_ => 2
+			};
+		UpdateMonthlyIntervalRowVisibility();
 
-        RecurringOptionsGrid.IsVisible = seed.IsRecurring;
-        UpdateEndModeVisibility();
+		RecurrenceEveryPicker.SelectedIndex = seed.RecurrenceEveryMonths switch
+		{
+			1 => 0,
+			2 => 1,
+			3 => 2,
+			6 => 3,
+			12 => 4,
+			_ => 0
+		};
+		RecurrenceEndModePicker.SelectedIndex = seed.RecurrenceEndMode switch
+		{
+			RecurrenceEndMode.EndOnDate => 1,
+			RecurrenceEndMode.EndAfterOccurrences => 2,
+			_ => 0
+		};
+		RecurrenceEndDatePicker.Date = seed.RecurrenceEndDate ?? DueDatePicker.Date;
+		RecurrenceCountEntry.Text = seed.RecurrenceMaxOccurrences?.ToString() ?? string.Empty;
 
-        DueDatePicker.MinimumDate = new DateTime(year, month, 1);
-        DueDatePicker.MaximumDate = new DateTime(year, month, DateTime.DaysInMonth(year, month));
+		RecurringOptionsGrid.IsVisible = seed.IsRecurring;
+		UpdateEndModeVisibility();
 
-        ValidateInputs(showValidation: false);
-    }
+		DueDatePicker.MinimumDate = new DateTime(year, month, 1);
+		DueDatePicker.MaximumDate = new DateTime(year, month, DateTime.DaysInMonth(year, month));
 
-    public Task<BillItem?> WaitForResultAsync()
-    {
-        return _tcs.Task;
-    }
+		ValidateInputs(showValidation: false);
+	}
 
-    protected override void OnDisappearing()
-    {
-        base.OnDisappearing();
+	public Task<BillItem?> WaitForResultAsync() => _tcs.Task;
 
-        if (!_tcs.Task.IsCompleted)
-        {
-            _tcs.TrySetResult(null);
-        }
-    }
+	protected override void OnDisappearing()
+	{
+		base.OnDisappearing();
 
-    private async void OnCancelClicked(object? sender, EventArgs e)
-    {
-        _tcs.TrySetResult(null);
-        await Navigation.PopAsync();
-    }
+		if (!_tcs.Task.IsCompleted)
+		{
+			_tcs.TrySetResult(null);
+		}
+	}
 
-    private async void OnSaveClicked(object? sender, EventArgs e)
-    {
-        if (!ValidateInputs(showValidation: true))
-        {
-            return;
-        }
+	private async void OnCancelClicked(object? sender, EventArgs e)
+	{
+		_tcs.TrySetResult(null);
+		await Navigation.PopAsync();
+	}
 
-        _ = decimal.TryParse(AmountEntry.Text, out var amount);
+	private async void OnSaveClicked(object? sender, EventArgs e)
+	{
+		if (!ValidateInputs(showValidation: true))
+		{
+			return;
+		}
 
-        if (CategoryPicker.SelectedItem is not string category || string.IsNullOrWhiteSpace(category))
-        {
-            category = "General";
-        }
+		_ = decimal.TryParse(AmountEntry.Text, out var amount);
 
-        var recurrenceEveryMonths = RecurrenceEveryPicker.SelectedIndex switch
-        {
-            1 => 2,
-            2 => 3,
-            3 => 6,
-            4 => 12,
-            _ => 1
-        };
+		if (CategoryPicker.SelectedItem is not string category || string.IsNullOrWhiteSpace(category))
+		{
+			category = "General";
+		}
 
-        var endMode = RecurrenceEndModePicker.SelectedIndex switch
-        {
-            1 => RecurrenceEndMode.EndOnDate,
-            2 => RecurrenceEndMode.EndAfterOccurrences,
-            _ => RecurrenceEndMode.None
-        };
+		var recurrenceEveryMonths = RecurrenceEveryPicker.SelectedIndex switch
+		{
+			1 => 2,
+			2 => 3,
+			3 => 6,
+			4 => 12,
+			_ => 1
+		};
 
-        int? maxOccurrences = null;
-        if (endMode == RecurrenceEndMode.EndAfterOccurrences)
-        {
-            maxOccurrences = int.TryParse(RecurrenceCountEntry.Text, out var parsed) ? Math.Max(1, parsed) : 1;
-        }
+		var endMode = RecurrenceEndModePicker.SelectedIndex switch
+		{
+			1 => RecurrenceEndMode.EndOnDate,
+			2 => RecurrenceEndMode.EndAfterOccurrences,
+			_ => RecurrenceEndMode.None
+		};
 
-        DateTime? endDate = endMode == RecurrenceEndMode.EndOnDate ? RecurrenceEndDatePicker.Date : null;
+		int? maxOccurrences = null;
+		if (endMode == RecurrenceEndMode.EndAfterOccurrences)
+		{
+			maxOccurrences = int.TryParse(RecurrenceCountEntry.Text, out var parsed) ? Math.Max(1, parsed) : 1;
+		}
 
-        var result = new BillItem
-        {
-            Name = NameEntry.Text.Trim(),
-            Amount = amount,
-            Category = category,
-            DueDate = DueDatePicker.Date,
-            IsPaid = PaidCheckBox.IsChecked,
-            IsRecurring = RecurringCheckBox.IsChecked,
-            RecurrenceEveryMonths = recurrenceEveryMonths,
-            RecurrenceEndMode = RecurringCheckBox.IsChecked ? endMode : RecurrenceEndMode.None,
-            RecurrenceEndDate = RecurringCheckBox.IsChecked ? endDate : null,
-            RecurrenceMaxOccurrences = RecurringCheckBox.IsChecked ? maxOccurrences : null,
-            Year = _year,
-            Month = _month
-        };
+		DateTime? endDate = endMode == RecurrenceEndMode.EndOnDate ? RecurrenceEndDatePicker.Date : null;
 
-        _tcs.TrySetResult(result);
-        await Navigation.PopAsync();
-    }
+		var recurrenceFrequency = RecurrenceFrequencyPicker.SelectedIndex switch
+		{
+			0 => RecurrenceFrequency.Weekly,
+			1 => RecurrenceFrequency.BiWeekly,
+			_ => RecurrenceFrequency.MonthlyInterval
+		};
 
-    private void OnRecurringChanged(object? sender, CheckedChangedEventArgs e)
-    {
-        RecurringOptionsGrid.IsVisible = e.Value;
-        if (!e.Value)
-        {
-            RecurrenceEndModePicker.SelectedIndex = 0;
-            UpdateEndModeVisibility();
-        }
+		var result = new BillItem
+		{
+			Id = _preservedId,
+			Name = NameEntry.Text.Trim(),
+			Amount = amount,
+			Category = category,
+			DueDate = DueDatePicker.Date,
+			IsPaid = PaidSwitch.IsToggled,
+			IsRecurring = RecurringSwitch.IsToggled,
+			RecurrenceFrequency = RecurringSwitch.IsToggled ? recurrenceFrequency : RecurrenceFrequency.None,
+			RecurrenceEveryMonths = recurrenceEveryMonths,
+			RecurrenceEndMode = RecurringSwitch.IsToggled ? endMode : RecurrenceEndMode.None,
+			RecurrenceEndDate = RecurringSwitch.IsToggled ? endDate : null,
+			RecurrenceMaxOccurrences = RecurringSwitch.IsToggled ? maxOccurrences : null,
+			Year = _year,
+			Month = _month
+		};
 
-        ValidateInputs(showValidation: false);
-    }
+		_tcs.TrySetResult(result);
+		await Navigation.PopAsync();
+	}
 
-    private void OnEndModeChanged(object? sender, EventArgs e)
-    {
-        UpdateEndModeVisibility();
-        ValidateInputs(showValidation: false);
-    }
+	private void OnRecurringToggled(object? sender, ToggledEventArgs e)
+	{
+		RecurringOptionsGrid.IsVisible = e.Value;
+		if (!e.Value)
+		{
+			RecurrenceEndModePicker.SelectedIndex = 0;
+			UpdateEndModeVisibility();
+		}
+		else
+		{
+			UpdateMonthlyIntervalRowVisibility();
+		}
 
-    private void OnInputChanged(object? sender, EventArgs e)
-    {
-        ValidateInputs(showValidation: false);
-    }
+		ValidateInputs(showValidation: false);
+	}
 
-    private void UpdateEndModeVisibility()
-    {
-        RecurrenceEndDatePicker.IsVisible = RecurrenceEndModePicker.SelectedIndex == 1;
-        RecurrenceCountEntry.IsVisible = RecurrenceEndModePicker.SelectedIndex == 2;
-    }
+	private void OnRecurrenceFrequencyChanged(object? sender, EventArgs e)
+	{
+		UpdateMonthlyIntervalRowVisibility();
+		ValidateInputs(showValidation: false);
+	}
 
-    private bool ValidateInputs(bool showValidation)
-    {
-        var errors = new List<string>();
+	private void UpdateMonthlyIntervalRowVisibility()
+	{
+		MonthlyIntervalRow.IsVisible = RecurrenceFrequencyPicker.SelectedIndex == 2;
+	}
 
-        if (string.IsNullOrWhiteSpace(NameEntry.Text))
-        {
-            errors.Add("Name is required.");
-        }
+	private void OnEndModeChanged(object? sender, EventArgs e)
+	{
+		UpdateEndModeVisibility();
+		ValidateInputs(showValidation: false);
+	}
 
-        if (!decimal.TryParse(AmountEntry.Text, out var amount) || amount < 0)
-        {
-            errors.Add("Amount must be a non-negative number.");
-        }
+	private void OnInputChanged(object? sender, EventArgs e)
+	{
+		ValidateInputs(showValidation: false);
+	}
 
-        if (RecurringCheckBox.IsChecked && RecurrenceEndModePicker.SelectedIndex == 2)
-        {
-            if (!int.TryParse(RecurrenceCountEntry.Text, out var count) || count < 1)
-            {
-                errors.Add("Occurrences must be a positive integer.");
-            }
-        }
+	private void UpdateEndModeVisibility()
+	{
+		RecurrenceEndDatePicker.IsVisible = RecurrenceEndModePicker.SelectedIndex == 1;
+		RecurrenceCountEntry.IsVisible = RecurrenceEndModePicker.SelectedIndex == 2;
+	}
 
-        if (showValidation)
-        {
-            ValidationLabel.IsVisible = errors.Count > 0;
-            ValidationLabel.Text = string.Join(" ", errors);
-        }
-        else if (errors.Count == 0)
-        {
-            ValidationLabel.IsVisible = false;
-            ValidationLabel.Text = string.Empty;
-        }
+	private bool ValidateInputs(bool showValidation)
+	{
+		var errors = new List<string>();
 
-        return errors.Count == 0;
-    }
+		if (string.IsNullOrWhiteSpace(NameEntry.Text))
+		{
+			errors.Add("Name is required.");
+		}
+
+		if (!decimal.TryParse(AmountEntry.Text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.CurrentCulture, out var amt)
+			&& !decimal.TryParse(AmountEntry.Text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out amt))
+		{
+			errors.Add("Amount must be a valid number.");
+		}
+		else if (amt < 0)
+		{
+			errors.Add("Amount must be non-negative.");
+		}
+
+		if (RecurringSwitch.IsToggled && RecurrenceEndModePicker.SelectedIndex == 2)
+		{
+			if (!int.TryParse(RecurrenceCountEntry.Text, out var count) || count < 1)
+			{
+				errors.Add("Occurrences must be a positive integer.");
+			}
+		}
+
+		if (showValidation)
+		{
+			ValidationLabel.IsVisible = errors.Count > 0;
+			ValidationLabel.Text = string.Join(" ", errors);
+		}
+		else if (errors.Count == 0)
+		{
+			ValidationLabel.IsVisible = false;
+			ValidationLabel.Text = string.Empty;
+		}
+
+		return errors.Count == 0;
+	}
 }

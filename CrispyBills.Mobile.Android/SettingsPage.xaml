@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="CrispyBills.Mobile.Android.SettingsPage"
+             Title="Settings">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="18" Spacing="20">
+
+            <Label Text="Appearance" FontAttributes="Bold" FontSize="18" TextColor="{StaticResource MidnightBlue}" />
+            <Label Text="Light and dark mode follows your device settings." FontSize="14" TextColor="{StaticResource MutedText}" />
+
+            <Label Text="Language / formats" FontAttributes="Bold" FontSize="16" TextColor="{StaticResource MidnightBlue}" Margin="0,8,0,0" />
+            <Label Text="Currency and date formats follow the selection below." FontSize="13" TextColor="{StaticResource MutedText}" />
+            <Picker x:Name="LanguagePicker" Title="Display language" SelectedIndexChanged="OnLanguageChanged" HeightRequest="48" />
+
+            <BoxView HeightRequest="1" Color="{StaticResource Gray200}" Margin="0,4" />
+
+            <Label Text="Data maintenance" FontAttributes="Bold" FontSize="18" TextColor="{StaticResource MidnightBlue}" />
+            <Label Text="Normalize due dates so they fall in each bill's month (unpaid carryovers before that month are kept)." FontSize="13" TextColor="{StaticResource MutedText}" />
+            <Button Text="Fix due dates (current year)" Clicked="OnFixDueDatesClicked" HeightRequest="48" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+
+            <BoxView HeightRequest="1" Color="{StaticResource Gray200}" Margin="0,4" />
+
+            <Label Text="Debug tools" FontAttributes="Bold" FontSize="18" TextColor="{StaticResource MidnightBlue}" />
+            <Label Text="Destructive operations are session-only and require explicit confirmation." FontSize="13" TextColor="{StaticResource MutedText}" />
+
+            <HorizontalStackLayout Spacing="12">
+                <Switch x:Name="DebugToggle" Toggled="OnDebugToggleToggled" VerticalOptions="Center" />
+                <Label Text="Enable destructive deletes" VerticalOptions="Center" FontSize="16" />
+            </HorizontalStackLayout>
+
+            <Button x:Name="DeleteMonthButton" Text="Delete current month data" Clicked="OnDeleteMonthClicked" IsEnabled="False" HeightRequest="48" />
+            <Button x:Name="DeleteYearButton" Text="Delete current year database" Clicked="OnDeleteYearClicked" IsEnabled="False" HeightRequest="48" BackgroundColor="{StaticResource DangerLight}" TextColor="{StaticResource Danger}" />
+
+            <Button Text="Open diagnostics" Clicked="OnDiagnosticsClicked" HeightRequest="48" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+
+            <BoxView HeightRequest="1" Color="{StaticResource Gray200}" Margin="0,4" />
+
+            <Label Text="About" FontAttributes="Bold" FontSize="18" TextColor="{StaticResource MidnightBlue}" />
+            <Label x:Name="VersionLabel" FontSize="14" TextColor="{StaticResource MutedText}" />
+            <Label x:Name="DataRootLabel" FontSize="12" TextColor="{StaticResource MutedLight}" LineBreakMode="WordWrap" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

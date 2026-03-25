@@ -1,4 +1,5 @@
 using CrispyBills.Mobile.Android.Models;
+using CrispyBills.Core.Storage;
 using Microsoft.Data.Sqlite;
 
 namespace CrispyBills.Mobile.Android.Services;
@@ -16,8 +17,25 @@ public sealed class BillingRepository : IBillingRepository
 
     public BillingRepository()
     {
-        _dataRoot = Path.Combine(FileSystem.Current.AppDataDirectory, "CrispyBills");
-        Directory.CreateDirectory(_dataRoot);
+        try
+        {
+            _dataRoot = Path.Combine(FileSystem.Current.AppDataDirectory, "CrispyBills");
+            Directory.CreateDirectory(_dataRoot);
+        }
+        catch (Exception ex)
+        {
+            StartupDiagnostics.AddIssue("BillingRepository", $"Failed to create app data folder: {ex.Message}");
+            DiagnosticsLog.WriteSync("BillingRepository.ctor", ex);
+            _dataRoot = Path.Combine(Path.GetTempPath(), "CrispyBills");
+            try
+            {
+                Directory.CreateDirectory(_dataRoot);
+            }
+            catch (Exception ex2)
+            {
+                StartupDiagnostics.AddIssue("BillingRepository", $"Fallback temp data folder failed: {ex2.Message}");
+            }
+        }
     }
 
     /// <summary>Return the full path to the SQLite database file for a given year.</summary>
@@ -80,7 +98,9 @@ CREATE TABLE IF NOT EXISTS Bills (
     RecurrenceEveryMonths INTEGER NOT NULL DEFAULT 1,
     RecurrenceEndMode TEXT NOT NULL DEFAULT 'None',
     RecurrenceEndDate TEXT NULL,
-    RecurrenceMaxOccurrences INTEGER NULL
+    RecurrenceMaxOccurrences INTEGER NULL,
+    RecurrenceFrequency TEXT NOT NULL DEFAULT 'MonthlyInterval',
+    RecurrenceGroupId TEXT NULL
 );";
 
         const string incomeSql = @"
@@ -93,18 +113,45 @@ CREATE TABLE IF NOT EXISTS Income (
 
         await ExecuteNonQueryAsync(connection, billsSql);
         await ExecuteNonQueryAsync(connection, incomeSql);
-        await EnsureBillsColumnAsync(connection, "RecurrenceEveryMonths", "INTEGER NOT NULL DEFAULT 1");
-        await EnsureBillsColumnAsync(connection, "RecurrenceEndMode", "TEXT NOT NULL DEFAULT 'None'");
-        await EnsureBillsColumnAsync(connection, "RecurrenceEndDate", "TEXT NULL");
-        await EnsureBillsColumnAsync(connection, "RecurrenceMaxOccurrences", "INTEGER NULL");
+        await CanonicalSchemaMigrator.EnsureCanonicalSchemaAsync(connection);
     }
 
     /// <summary>Load year data from disk into a <see cref="YearData"/> instance.</summary>
     /// <param name="year">Year to load.</param>
     public async Task<YearData> LoadYearAsync(int year)
     {
+        try
+        {
+            return await LoadYearAfterInitAsync(year);
+        }
+        catch (Exception ex)
+        {
+            var dbPath = GetYearDatabasePath(year);
+            await SafeTryRecoverCorruptYearDatabaseAsync(dbPath, ex);
+            try
+            {
+                return await LoadYearAfterInitAsync(year);
+            }
+            catch (Exception ex2)
+            {
+                StartupDiagnostics.AddIssue("DatabaseLoad", $"Year {year} load failed after recovery: {ex2.Message}");
+                try
+                {
+                    await DiagnosticsLog.WriteAsync("LoadYearAsync", ex2);
+                }
+                catch
+                {
+                    DiagnosticsLog.WriteSync("LoadYearAsync", ex2);
+                }
+
+                return new YearData();
+            }
+        }
+    }
+
+    private async Task<YearData> LoadYearAfterInitAsync(int year)
+    {
         await InitializeYearAsync(year);
-        var data = new YearData();
         var dbPath = GetYearDatabasePath(year);
         var connectionString = BuildConnectionString(dbPath);
 
@@ -115,7 +162,7 @@ CREATE TABLE IF NOT EXISTS Income (
         }
         catch (Exception ex)
         {
-            await TryRecoverCorruptYearDatabaseAsync(dbPath, ex);
+            await SafeTryRecoverCorruptYearDatabaseAsync(dbPath, ex);
             await using var recovered = new SqliteConnection(BuildConnectionString(dbPath));
             await recovered.OpenAsync();
             return await LoadYearUsingOpenConnectionAsync(year, recovered);
@@ -130,7 +177,8 @@ CREATE TABLE IF NOT EXISTS Income (
 
         const string billsSql = @"
 SELECT Id, Month, Year, Name, Amount, DueDate, Paid, Category, Recurring,
-       RecurrenceEveryMonths, RecurrenceEndMode, RecurrenceEndDate, RecurrenceMaxOccurrences
+       RecurrenceEveryMonths, RecurrenceEndMode, RecurrenceEndDate, RecurrenceMaxOccurrences,
+       RecurrenceFrequency, RecurrenceGroupId
 FROM Bills
 WHERE Year = $year
 ORDER BY Month, DueDate, Name;";
@@ -144,12 +192,25 @@ ORDER BY Month, DueDate, Name;";
             while (await reader.ReadAsync())
             {
                 var month = reader.GetInt32(1);
+                if (!IsValidMonth(month))
+                {
+                    StartupDiagnostics.AddIssue("DatabaseLoad", $"Skipping bill row with invalid month '{month}' for year {year}.");
+                    continue;
+                }
+
+                var idRaw = reader.GetString(0);
+                if (!Guid.TryParse(idRaw, out var parsedId))
+                {
+                    StartupDiagnostics.AddIssue("DatabaseLoad", $"Skipping bill row with invalid GUID '{idRaw}' for year {year}, month {month}.");
+                    continue;
+                }
+
                 var dueDateRaw = reader.GetString(5);
                 DateTime.TryParse(dueDateRaw, out var dueDate);
 
                 var bill = new BillItem
                 {
-                    Id = Guid.Parse(reader.GetString(0)),
+                    Id = parsedId,
                     Month = month,
                     Year = reader.GetInt32(2),
                     Name = reader.GetString(3),
@@ -163,7 +224,11 @@ ORDER BY Month, DueDate, Name;";
                     RecurrenceEndDate = reader.IsDBNull(11)
                         ? null
                         : (DateTime.TryParse(reader.GetString(11), out var endDate) ? endDate : null),
-                    RecurrenceMaxOccurrences = reader.IsDBNull(12) ? null : reader.GetInt32(12)
+                    RecurrenceMaxOccurrences = reader.IsDBNull(12) ? null : reader.GetInt32(12),
+                    RecurrenceFrequency = ParseRecurrenceFrequency(reader.IsDBNull(13) ? null : reader.GetString(13)),
+                    RecurrenceGroupId = reader.IsDBNull(14)
+                        ? null
+                        : (Guid.TryParse(reader.GetString(14), out var gid) ? gid : null)
                 };
 
                 data.BillsByMonth[month].Add(bill);
@@ -183,7 +248,14 @@ WHERE Year = $year;";
             await using var reader = await incomeCommand.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
-                data.IncomeByMonth[reader.GetInt32(0)] = (decimal)reader.GetDouble(1);
+                var month = reader.GetInt32(0);
+                if (!IsValidMonth(month))
+                {
+                    StartupDiagnostics.AddIssue("DatabaseLoad", $"Skipping income row with invalid month '{month}' for year {year}.");
+                    continue;
+                }
+
+                data.IncomeByMonth[month] = (decimal)reader.GetDouble(1);
             }
         }
 
@@ -197,6 +269,12 @@ WHERE Year = $year;";
         await InitializeYearAsync(year);
         var dbPath = GetYearDatabasePath(year);
         var connectionString = BuildConnectionString(dbPath);
+
+        await using (var checkpoint = new SqliteConnection(connectionString))
+        {
+            await checkpoint.OpenAsync();
+            await ExecuteNonQueryAsync(checkpoint, "PRAGMA wal_checkpoint(TRUNCATE);");
+        }
 
         var backupPath = dbPath + BackupSuffix;
         if (File.Exists(dbPath))
@@ -226,11 +304,13 @@ WHERE Year = $year;";
                 await deleteIncome.ExecuteNonQueryAsync();
             }
 
-        const string insertBillSql = @"
+            const string insertBillSql = @"
 INSERT INTO Bills (Id, Month, Year, Name, Amount, DueDate, Paid, Category, Recurring,
-    RecurrenceEveryMonths, RecurrenceEndMode, RecurrenceEndDate, RecurrenceMaxOccurrences)
+    RecurrenceEveryMonths, RecurrenceEndMode, RecurrenceEndDate, RecurrenceMaxOccurrences,
+    RecurrenceFrequency, RecurrenceGroupId)
 VALUES ($id, $month, $year, $name, $amount, $dueDate, $paid, $category, $recurring,
-    $recurrenceEveryMonths, $recurrenceEndMode, $recurrenceEndDate, $recurrenceMaxOccurrences);";
+    $recurrenceEveryMonths, $recurrenceEndMode, $recurrenceEndDate, $recurrenceMaxOccurrences,
+    $recurrenceFrequency, $recurrenceGroupId);";
 
             foreach (var month in data.BillsByMonth.Keys.OrderBy(k => k))
             {
@@ -252,11 +332,13 @@ VALUES ($id, $month, $year, $name, $amount, $dueDate, $paid, $category, $recurri
                     insertBill.Parameters.AddWithValue("$recurrenceEndMode", bill.RecurrenceEndMode.ToString());
                     insertBill.Parameters.AddWithValue("$recurrenceEndDate", bill.RecurrenceEndDate?.ToString("yyyy-MM-dd") ?? (object)DBNull.Value);
                     insertBill.Parameters.AddWithValue("$recurrenceMaxOccurrences", bill.RecurrenceMaxOccurrences ?? (object)DBNull.Value);
+                    insertBill.Parameters.AddWithValue("$recurrenceFrequency", bill.RecurrenceFrequency.ToString());
+                    insertBill.Parameters.AddWithValue("$recurrenceGroupId", bill.RecurrenceGroupId?.ToString() ?? (object)DBNull.Value);
                     await insertBill.ExecuteNonQueryAsync();
                 }
             }
 
-        const string insertIncomeSql = @"
+            const string insertIncomeSql = @"
 INSERT INTO Income (Month, Year, Amount)
 VALUES ($month, $year, $amount);";
 
@@ -436,20 +518,47 @@ CREATE TABLE IF NOT EXISTS AppMeta (
         return RecurrenceEndMode.None;
     }
 
-    private static async Task TryRecoverCorruptYearDatabaseAsync(string dbPath, Exception source)
+    private static RecurrenceFrequency ParseRecurrenceFrequency(string? raw)
     {
-        var backupPath = dbPath + BackupSuffix;
-        var markerPath = dbPath + ".corrupt." + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
-
-        var note = $"[{DateTime.Now:O}] failed to open DB '{dbPath}'. Exception: {source}";
-        await File.WriteAllTextAsync(markerPath, note);
-        StartupDiagnostics.AddIssue("DatabaseRecovery", note);
-
-        if (File.Exists(backupPath))
+        if (Enum.TryParse<RecurrenceFrequency>(raw ?? string.Empty, ignoreCase: true, out var parsed))
         {
-            File.Copy(backupPath, dbPath, overwrite: true);
-            File.Delete(backupPath);
-            StartupDiagnostics.AddIssue("DatabaseRecovery", $"Recovered year DB from backup: {backupPath}");
+            return parsed;
+        }
+
+        return RecurrenceFrequency.MonthlyInterval;
+    }
+
+    private static bool IsValidMonth(int month) => month >= 1 && month <= 12;
+
+    private static async Task SafeTryRecoverCorruptYearDatabaseAsync(string dbPath, Exception source)
+    {
+        try
+        {
+            var backupPath = dbPath + BackupSuffix;
+            var markerPath = dbPath + ".corrupt." + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".txt";
+
+            var note = $"[{DateTime.Now:O}] failed to open DB '{dbPath}'. Exception: {source}";
+            try
+            {
+                await File.WriteAllTextAsync(markerPath, note);
+            }
+            catch (Exception writeEx)
+            {
+                StartupDiagnostics.AddIssue("DatabaseRecovery", $"Could not write corrupt marker: {writeEx.Message}");
+            }
+
+            StartupDiagnostics.AddIssue("DatabaseRecovery", note);
+
+            if (File.Exists(backupPath))
+            {
+                File.Copy(backupPath, dbPath, overwrite: true);
+                File.Delete(backupPath);
+                StartupDiagnostics.AddIssue("DatabaseRecovery", $"Recovered year DB from backup: {backupPath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            StartupDiagnostics.AddIssue("DatabaseRecovery", $"Recovery attempt failed: {ex.Message}");
         }
     }
 }

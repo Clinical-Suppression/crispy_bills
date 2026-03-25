@@ -246,6 +246,11 @@
                 <MenuItem Header="_Fix Due Dates (Current Year)..." Click="FixDueDatesCurrentYear_Click"/>
             </MenuItem>
             <MenuItem Header="_View">
+                <MenuItem Header="_Refresh" Click="RefreshData_Click" InputGestureText="F5"/>
+                <Separator/>
+                <MenuItem Header="_Settings..." Click="OpenSettings_Click"/>
+                <MenuItem Header="_Diagnostics..." Click="OpenDiagnostics_Click"/>
+                <Separator/>
                 <MenuItem Header="Toggle _Theme" Click="ToggleTheme_Click"/>
                 <MenuItem Header="_Monthly Summary" Click="SendSummary_Click"/>
                 <MenuItem Header="_Enter Moves Down" IsCheckable="True" Click="EnterMovesDown_Click"/>
@@ -281,6 +286,7 @@
                         <TextBlock Text="Year:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <ComboBox x:Name="YearSelector" Width="80" SelectionChanged="YearSelector_SelectionChanged" VerticalAlignment="Center" IsEditable="False"/>
                         <Button x:Name="NewYearBtn" Content="New Year" Click="NewYear_Click" Style="{StaticResource ToolbarButton}" Margin="6,0,0,0" ToolTip="Create the next year (copies recurring December bills)"/>
+                        <Button Content="Refresh" Click="RefreshData_Click" Style="{StaticResource ToolbarButton}" Margin="6,0,0,0" ToolTip="Reload current year from disk (F5)"/>
                     </StackPanel>
 
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">

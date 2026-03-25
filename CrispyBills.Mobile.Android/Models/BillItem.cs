@@ -11,6 +11,7 @@ public sealed class BillItem : INotifyPropertyChanged
 {
     private bool _isPaid;
     private DateTime _dueDate;
+    private DateTime _contextPeriodStart = new(DateTime.Today.Year, DateTime.Today.Month, 1);
 
     /// <summary>Identifier for this bill instance.</summary>
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -21,6 +22,10 @@ public sealed class BillItem : INotifyPropertyChanged
     /// <summary>Category for grouping and reporting.</summary>
     public string Category { get; set; } = "General";
     public bool IsRecurring { get; set; }
+    /// <summary>When <see cref="IsRecurring"/> is true, how the bill repeats. Ignored for one-time bills.</summary>
+    public RecurrenceFrequency RecurrenceFrequency { get; set; } = RecurrenceFrequency.MonthlyInterval;
+    /// <summary>For weekly/bi-weekly children, the anchor bill id. Null for standalone bills and monthly recurring rows.</summary>
+    public Guid? RecurrenceGroupId { get; set; }
     public int RecurrenceEveryMonths { get; set; } = 1;
     public RecurrenceEndMode RecurrenceEndMode { get; set; } = RecurrenceEndMode.None;
     public DateTime? RecurrenceEndDate { get; set; }
@@ -45,6 +50,24 @@ public sealed class BillItem : INotifyPropertyChanged
         }
     }
 
+    /// <summary>First day of the month being viewed; affects <see cref="IsPastDue"/> for unpaid bills.</summary>
+    public DateTime ContextPeriodStart
+    {
+        get => _contextPeriodStart;
+        set
+        {
+            var normalized = new DateTime(value.Year, value.Month, 1);
+            if (_contextPeriodStart == normalized)
+            {
+                return;
+            }
+
+            _contextPeriodStart = normalized;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsPastDue));
+        }
+    }
+
     /// <summary>Whether the bill has been paid.</summary>
     public bool IsPaid
     {
@@ -62,8 +85,9 @@ public sealed class BillItem : INotifyPropertyChanged
         }
     }
 
-    /// <summary>True if the bill is unpaid and the due date has passed.</summary>
-    public bool IsPastDue => !IsPaid && DueDate.Date < DateTime.Today;
+    /// <summary>True if the bill is unpaid and past the due date or before the viewed month.</summary>
+    public bool IsPastDue => !IsPaid &&
+        (DueDate.Date < DateTime.Today || DueDate.Date < ContextPeriodStart.Date);
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -80,12 +104,15 @@ public sealed class BillItem : INotifyPropertyChanged
             DueDate = DueDate,
             IsPaid = IsPaid,
             IsRecurring = IsRecurring,
+            RecurrenceFrequency = RecurrenceFrequency,
+            RecurrenceGroupId = RecurrenceGroupId,
             RecurrenceEveryMonths = RecurrenceEveryMonths,
             RecurrenceEndMode = RecurrenceEndMode,
             RecurrenceEndDate = RecurrenceEndDate,
             RecurrenceMaxOccurrences = RecurrenceMaxOccurrences,
             Year = Year,
-            Month = Month
+            Month = Month,
+            ContextPeriodStart = ContextPeriodStart
         };
     }
 

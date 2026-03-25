@@ -4,13 +4,13 @@
              x:Class="CrispyBills.Mobile.Android.DiagnosticsPage"
              Title="Diagnostics">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*" Padding="14" RowSpacing="10">
-        <Label x:Name="InfoLabel" FontSize="14" />
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Padding="14" RowSpacing="12">
+        <Label x:Name="InfoLabel" FontSize="14" LineBreakMode="WordWrap" />
         <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="10">
-            <Button Grid.Column="0" Text="Refresh" Clicked="OnRefreshClicked" />
-            <Button Grid.Column="1" Text="Integrity Repair" Clicked="OnIntegrityRepairClicked" />
+            <Button Grid.Column="0" Text="Refresh" Clicked="OnRefreshClicked" HeightRequest="48" />
+            <Button Grid.Column="1" Text="Integrity repair" Clicked="OnIntegrityRepairClicked" HeightRequest="48" />
         </Grid>
-        <Label Grid.Row="2" x:Name="StartupIssuesLabel" FontSize="12" TextColor="{StaticResource Info}" />
-        <Editor Grid.Row="3" x:Name="LogEditor" IsReadOnly="True" FontSize="12" AutoSize="TextChanges" />
+        <Label Grid.Row="2" x:Name="StartupIssuesLabel" FontSize="12" TextColor="{StaticResource Info}" LineBreakMode="WordWrap" />
+        <Editor Grid.Row="3" x:Name="LogEditor" IsReadOnly="True" FontSize="12" />
     </Grid>
 </ContentPage>

@@ -73,7 +73,100 @@ namespace CrispyBills
             }
         }
 
-        private DateTime _contextPeriodStart = new(DateTime.Now.Year, DateTime.Now.Month, 1);
+        private RecurrenceFrequency _recurrenceFrequency = RecurrenceFrequency.MonthlyInterval;
+        /// <summary>Repeat cadence when <see cref="IsRecurring"/> is true.</summary>
+        public RecurrenceFrequency RecurrenceFrequency
+        {
+            get => _recurrenceFrequency;
+            set
+            {
+                if (_recurrenceFrequency != value)
+                {
+                    _recurrenceFrequency = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private Guid? _recurrenceGroupId;
+        /// <summary>Weekly/bi-weekly series anchor id for child rows; null for monthly recurring and one-time bills.</summary>
+        public Guid? RecurrenceGroupId
+        {
+            get => _recurrenceGroupId;
+            set
+            {
+                if (_recurrenceGroupId != value)
+                {
+                    _recurrenceGroupId = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int _recurrenceEveryMonths = 1;
+        public int RecurrenceEveryMonths
+        {
+            get => _recurrenceEveryMonths;
+            set
+            {
+                var v = Math.Max(1, value);
+                if (_recurrenceEveryMonths != v)
+                {
+                    _recurrenceEveryMonths = v;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private RecurrenceEndMode _recurrenceEndMode = RecurrenceEndMode.None;
+        public RecurrenceEndMode RecurrenceEndMode
+        {
+            get => _recurrenceEndMode;
+            set
+            {
+                if (_recurrenceEndMode != value)
+                {
+                    _recurrenceEndMode = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private DateTime? _recurrenceEndDate;
+        public DateTime? RecurrenceEndDate
+        {
+            get => _recurrenceEndDate;
+            set
+            {
+                if (_recurrenceEndDate != value)
+                {
+                    _recurrenceEndDate = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int? _recurrenceMaxOccurrences;
+        public int? RecurrenceMaxOccurrences
+        {
+            get => _recurrenceMaxOccurrences;
+            set
+            {
+                if (_recurrenceMaxOccurrences != value)
+                {
+                    _recurrenceMaxOccurrences = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private static DateTime FirstDayOfCurrentMonth()
+        {
+            var now = DateTime.Now;
+            return new DateTime(now.Year, now.Month, 1);
+        }
+
+        private DateTime _contextPeriodStart = FirstDayOfCurrentMonth();
         /// <summary>
         /// The start of the currently-viewed context period (normalized to the month first day).
         /// Used when computing past-due status relative to a viewing period.

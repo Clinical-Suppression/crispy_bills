@@ -1,144 +1,184 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:models="clr-namespace:CrispyBills.Mobile.Android.Models"
              x:Class="CrispyBills.Mobile.Android.MainPage"
              Shell.NavBarIsVisible="False"
-             Title="Crispy_Bills">
+             Title="Crispy Bills">
 
-    <Grid RowDefinitions="Auto,*" RowSpacing="0">
+    <Grid RowDefinitions="Auto,*" RowSpacing="0" BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource OffBlack}}">
+
+        <!-- Header -->
         <Border Grid.Row="0"
-            StrokeThickness="0"
-            BackgroundColor="{StaticResource PrimaryDark}"
-            Padding="14,16,14,12">
-            <VerticalStackLayout Spacing="12">
-                  <Label Text="Crispy_Bills"
-                      TextColor="{StaticResource White}"
-                       FontSize="24"
+                StrokeThickness="0"
+                BackgroundColor="{StaticResource PrimaryDark}"
+                Padding="14,16,14,14">
+            <VerticalStackLayout Spacing="14">
+                <Label Text="Crispy Bills"
+                       TextColor="{StaticResource White}"
+                       FontSize="22"
                        FontAttributes="Bold" />
 
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10">
-                    <Button Grid.Column="0" x:Name="PrevYearButton" Text="◀" Clicked="OnPrevYearClicked" WidthRequest="52" HeightRequest="52" />
-                    <Button Grid.Column="1"
-                            x:Name="YearButton"
-                            Clicked="OnYearSelectClicked"
-                            TextColor="White"
-                            BackgroundColor="Transparent"
-                            BorderColor="Transparent"
-                            VerticalOptions="Center"
-                            HorizontalOptions="Center"
-                            FontAttributes="Bold"
-                            FontSize="20" />
-                    <Button Grid.Column="2" x:Name="NextYearButton" Text="▶" Clicked="OnNextYearClicked" WidthRequest="52" HeightRequest="52" />
-                    <Button Grid.Column="3" Text="Archive" Clicked="OnArchiveYearClicked" HeightRequest="52" />
-                    <Button Grid.Column="4" Text="Notes" Clicked="OnNotesClicked" HeightRequest="52" />
-                    <Button Grid.Column="5" Text="Export" Clicked="OnExportClicked" HeightRequest="52" />
-                    <Button Grid.Column="6" Text="Diag" Clicked="OnDiagnosticsClicked" HeightRequest="52" />
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                    <Button Grid.Column="0" x:Name="PrevYearButton" Text="&#x25C0;" Clicked="OnPrevYearClicked"
+                            WidthRequest="48" HeightRequest="48" Padding="0" />
+                    <Button Grid.Column="1" x:Name="YearButton" Clicked="OnYearSelectClicked"
+                            TextColor="White" BackgroundColor="Transparent" BorderColor="Transparent"
+                            FontAttributes="Bold" FontSize="18" MinimumHeightRequest="48" />
+                    <Button Grid.Column="2" x:Name="NextYearButton" Text="&#x25B6;" Clicked="OnNextYearClicked"
+                            WidthRequest="48" HeightRequest="48" Padding="0" />
+                    <Button Grid.Column="3" Text="Archive" Clicked="OnArchiveYearClicked" HeightRequest="48" FontSize="13" Padding="12,8" />
                 </Grid>
 
-                <!-- Debug controls (session-only) -->
-                <HorizontalStackLayout Spacing="8" VerticalOptions="Center" HorizontalOptions="End">
-                    <Label Text="Destructive Deletes" VerticalOptions="Center" TextColor="{StaticResource White}" />
-                    <Switch x:Name="DebugToggle" Toggled="OnDebugToggleToggled" />
-                    <Button x:Name="DebugDeleteMonthButton" Text="Delete Month" Clicked="OnDebugDeleteMonthClicked" IsEnabled="False" />
-                    <Button x:Name="DebugDeleteYearButton" Text="Delete Year" Clicked="OnDebugDeleteYearClicked" IsEnabled="False" />
-                </HorizontalStackLayout>
-
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-                    <Button Grid.Column="0" Text="◀" Clicked="OnPrevMonthClicked" WidthRequest="52" HeightRequest="52" />
-                    <Button Grid.Column="1"
-                            x:Name="MonthButton"
-                            Clicked="OnMonthSelectClicked"
-                            TextColor="White"
-                            BackgroundColor="Transparent"
-                            BorderColor="Transparent"
-                            FontAttributes="Bold"
-                            FontSize="20" />
-                    <Button Grid.Column="2" Text="▶" Clicked="OnNextMonthClicked" WidthRequest="52" HeightRequest="52" />
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                    <Button Grid.Column="0" Text="&#x25C0;" Clicked="OnPrevMonthClicked" WidthRequest="48" HeightRequest="48" Padding="0" />
+                    <Button Grid.Column="1" x:Name="MonthButton" Clicked="OnMonthSelectClicked"
+                            TextColor="White" BackgroundColor="Transparent" BorderColor="Transparent"
+                            FontAttributes="Bold" FontSize="18" MinimumHeightRequest="48" />
+                    <Button Grid.Column="2" Text="&#x25B6;" Clicked="OnNextMonthClicked" WidthRequest="48" HeightRequest="48" Padding="0" />
                 </Grid>
             </VerticalStackLayout>
         </Border>
 
-        <ScrollView Grid.Row="1">
-            <VerticalStackLayout Padding="14" Spacing="12">
-                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="10" ColumnSpacing="10">
-                    <Border Grid.Row="0" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12">
-                        <VerticalStackLayout>
-                            <Label Text="Income" FontSize="12" TextColor="{StaticResource MutedText}" />
-                            <Label x:Name="IncomeLabel" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
-                        </VerticalStackLayout>
-                    </Border>
+        <!-- Body + bottom bar -->
+        <Grid Grid.Row="1" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="10" Padding="14,12,14,10">
 
-                    <Border Grid.Row="0" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12">
-                        <VerticalStackLayout>
-                            <Label Text="Unpaid" FontSize="12" TextColor="{StaticResource MutedText}" />
-                            <Label x:Name="UnpaidLabel" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource Danger}" />
-                        </VerticalStackLayout>
-                    </Border>
+            <!-- Summary cards -->
+            <Grid Grid.Row="0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+                <Border Grid.Row="0" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Income" FontSize="12" TextColor="{StaticResource MutedText}" />
+                        <Label x:Name="IncomeLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Unpaid" FontSize="12" TextColor="{StaticResource MutedText}" />
+                        <Label x:Name="UnpaidLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Danger}" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Remaining" FontSize="12" TextColor="{StaticResource MutedText}" />
+                        <Label x:Name="RemainingLabel" FontSize="20" FontAttributes="Bold" />
+                    </VerticalStackLayout>
+                </Border>
+                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Bills" FontSize="12" TextColor="{StaticResource MutedText}" />
+                        <Label x:Name="BillCountLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
+                    </VerticalStackLayout>
+                </Border>
+            </Grid>
 
-                    <Border Grid.Row="1" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12">
-                        <VerticalStackLayout>
-                            <Label Text="Remaining" FontSize="12" TextColor="{StaticResource MutedText}" />
-                            <Label x:Name="RemainingLabel" FontSize="22" FontAttributes="Bold" />
-                        </VerticalStackLayout>
-                    </Border>
+            <!-- Month income vs bill totals -->
+            <VerticalStackLayout Grid.Row="1" Spacing="4">
+                <Label x:Name="IncomeExpenseBarCaption"
+                       FontSize="11"
+                       TextColor="{StaticResource MutedText}"
+                       LineBreakMode="WordWrap" />
+                <GraphicsView x:Name="IncomeExpenseBarView" HeightRequest="28" />
+            </VerticalStackLayout>
 
-                    <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12">
-                        <VerticalStackLayout>
-                            <Label Text="Bills" FontSize="12" TextColor="{StaticResource MutedText}" />
-                            <Label x:Name="BillCountLabel" FontSize="22" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
-                        </VerticalStackLayout>
-                    </Border>
-                </Grid>
+            <!-- Swipe hint + action pills -->
+            <VerticalStackLayout Grid.Row="2" Spacing="6">
+                <Label Text="Tip: Swipe a bill left to mark paid or unpaid. Swipe right for Edit and Delete."
+                       FontSize="12"
+                       TextColor="{StaticResource MutedText}"
+                       LineBreakMode="WordWrap"
+                       Margin="0,0,0,2" />
+            <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+                <HorizontalStackLayout Spacing="10" Padding="0,4">
+                    <Button Text="Income" Clicked="OnSetIncomeClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
+                    <Button Text="Add" Clicked="OnAddClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
+                    <Button Text="Rollover" Clicked="OnRolloverClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
+                    <Button Text="New Year" Clicked="OnNewYearClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
+                    <Button Text="Import" Clicked="OnImportClicked" Padding="16,12" CornerRadius="20" FontSize="13" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+                    <Button Text="Export" Clicked="OnExportClicked" Padding="16,12" CornerRadius="20" FontSize="13" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+                </HorizontalStackLayout>
+            </ScrollView>
+            </VerticalStackLayout>
 
-                <Button Text="Set Monthly Income" Clicked="OnSetIncomeClicked" />
+            <!-- Search + category -->
+            <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="10">
+                <Entry x:Name="SearchEntry" Placeholder="Search bills..." TextChanged="OnSearchChanged" HeightRequest="48" />
+                <Picker x:Name="CategoryPicker" Grid.Column="1" Title="Category" SelectedIndexChanged="OnCategoryChanged" HeightRequest="48" />
+            </Grid>
 
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-                    <Entry x:Name="SearchEntry" Grid.Column="0" Placeholder="Search bills or categories" TextChanged="OnSearchChanged" />
-                    <Picker x:Name="CategoryPicker" Grid.Column="1" SelectedIndexChanged="OnCategoryChanged" Title="All categories" />
-                </Grid>
-
-                <Grid ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
-                    <Button Grid.Column="0" Text="Add Bill" Clicked="OnAddClicked" HeightRequest="52" />
-                    <Button Grid.Column="1" Text="Template" Clicked="OnAddTemplateClicked" HeightRequest="52" />
-                    <Button Grid.Column="2" Text="Rollover" Clicked="OnRolloverClicked" HeightRequest="52" />
-                    <Button Grid.Column="3" Text="New Year" Clicked="OnNewYearClicked" HeightRequest="52" />
-                    <Button Grid.Row="1" Grid.Column="0" Text="Import" Clicked="OnImportClicked" />
-                    <Button Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Text="Summary &amp; Pie Chart" Clicked="OnSummaryClicked" />
-                </Grid>
-
-                <CollectionView x:Name="BillsCollection" SelectionMode="None">
+            <!-- Bill list -->
+            <RefreshView x:Name="BillsRefreshView" Grid.Row="4" Refreshing="OnBillsRefreshing">
+                <CollectionView x:Name="BillsCollection" SelectionMode="None" Margin="0,4,0,0">
                     <CollectionView.EmptyView>
-                        <VerticalStackLayout Padding="8,24" Spacing="6">
-                            <Label Text="No bills for this filter." HorizontalOptions="Center" TextColor="{StaticResource EmptyText}" />
-                            <Label Text="Tap Add Bill to create your first entry." HorizontalOptions="Center" TextColor="{StaticResource MutedLight}" FontSize="12" />
+                        <VerticalStackLayout Padding="24,32" Spacing="16" HorizontalOptions="Center">
+                            <Label Text="No bills yet" HorizontalOptions="Center" FontSize="18" TextColor="{StaticResource EmptyText}" />
+                            <Label Text="Swipe left on a bill to toggle paid. Swipe right for edit or delete." HorizontalOptions="Center" FontSize="13" TextColor="{StaticResource MutedLight}" HorizontalTextAlignment="Center" />
+                            <Button Text="Add your first bill" Clicked="OnAddClicked" HorizontalOptions="Center" Padding="24,14" />
                         </VerticalStackLayout>
                     </CollectionView.EmptyView>
 
                     <CollectionView.ItemTemplate>
                         <DataTemplate x:DataType="models:BillListItem">
-                            <Border StrokeThickness="0" BackgroundColor="{StaticResource CardBackground}" StrokeShape="RoundRectangle 14" Padding="12" Margin="0,0,0,8">
-                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
-                                    <Label Grid.Row="0" Grid.Column="0" Text="{Binding Name}" FontAttributes="Bold" FontSize="17" LineBreakMode="TailTruncation" />
-                                    <Label Grid.Row="0" Grid.Column="1" Text="{Binding Amount, StringFormat='${0:F2}'}" FontAttributes="Bold" FontSize="17" />
+                            <Border StrokeThickness="0"
+                                    BackgroundColor="{StaticResource CardBackground}"
+                                    StrokeShape="RoundRectangle 14"
+                                    Padding="0"
+                                    Margin="0,0,0,10">
+                                <SwipeView>
+                                    <SwipeView.LeftItems>
+                                        <SwipeItems Mode="Execute">
+                                            <SwipeItem Text="Paid"
+                                                       BackgroundColor="{StaticResource Success}"
+                                                       Invoked="OnSwipeTogglePaid" />
+                                        </SwipeItems>
+                                    </SwipeView.LeftItems>
+                                    <SwipeView.RightItems>
+                                        <SwipeItems Mode="Reveal">
+                                            <SwipeItem Text="Edit"
+                                                       BackgroundColor="{StaticResource Info}"
+                                                       Invoked="OnSwipeEdit" />
+                                            <SwipeItem Text="Delete"
+                                                       BackgroundColor="{StaticResource Danger}"
+                                                       Invoked="OnSwipeDelete" />
+                                        </SwipeItems>
+                                    </SwipeView.RightItems>
 
-                                    <Label Grid.Row="1" Grid.Column="0" Text="{Binding Category}" TextColor="{StaticResource MutedText}" FontSize="13" />
-                                    <Label Grid.Row="1" Grid.Column="1" Text="{Binding DueDate, StringFormat='Due {0:MMM d}'}" TextColor="{StaticResource MutedText}" FontSize="13" />
-
-                                    <Grid Grid.Row="2" Grid.ColumnSpan="2" ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="8">
-                                        <Button Grid.Column="0" Text="Paid" Clicked="OnTogglePaidClicked" CommandParameter="{Binding Id}" FontSize="12" HeightRequest="44" />
-                                        <Button Grid.Column="1" Text="Edit" Clicked="OnEditClicked" CommandParameter="{Binding Id}" FontSize="12" HeightRequest="44" />
-                                        <Button Grid.Column="2" Text="Delete" Clicked="OnDeleteClicked" CommandParameter="{Binding Id}" FontSize="12" HeightRequest="44" BackgroundColor="{StaticResource DangerLight}" TextColor="{StaticResource Danger}" />
-                                        <Border Grid.Column="3" StrokeThickness="0" Padding="10,4" BackgroundColor="{StaticResource TagBackground}" StrokeShape="RoundRectangle 999" HorizontalOptions="End" VerticalOptions="Center">
-                                            <Label Text="{Binding StatusText}" FontSize="12" TextColor="{StaticResource TagText}" />
-                                        </Border>
-                                    </Grid>
-                                </Grid>
+                                    <Border StrokeThickness="0" Padding="14" BackgroundColor="Transparent">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <VerticalStackLayout Grid.Column="0" Spacing="6">
+                                                <VerticalStackLayout.GestureRecognizers>
+                                                    <TapGestureRecognizer Tapped="OnBillCardTapped" />
+                                                </VerticalStackLayout.GestureRecognizers>
+                                                <HorizontalStackLayout Spacing="10">
+                                                    <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="17" LineBreakMode="TailTruncation" HorizontalOptions="FillAndExpand" />
+                                                    <Label Text="{Binding AmountDisplay}" FontAttributes="Bold" FontSize="17" />
+                                                </HorizontalStackLayout>
+                                                <Label Text="{Binding Category}" TextColor="{StaticResource MutedText}" FontSize="13" />
+                                                <Label Text="{Binding DueDate, StringFormat='Due {0:MMM d}'}" TextColor="{StaticResource MutedText}" FontSize="13" />
+                                            </VerticalStackLayout>
+                                            <Border Grid.Column="1"
+                                                    StrokeThickness="0"
+                                                    Padding="12,8"
+                                                    MinimumHeightRequest="36"
+                                                    BackgroundColor="{Binding StatusBadgeBackground}"
+                                                    StrokeShape="RoundRectangle 999"
+                                                    VerticalOptions="Center">
+                                                <Label Text="{Binding StatusText}" FontSize="12" TextColor="{Binding StatusBadgeTextColor}" VerticalOptions="Center" />
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </SwipeView>
                             </Border>
                         </DataTemplate>
                     </CollectionView.ItemTemplate>
                 </CollectionView>
-            </VerticalStackLayout>
-        </ScrollView>
+            </RefreshView>
+
+            <!-- Bottom nav -->
+            <Grid Grid.Row="5" ColumnDefinitions="*,*,*" ColumnSpacing="8" Padding="0,8,0,0">
+                <Button Grid.Column="0" Text="Summary" Clicked="OnSummaryClicked" HeightRequest="52" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+                <Button Grid.Column="1" Text="Notes" Clicked="OnNotesClicked" HeightRequest="52" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+                <Button Grid.Column="2" Text="Settings" Clicked="OnSettingsClicked" HeightRequest="52" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+            </Grid>
+        </Grid>
     </Grid>
 </ContentPage>

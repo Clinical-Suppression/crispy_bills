@@ -1,9 +1,6 @@
 <#
-Common helpers for the release tooling.
-
-This file exposes utility functions used by the release scripts (wizard, version,
-preflight, publish, etc.). Keep helpers small and well-documented; do not perform
-interactive work here — prefer to return data for callers to display or act on.
+.SYNOPSIS
+Shared helpers for release tooling (wizard, version, preflight, publish). No interactive I/O here.
 #>
 
 Set-StrictMode -Version Latest
@@ -12,26 +9,13 @@ $ErrorActionPreference = 'Stop'
 $script:TaskWarningCount = 0
 $script:TaskErrorCount = 0
 
-<#
-Reset-TaskDiagnostics
-
-Reset the in-memory counters used to accumulate warnings and errors
-observed from invoked child commands. Useful to clear diagnostics
-between independent tasks.
-#>
+<# .SYNOPSIS Reset warning/error counters between tasks. #>
 function Reset-TaskDiagnostics {
     $script:TaskWarningCount = 0
     $script:TaskErrorCount = 0
 }
 
-<#
-Add-TaskDiagnosticsFromOutput
-
-Parse a command's combined stdout/stderr text for common warning/error
-summaries and increment the global diagnostic counters. Accepts the
-`$Command` that produced the output (used to apply heuristics) and the
-raw `$OutputText` to inspect.
-#>
+<# .SYNOPSIS Scan command output and update diagnostic counters. #>
 function Add-TaskDiagnosticsFromOutput {
     param(
         [Parameter(Mandatory = $true)][string]$Command,
@@ -42,7 +26,6 @@ function Add-TaskDiagnosticsFromOutput {
         return
     }
 
-    # Prefer MSBuild summary lines when available.
     $warningMatches = [regex]::Matches($OutputText, '(?im)^\s*(\d+)\s+Warning\(s\)\s*$')
     $errorMatches = [regex]::Matches($OutputText, '(?im)^\s*(\d+)\s+Error\(s\)\s*$')
 
@@ -56,20 +39,13 @@ function Add-TaskDiagnosticsFromOutput {
         return
     }
 
-    # Fallback for commands that emit compiler-style warning/error lines without summary.
     if ($Command -eq 'dotnet') {
         $script:TaskWarningCount += [regex]::Matches($OutputText, '(?im)\bwarning\b').Count
         $script:TaskErrorCount += [regex]::Matches($OutputText, '(?im)\berror\b').Count
     }
 }
 
-<#
-Get-TaskDiagnostics
-
-Return a PSCustomObject containing the current `Warnings` and `Errors`
-counts accumulated by helper functions. This is intended for reporting
-and test assertions.
-#>
+<# .SYNOPSIS Return accumulated Warnings and Errors counts. #>
 function Get-TaskDiagnostics {
     return [PSCustomObject]@{
         Warnings = $script:TaskWarningCount
@@ -77,12 +53,7 @@ function Get-TaskDiagnostics {
     }
 }
 
-<#
-Write-TaskDiagnostics
-
-Write the current task diagnostics to host output using an optional
-`$Prefix` to clarify context (for example, "Build", "Publish").
-#>
+<# .SYNOPSIS Print diagnostic counts to the host. #>
 function Write-TaskDiagnostics {
     param([string]$Prefix = 'Task')
 
@@ -90,13 +61,7 @@ function Write-TaskDiagnostics {
     Write-Host "$Prefix diagnostics: warnings=$($diag.Warnings) errors=$($diag.Errors)"
 }
 
-<#
-Get-WorkspaceRoot
-
-Return the workspace root path by resolving two levels above the
-script directory. Callers should treat the returned value as a
-string path suitable for joining with project-specific subpaths.
-#>
+<# .SYNOPSIS Workspace root (two levels above this script directory). #>
 function Get-WorkspaceRoot {
     $resolved = Resolve-Path (Join-Path $PSScriptRoot '..\..')
     if ($resolved -is [System.Array]) {
@@ -105,13 +70,7 @@ function Get-WorkspaceRoot {
     return $resolved.Path
 }
 
-<#
-Get-FirstPathValue
-
-Accept a value that may be a single path or an array of path-like
-values and return the first non-empty, non-null string. Returns `$null`
-if no usable value is found.
-#>
+<# .SYNOPSIS First non-empty path from a scalar or array; $null if none. #>
 function Get-FirstPathValue {
     param([Parameter(Mandatory = $true)]$Value)
 
@@ -136,13 +95,7 @@ function Get-FirstPathValue {
     return [string]$Value
 }
 
-<#
-ConvertTo-CommandLineArgument
-
-Quote and escape a single command-line argument so it can be safely
-passed through a single string invocation to Start-Process. Always
-returns a string suitable for concatenation into an argument list.
-#>
+<# .SYNOPSIS Quote/escape one argument for Start-Process -ArgumentList string. #>
 function ConvertTo-CommandLineArgument {
     param([AllowEmptyString()][string]$Value)
 
@@ -163,15 +116,7 @@ function ConvertTo-CommandLineArgument {
     return '"' + $escaped + '"'
 }
 
-<#
-Invoke-LoggedCommand
-
-Start a process and capture its stdout/stderr to temporary files, echo
-the combined output to the host, and update task diagnostics based on
-the output. Throws on non-zero exit codes with captured output for
-diagnosis. Parameters: `$Command` (executable), `$Arguments` (string[]),
-and optional `$WorkingDirectory`.
-#>
+<# .SYNOPSIS Run a process with logged stdout/stderr, diagnostics, and non-zero exit as throw. #>
 function Invoke-LoggedCommand {
     param(
         [Parameter(Mandatory = $true)][string]$Command,
@@ -187,35 +132,31 @@ function Invoke-LoggedCommand {
     Write-Host "==> $display"
 
     Push-Location $WorkingDirectory
-
+    try {
+        $stdoutPath = [System.IO.Path]::GetTempFileName()
+        $stderrPath = [System.IO.Path]::GetTempFileName()
         try {
-            $stdoutPath = [System.IO.Path]::GetTempFileName()
-            $stderrPath = [System.IO.Path]::GetTempFileName()
-            try {
-                # Build a properly quoted argument string so that arguments containing
-                # spaces are preserved when passed to the child process. Start-Process
-                # does not reliably quote complex arguments when given an array,
-                # so we compose a single string using ConvertTo-CommandLineArgument.
-                $quotedArguments = @($Arguments | ForEach-Object { ConvertTo-CommandLineArgument -Value $_ }) -join ' '
-                $process = Start-Process -FilePath $Command -ArgumentList $quotedArguments -WorkingDirectory $WorkingDirectory -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+            # Start-Process: build one quoted string (array quoting is unreliable).
+            $quotedArguments = @($Arguments | ForEach-Object { ConvertTo-CommandLineArgument -Value $_ }) -join ' '
+            $process = Start-Process -FilePath $Command -ArgumentList $quotedArguments -WorkingDirectory $WorkingDirectory -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
 
-                $stdoutText = if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath -Raw } else { '' }
-                $stderrText = if (Test-Path $stderrPath) { Get-Content -Path $stderrPath -Raw } else { '' }
+            $stdoutText = if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath -Raw } else { '' }
+            $stderrText = if (Test-Path $stderrPath) { Get-Content -Path $stderrPath -Raw } else { '' }
 
-                $commandOutput = @()
-                if (-not [string]::IsNullOrWhiteSpace($stdoutText)) {
-                    $commandOutput += $stdoutText.TrimEnd("`r", "`n")
-                }
-                if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
-                    $commandOutput += $stderrText.TrimEnd("`r", "`n")
-                }
-
-                $global:LASTEXITCODE = $process.ExitCode
+            $commandOutput = @()
+            if (-not [string]::IsNullOrWhiteSpace($stdoutText)) {
+                $commandOutput += $stdoutText.TrimEnd("`r", "`n")
             }
-            finally {
-                if (Test-Path $stdoutPath) { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue }
-                if (Test-Path $stderrPath) { Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue }
+            if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+                $commandOutput += $stderrText.TrimEnd("`r", "`n")
             }
+
+            $global:LASTEXITCODE = $process.ExitCode
+        }
+        finally {
+            if (Test-Path $stdoutPath) { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $stderrPath) { Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue }
+        }
 
         if ($null -ne $commandOutput) {
             $commandOutput | Out-Host
@@ -237,15 +178,8 @@ function Invoke-LoggedCommand {
     }
 }
 
-<#
-Get-JavaAndAndroidSdk
-
-Detect a usable JDK (preferring `$env:JAVA_HOME` or OpenJDK under
-`%LOCALAPPDATA%`) and an Android SDK (preferring `$env:ANDROID_SDK_ROOT`).
-Throws with a helpful message when detection fails.
-#>
+<# .SYNOPSIS Resolve JDK and Android SDK paths; throw if missing. #>
 function Get-JavaAndAndroidSdk {
-    # Prefer explicit environment variables when provided
     $jdkCandidates = @()
     if ($env:JAVA_HOME) { $jdkCandidates += $env:JAVA_HOME }
 
@@ -272,7 +206,6 @@ function Get-JavaAndAndroidSdk {
         throw "No valid JDK found. Set `JAVA_HOME` to a JDK 17+ installation (containing `bin\\jar.exe`) or install OpenJDK under `$env:LOCALAPPDATA\\Programs\\OpenJDK`."
     }
 
-    # Android SDK detection
     $sdkCandidates = @()
     if ($env:ANDROID_SDK_ROOT) { $sdkCandidates += $env:ANDROID_SDK_ROOT }
     if ($env:ANDROID_HOME) { $sdkCandidates += $env:ANDROID_HOME }
@@ -313,13 +246,7 @@ function Get-JavaAndAndroidSdk {
     }
 }
 
-<#
-Get-GitOutput
-
-Run `git` with the provided argument array in the specified working
-directory (defaults to workspace root) and return the trimmed combined
-output as a string. Throws if the git command exits non-zero.
-#>
+<# .SYNOPSIS Run git @Args in a working directory; return trimmed output or throw. #>
 function Get-GitOutput {
     param(
         [Parameter(Mandatory = $true)][string[]]$Args,
@@ -344,12 +271,7 @@ function Get-GitOutput {
     }
 }
 
-<#
-Ensure-Directory
-
-Ensure that the directory at `$Path` exists, creating parent
-directories as required. Does nothing if the directory already exists.
-#>
+<# .SYNOPSIS Create directory $Path if missing. #>
 function Ensure-Directory {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -358,13 +280,7 @@ function Ensure-Directory {
     }
 }
 
-<#
-Get-ReleasePaths
-
-Given a release `$Version` string, ensure and return a map of paths
-used for publishing: `WorkspaceRoot`, `ReleaseRoot`, and `LogsRoot`.
-Creates directories as needed.
-#>
+<# .SYNOPSIS Paths for a release version (creates publish dirs as needed). #>
 function Get-ReleasePaths {
     param(
         [Parameter(Mandatory = $true)][string]$Version
@@ -384,12 +300,7 @@ function Get-ReleasePaths {
     }
 }
 
-<#
-Write-JsonFile
-
-Serialize an object to JSON (UTF8) and write it to the specified
-file path. Uses `ConvertTo-Json -Depth 8` to preserve nested structures.
-#>
+<# .SYNOPSIS Write object as UTF-8 JSON (depth 8). #>
 function Write-JsonFile {
     param(
         [Parameter(Mandatory = $true)]$Object,
@@ -398,4 +309,145 @@ function Write-JsonFile {
 
     $json = $Object | ConvertTo-Json -Depth 8
     Set-Content -Path $Path -Value $json -Encoding UTF8
+}
+
+function New-WizardRunState {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Steps,
+        [bool]$DryRun = $false,
+        [bool]$NonInteractive = $false
+    )
+
+    $runId = [Guid]::NewGuid().ToString('N')
+    $startedAt = [DateTimeOffset]::UtcNow
+    $stepObjects = New-Object System.Collections.Generic.List[object]
+    for ($i = 0; $i -lt $Steps.Count; $i++) {
+        $stepObjects.Add([PSCustomObject]@{
+            Index = $i + 1
+            Name = $Steps[$i]
+            State = 'queued'
+            StartTimeUtc = $null
+            EndTimeUtc = $null
+            DurationMs = $null
+            ExitCode = $null
+            Message = $null
+        })
+    }
+
+    return [PSCustomObject]@{
+        RunId = $runId
+        StartedAtUtc = $startedAt.ToString('o')
+        EndedAtUtc = $null
+        DurationMs = $null
+        DryRun = [bool]$DryRun
+        NonInteractive = [bool]$NonInteractive
+        Status = 'running'
+        Steps = $stepObjects
+    }
+}
+
+function Update-WizardStepState {
+    param(
+        [Parameter(Mandatory = $true)]$RunState,
+        [Parameter(Mandatory = $true)][int]$StepIndex,
+        [Parameter(Mandatory = $true)][ValidateSet('queued', 'running', 'succeeded', 'failed', 'skipped')][string]$State,
+        [int]$ExitCode = 0,
+        [string]$Message
+    )
+
+    if ($null -eq $RunState -or $null -eq $RunState.Steps) { return }
+    if ($StepIndex -lt 1 -or $StepIndex -gt $RunState.Steps.Count) { return }
+
+    $step = $RunState.Steps[$StepIndex - 1]
+    $now = [DateTimeOffset]::UtcNow
+    $step.State = $State
+    if ($PSBoundParameters.ContainsKey('Message')) {
+        $step.Message = $Message
+    }
+
+    if ($State -eq 'running') {
+        $step.StartTimeUtc = $now.ToString('o')
+        $step.EndTimeUtc = $null
+        $step.DurationMs = $null
+        $step.ExitCode = $null
+        return
+    }
+
+    if ($State -in @('succeeded', 'failed', 'skipped')) {
+        if ($null -eq $step.StartTimeUtc) {
+            $step.StartTimeUtc = $now.ToString('o')
+        }
+        $step.EndTimeUtc = $now.ToString('o')
+        try {
+            $start = [DateTimeOffset]::Parse($step.StartTimeUtc)
+            $step.DurationMs = [int][Math]::Round(($now - $start).TotalMilliseconds)
+        }
+        catch {
+            $step.DurationMs = $null
+        }
+        $step.ExitCode = $ExitCode
+    }
+}
+
+function Complete-WizardRunState {
+    param(
+        [Parameter(Mandatory = $true)]$RunState,
+        [Parameter(Mandatory = $true)][ValidateSet('succeeded', 'failed')][string]$Status
+    )
+
+    if ($null -eq $RunState) { return }
+    $ended = [DateTimeOffset]::UtcNow
+    $RunState.EndedAtUtc = $ended.ToString('o')
+    $RunState.Status = $Status
+    try {
+        $start = [DateTimeOffset]::Parse($RunState.StartedAtUtc)
+        $RunState.DurationMs = [int][Math]::Round(($ended - $start).TotalMilliseconds)
+    }
+    catch {
+        $RunState.DurationMs = $null
+    }
+}
+
+<# .SYNOPSIS Print wizard step table from run-state. #>
+function Write-WizardSummary {
+    param([Parameter(Mandatory = $true)]$RunState)
+
+    if ($null -eq $RunState -or $null -eq $RunState.Steps) { return }
+
+    Write-Host ''
+    Write-Host '=== Wizard Step Summary ===' -ForegroundColor Cyan
+    foreach ($step in $RunState.Steps) {
+        $durationText = if ($null -eq $step.DurationMs) { '-' } else { ('{0:N1}s' -f ($step.DurationMs / 1000.0)) }
+        $exitText = if ($null -eq $step.ExitCode) { '-' } else { [string]$step.ExitCode }
+        $line = ('[{0,2}] {1,-30} {2,-10} duration={3,-7} exit={4}' -f $step.Index, $step.Name, $step.State, $durationText, $exitText)
+        if ($step.State -eq 'failed') {
+            Write-Host $line -ForegroundColor Red
+            if (-not [string]::IsNullOrWhiteSpace($step.Message)) {
+                Write-Host ("     reason: {0}" -f $step.Message) -ForegroundColor Yellow
+            }
+        }
+        elseif ($step.State -eq 'succeeded') {
+            Write-Host $line -ForegroundColor Green
+        }
+        else {
+            Write-Host $line -ForegroundColor Yellow
+        }
+    }
+
+    $overallDuration = if ($null -eq $RunState.DurationMs) { '-' } else { ('{0:N1}s' -f ($RunState.DurationMs / 1000.0)) }
+    Write-Host ("Run status: {0} | Duration: {1} | RunId: {2}" -f $RunState.Status, $overallDuration, $RunState.RunId) -ForegroundColor Cyan
+}
+
+<# .SYNOPSIS Write wizard run-state JSON under publish/logs; return path. #>
+function Write-WizardProgressJson {
+    param([Parameter(Mandatory = $true)]$RunState)
+
+    if ($null -eq $RunState) { return $null }
+
+    $versionForPath = if ([string]::IsNullOrWhiteSpace([string]$RunState.RunId)) { 'wizard' } else { "wizard-$($RunState.RunId)" }
+    $paths = Get-ReleasePaths -Version $versionForPath
+    $fileName = "wizard-progress-$([DateTime]::UtcNow.ToString('yyyyMMdd_HHmmss')).json"
+    $path = Join-Path $paths.LogsRoot $fileName
+    Write-JsonFile -Object $RunState -Path $path
+    return $path
 }

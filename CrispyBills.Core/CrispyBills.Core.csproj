@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\CrispyBills.Mobile.Android\Models\BillItem.cs" Link="Models\BillItem.cs" />
+    <Compile Include="..\CrispyBills.Mobile.Android\Models\IntegrityCheckReport.cs" Link="Models\IntegrityCheckReport.cs" />
+    <Compile Include="..\CrispyBills.Mobile.Android\Models\RecurrenceEndMode.cs" Link="Models\RecurrenceEndMode.cs" />
+    <Compile Include="..\CrispyBills.Mobile.Android\Models\RecurrenceFrequency.cs" Link="Models\RecurrenceFrequency.cs" />
+    <Compile Include="..\CrispyBills.Mobile.Android\Models\YearData.cs" Link="Models\YearData.cs" />
+    <Compile Include="..\CrispyBills.Mobile.Android\Services\IBillingRepository.cs" Link="Services\IBillingRepository.cs" />
+    <Compile Include="..\CrispyBills.Mobile.Android\Services\BillingService.cs" Link="Services\BillingService.cs" />
+    <Compile Include="..\CrispyBills.Mobile.Android\Services\MonthNames.cs" Link="Services\MonthNames.cs" />
+    <Compile Include="..\CrispyBills.Mobile.Android\Services\MobileStructuredReportCsv.cs" Link="Services\MobileStructuredReportCsv.cs" />
+    <Compile Include="..\CrispyBills.Mobile.Android\Services\YearSummaryHtmlBuilder.cs" Link="Services\YearSummaryHtmlBuilder.cs" />
+  </ItemGroup>
+</Project>

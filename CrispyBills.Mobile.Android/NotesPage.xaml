@@ -4,16 +4,17 @@
              x:Class="CrispyBills.Mobile.Android.NotesPage"
              Title="Notes">
 
-    <Grid RowDefinitions="*,Auto" Padding="14" RowSpacing="10">
+    <Grid RowDefinitions="*,Auto" Padding="14" RowSpacing="12">
         <Editor x:Name="NotesEditor"
                 Grid.Row="0"
                 AutoSize="TextChanges"
-                Placeholder="Write your monthly reminders, payment notes, and follow-ups here..."
-                FontSize="15" />
+                Placeholder="Notes, reminders, payment follow-ups..."
+                FontSize="16"
+                MinimumHeightRequest="200" />
 
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-            <Label x:Name="LinesLabel" VerticalOptions="Center" TextColor="{StaticResource MutedText}" />
-            <Button Grid.Column="2" Text="Save" Clicked="OnSaveClicked" />
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <Label x:Name="LinesLabel" VerticalOptions="Center" TextColor="{StaticResource MutedText}" FontSize="14" />
+            <Button Grid.Column="1" Text="Save" Clicked="OnSaveClicked" HeightRequest="48" />
         </Grid>
     </Grid>
 
