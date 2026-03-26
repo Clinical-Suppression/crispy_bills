@@ -5,14 +5,15 @@
              xmlns:local="clr-namespace:CrispyBills.Mobile.Android"
              x:Class="CrispyBills.Mobile.Android.MainPage"
              Shell.NavBarIsVisible="False"
-             Title="Crispy Bills">
+             Title="Crispy Bills"
+             Background="{AppThemeBinding Light={StaticResource PageBackgroundBrush}, Dark={StaticResource PageBackgroundBrushDark}}">
 
-    <Grid RowDefinitions="Auto,*" RowSpacing="0" BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource OffBlack}}">
+    <Grid RowDefinitions="Auto,*" RowSpacing="0">
 
         <!-- Header -->
         <Border Grid.Row="0"
                 StrokeThickness="0"
-                BackgroundColor="{StaticResource PrimaryDark}"
+                Background="{StaticResource PrimaryDarkHeaderBrush}"
                 Padding="14,16,14,14">
             <VerticalStackLayout Spacing="14">
                 <Label Text="Crispy Bills"
@@ -46,7 +47,7 @@
 
             <!-- Summary cards -->
             <Grid Grid.Row="0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
-                <Border Grid.Row="0" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                <Border Grid.Row="0" Grid.Column="0" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="6">
                         <Label Text="Income" FontSize="12" TextColor="{StaticResource MutedText}" />
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -70,19 +71,19 @@
                         </Grid>
                     </VerticalStackLayout>
                 </Border>
-                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
                         <Label Text="Unpaid" FontSize="12" TextColor="{StaticResource MutedText}" />
                         <Label x:Name="UnpaidLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Danger}" />
                     </VerticalStackLayout>
                 </Border>
-                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
                         <Label Text="Remaining" FontSize="12" TextColor="{StaticResource MutedText}" />
                         <Label x:Name="RemainingLabel" FontSize="20" FontAttributes="Bold" />
                     </VerticalStackLayout>
                 </Border>
-                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
                         <Label Text="Bills" FontSize="12" TextColor="{StaticResource MutedText}" />
                         <Label x:Name="BillCountLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
@@ -108,11 +109,10 @@
                        Margin="0,0,0,2" />
             <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
                 <HorizontalStackLayout Spacing="10" Padding="0,4">
-                    <Button x:Name="AddBillsButton" Text="Add bill(s)" Clicked="OnAddClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
                     <Button Text="Rollover" Clicked="OnRolloverClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
                     <Button Text="New Year" Clicked="OnNewYearClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
-                    <Button Text="Import" Clicked="OnImportClicked" Padding="16,12" CornerRadius="20" FontSize="13" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
-                    <Button Text="Export" Clicked="OnExportClicked" Padding="16,12" CornerRadius="20" FontSize="13" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+                    <Button Text="Import" Clicked="OnImportClicked" Padding="16,12" CornerRadius="20" FontSize="13" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
+                    <Button Text="Export" Clicked="OnExportClicked" Padding="16,12" CornerRadius="20" FontSize="13" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
                 </HorizontalStackLayout>
             </ScrollView>
             </VerticalStackLayout>
@@ -127,8 +127,18 @@
                 <Picker x:Name="CategoryPicker" Grid.Column="1" Title="Category" SelectedIndexChanged="OnCategoryChanged" HeightRequest="48" />
             </Grid>
 
-            <!-- Bill list -->
-            <RefreshView x:Name="BillsRefreshView" Grid.Row="4" Refreshing="OnBillsRefreshing">
+            <!-- Bill list: add button only when month has bills (see UpdateAddButtonText) -->
+            <Grid Grid.Row="4" RowDefinitions="Auto,*" RowSpacing="8">
+                <Button Grid.Row="0"
+                        x:Name="BillsListAddButton"
+                        Text="Add bill(s)"
+                        Clicked="OnAddClicked"
+                        Padding="16,12"
+                        CornerRadius="20"
+                        FontSize="13"
+                        HorizontalOptions="Start"
+                        IsVisible="False" />
+                <RefreshView x:Name="BillsRefreshView" Grid.Row="1" Refreshing="OnBillsRefreshing">
                 <CollectionView x:Name="BillsCollection" SelectionMode="None" Margin="0,4,0,0">
                     <CollectionView.EmptyView>
                         <VerticalStackLayout Padding="24,32" Spacing="16" HorizontalOptions="Center">
@@ -141,7 +151,7 @@
                     <CollectionView.ItemTemplate>
                         <DataTemplate x:DataType="models:BillListItem">
                             <Border StrokeThickness="0"
-                                    BackgroundColor="{StaticResource CardBackground}"
+                                    BackgroundColor="{Binding CardRowBackground}"
                                     StrokeShape="RoundRectangle 14"
                                     Padding="0"
                                     Margin="0,0,0,10">
@@ -171,8 +181,8 @@
                                                     <TapGestureRecognizer Tapped="OnBillCardTapped" />
                                                 </VerticalStackLayout.GestureRecognizers>
                                                 <HorizontalStackLayout Spacing="10">
-                                                    <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="17" LineBreakMode="TailTruncation" HorizontalOptions="FillAndExpand" />
-                                                    <Label Text="{Binding AmountDisplay}" FontAttributes="Bold" FontSize="17" />
+                                                    <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="17" LineBreakMode="TailTruncation" HorizontalOptions="FillAndExpand" TextColor="{StaticResource NeutralText}" />
+                                                    <Label Text="{Binding AmountDisplay}" FontAttributes="Bold" FontSize="17" TextColor="{StaticResource NeutralText}" />
                                                 </HorizontalStackLayout>
                                                 <Label Text="{Binding Category}" TextColor="{StaticResource MutedText}" FontSize="13" />
                                                 <Label Text="{Binding DueDate, StringFormat='Due {0:MMM d}'}" TextColor="{StaticResource MutedText}" FontSize="13" />
@@ -181,7 +191,7 @@
                                                     StrokeThickness="0"
                                                     Padding="12,8"
                                                     MinimumHeightRequest="36"
-                                                    BackgroundColor="{Binding StatusBadgeBackground}"
+                                                    BackgroundColor="Transparent"
                                                     StrokeShape="RoundRectangle 999"
                                                     VerticalOptions="Center">
                                                 <Label Text="{Binding StatusText}" FontSize="12" TextColor="{Binding StatusBadgeTextColor}" VerticalOptions="Center" />
@@ -194,12 +204,13 @@
                     </CollectionView.ItemTemplate>
                 </CollectionView>
             </RefreshView>
+            </Grid>
 
             <!-- Bottom nav -->
             <Grid Grid.Row="5" ColumnDefinitions="*,*,*" ColumnSpacing="8" Padding="0,8,0,0">
-                <Button Grid.Column="0" Text="Summary" Clicked="OnSummaryClicked" HeightRequest="52" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
-                <Button Grid.Column="1" Text="Notes" Clicked="OnNotesClicked" HeightRequest="52" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
-                <Button Grid.Column="2" Text="Settings" Clicked="OnSettingsClicked" HeightRequest="52" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+                <Button Grid.Column="0" Text="Summary" Clicked="OnSummaryClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
+                <Button Grid.Column="1" Text="Notes" Clicked="OnNotesClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
+                <Button Grid.Column="2" Text="Settings" Clicked="OnSettingsClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
             </Grid>
         </Grid>
     </Grid>

@@ -453,8 +453,12 @@ public partial class MainPage : ContentPage
 	private void UpdateAddButtonText()
 	{
 		var hasBills = _monthBills.Count > 0;
-		var text = hasBills ? "Add bill(s)" : "Add your first bill(s)";
-		AddBillsButton.Text = text;
+		BillsListAddButton.IsVisible = hasBills;
+		if (hasBills)
+		{
+			BillsListAddButton.Text = "Add bill(s)";
+		}
+
 		EmptyAddBillsButton.Text = "Add your first bill(s)";
 	}
 

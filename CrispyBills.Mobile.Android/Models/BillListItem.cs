@@ -23,8 +23,11 @@ public sealed class BillListItem
     /// <summary>Short status label used in list views.</summary>
     public string StatusText => IsPaid ? "Paid" : (IsPastDue ? "Past Due" : (IsSoon ? "Soon" : "Open"));
 
-    /// <summary>Background for the status pill (touch-optimized list).</summary>
+    /// <summary>Background for the status pill (legacy; row tint uses <see cref="CardRowBackground"/>).</summary>
     public Color StatusBadgeBackground { get; }
+
+    /// <summary>Full row background tint (paid / past due / soon / open).</summary>
+    public Color CardRowBackground { get; }
 
     /// <summary>Foreground for the status pill.</summary>
     public Color StatusBadgeTextColor { get; }
@@ -64,5 +67,8 @@ public sealed class BillListItem
             StatusBadgeBackground = Color.FromArgb("#DBEAFE");
             StatusBadgeTextColor = Color.FromArgb("#1E3A8A");
         }
+
+        // Full-row tint matches status family; inner chip uses transparent overlay in XAML.
+        CardRowBackground = StatusBadgeBackground;
     }
 }

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8" ?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <?xaml-comp compile="true" ?>
 <ResourceDictionary 
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
@@ -58,4 +58,32 @@
     <SolidColorBrush x:Key="Gray600Brush" Color="{StaticResource Gray600}"/>
     <SolidColorBrush x:Key="Gray900Brush" Color="{StaticResource Gray900}"/>
     <SolidColorBrush x:Key="Gray950Brush" Color="{StaticResource Gray950}"/>
+
+    <!-- Frosted / depth: soft gradients (no platform blur) -->
+    <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#F0F4F8" Offset="0" />
+        <GradientStop Color="#E8EDF5" Offset="0.5" />
+        <GradientStop Color="#F5F7FA" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="PageBackgroundBrushDark" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#1F1F1F" Offset="0" />
+        <GradientStop Color="#2A2A2A" Offset="1" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="SurfaceGlassBrushLight" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#EEF2F9" Offset="0" />
+        <GradientStop Color="#DDE3EE" Offset="1" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="SurfaceGlassBrushDark" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#2E2E2E" Offset="0" />
+        <GradientStop Color="#252525" Offset="1" />
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="SurfaceStrokeLightBrush" Color="#18000000" />
+    <SolidColorBrush x:Key="SurfaceStrokeDarkBrush" Color="#1AFFFFFF" />
+
+    <LinearGradientBrush x:Key="PrimaryDarkHeaderBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#173762" Offset="0" />
+        <GradientStop Color="#152A4F" Offset="1" />
+    </LinearGradientBrush>
 </ResourceDictionary>
