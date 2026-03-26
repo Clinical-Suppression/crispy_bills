@@ -19,8 +19,14 @@ public static class MauiProgram
 		builder.Services.AddSingleton<IBillingRepository, BillingRepository>();
 		builder.Services.AddSingleton<BillingService>();
 		builder.Services.AddSingleton<LocalizationService>();
-		builder.Services.AddSingleton<MainPage>();
-		builder.Services.AddSingleton<AppShell>();
+		builder.Services.AddSingleton<BiometricAuthService>();
+		builder.Services.AddSingleton<AppLockService>();
+		// Shell/Page instances must be fresh per window lifecycle on Android.
+		// Reusing singleton visual trees can cause handler/context invalidation on recreation.
+		builder.Services.AddTransient<MainPage>();
+		builder.Services.AddTransient<AppShell>();
+		builder.Services.AddTransient<PinSetupPage>();
+		builder.Services.AddTransient<UnlockPage>();
 
 #if DEBUG
 		builder.Logging.AddDebug();

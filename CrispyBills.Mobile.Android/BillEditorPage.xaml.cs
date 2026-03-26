@@ -45,24 +45,15 @@ public partial class BillEditorPage : ContentPage
 		RecurringSwitch.IsToggled = seed.IsRecurring;
 
 		RecurrenceFrequencyPicker.SelectedIndex = !seed.IsRecurring
-			? 2
+			? 0
 			: seed.RecurrenceFrequency switch
 			{
-				RecurrenceFrequency.Weekly => 0,
-				RecurrenceFrequency.BiWeekly => 1,
-				_ => 2
+				RecurrenceFrequency.Weekly => 3,
+				RecurrenceFrequency.BiWeekly => 4,
+				_ when seed.RecurrenceEveryMonths >= 3 => 2,
+				_ when seed.RecurrenceEveryMonths == 2 => 1,
+				_ => 0
 			};
-		UpdateMonthlyIntervalRowVisibility();
-
-		RecurrenceEveryPicker.SelectedIndex = seed.RecurrenceEveryMonths switch
-		{
-			1 => 0,
-			2 => 1,
-			3 => 2,
-			6 => 3,
-			12 => 4,
-			_ => 0
-		};
 		RecurrenceEndModePicker.SelectedIndex = seed.RecurrenceEndMode switch
 		{
 			RecurrenceEndMode.EndOnDate => 1,
@@ -113,12 +104,10 @@ public partial class BillEditorPage : ContentPage
 			category = "General";
 		}
 
-		var recurrenceEveryMonths = RecurrenceEveryPicker.SelectedIndex switch
+		var recurrenceEveryMonths = RecurrenceFrequencyPicker.SelectedIndex switch
 		{
 			1 => 2,
 			2 => 3,
-			3 => 6,
-			4 => 12,
 			_ => 1
 		};
 
@@ -139,8 +128,8 @@ public partial class BillEditorPage : ContentPage
 
 		var recurrenceFrequency = RecurrenceFrequencyPicker.SelectedIndex switch
 		{
-			0 => RecurrenceFrequency.Weekly,
-			1 => RecurrenceFrequency.BiWeekly,
+			3 => RecurrenceFrequency.Weekly,
+			4 => RecurrenceFrequency.BiWeekly,
 			_ => RecurrenceFrequency.MonthlyInterval
 		};
 
@@ -176,7 +165,7 @@ public partial class BillEditorPage : ContentPage
 		}
 		else
 		{
-			UpdateMonthlyIntervalRowVisibility();
+			// Recurrence details remain visible while recurrence is enabled.
 		}
 
 		ValidateInputs(showValidation: false);
@@ -184,13 +173,7 @@ public partial class BillEditorPage : ContentPage
 
 	private void OnRecurrenceFrequencyChanged(object? sender, EventArgs e)
 	{
-		UpdateMonthlyIntervalRowVisibility();
 		ValidateInputs(showValidation: false);
-	}
-
-	private void UpdateMonthlyIntervalRowVisibility()
-	{
-		MonthlyIntervalRow.IsVisible = RecurrenceFrequencyPicker.SelectedIndex == 2;
 	}
 
 	private void OnEndModeChanged(object? sender, EventArgs e)
@@ -249,5 +232,15 @@ public partial class BillEditorPage : ContentPage
 		}
 
 		return errors.Count == 0;
+	}
+
+	private void OnPaidRowTapped(object? sender, TappedEventArgs e)
+	{
+		PaidSwitch.IsToggled = !PaidSwitch.IsToggled;
+	}
+
+	private void OnRecurringRowTapped(object? sender, TappedEventArgs e)
+	{
+		RecurringSwitch.IsToggled = !RecurringSwitch.IsToggled;
 	}
 }

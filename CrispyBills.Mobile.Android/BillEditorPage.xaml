@@ -1,16 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:CrispyBills.Mobile.Android"
              x:Class="CrispyBills.Mobile.Android.BillEditorPage"
              Title="Bill Details">
 
     <ScrollView>
         <VerticalStackLayout Padding="18" Spacing="14">
             <Label Text="Bill name" FontAttributes="Bold" FontSize="15" />
-            <Entry x:Name="NameEntry" Placeholder="e.g. Rent, Electric" ReturnType="Next" TextChanged="OnInputChanged" HeightRequest="48" />
+            <Entry x:Name="NameEntry" Placeholder="e.g. Rent, Electric" ReturnType="Next" TextChanged="OnInputChanged" HeightRequest="48">
+                <Entry.Behaviors>
+                    <local:SelectAllEntryBehavior />
+                </Entry.Behaviors>
+            </Entry>
 
             <Label Text="Amount" FontAttributes="Bold" FontSize="15" />
-            <Entry x:Name="AmountEntry" Placeholder="0.00" Keyboard="Numeric" ReturnType="Next" TextChanged="OnInputChanged" HeightRequest="48" />
+            <Entry x:Name="AmountEntry" Placeholder="0.00" Keyboard="Numeric" ReturnType="Next" TextChanged="OnInputChanged" HeightRequest="48">
+                <Entry.Behaviors>
+                    <local:SelectAllEntryBehavior />
+                </Entry.Behaviors>
+            </Entry>
 
             <Label Text="Category" FontAttributes="Bold" FontSize="15" />
             <Picker x:Name="CategoryPicker" Title="Choose category" SelectedIndexChanged="OnInputChanged" HeightRequest="48" />
@@ -20,40 +29,37 @@
 
             <HorizontalStackLayout Spacing="12">
                 <Switch x:Name="PaidSwitch" VerticalOptions="Center" />
-                <Label Text="Paid" VerticalOptions="Center" FontSize="16" />
+                <Label Text="Paid" VerticalOptions="Center" FontSize="16">
+                    <Label.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnPaidRowTapped" />
+                    </Label.GestureRecognizers>
+                </Label>
             </HorizontalStackLayout>
 
             <HorizontalStackLayout Spacing="12">
                 <Switch x:Name="RecurringSwitch" VerticalOptions="Center" Toggled="OnRecurringToggled" />
-                <Label Text="Recurring in future months" VerticalOptions="Center" FontSize="16" />
+                <Label Text="Recurring" VerticalOptions="Center" FontSize="16">
+                    <Label.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnRecurringRowTapped" />
+                    </Label.GestureRecognizers>
+                </Label>
             </HorizontalStackLayout>
 
-            <Grid x:Name="RecurringOptionsGrid" IsVisible="False" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
+            <Grid x:Name="RecurringOptionsGrid" IsVisible="False" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                     <Label Text="Repeat" VerticalOptions="Center" />
                     <Picker Grid.Column="1" x:Name="RecurrenceFrequencyPicker" Title="How it repeats" SelectedIndexChanged="OnRecurrenceFrequencyChanged" HeightRequest="48">
                         <Picker.Items>
+                            <x:String>Monthly (every month)</x:String>
+                            <x:String>Every 2 months</x:String>
+                            <x:String>Every 3 months</x:String>
                             <x:String>Weekly</x:String>
                             <x:String>Bi-weekly</x:String>
-                            <x:String>Monthly (interval)</x:String>
                         </Picker.Items>
                     </Picker>
                 </Grid>
 
-                <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8" x:Name="MonthlyIntervalRow">
-                    <Label Text="Every" VerticalOptions="Center" />
-                    <Picker Grid.Column="1" x:Name="RecurrenceEveryPicker" SelectedIndexChanged="OnInputChanged" HeightRequest="48">
-                        <Picker.Items>
-                            <x:String>1 month</x:String>
-                            <x:String>2 months</x:String>
-                            <x:String>3 months</x:String>
-                            <x:String>6 months</x:String>
-                            <x:String>12 months</x:String>
-                        </Picker.Items>
-                    </Picker>
-                </Grid>
-
-                <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8">
                     <Label Text="Ends" VerticalOptions="Center" />
                     <Picker Grid.Column="1" x:Name="RecurrenceEndModePicker" SelectedIndexChanged="OnEndModeChanged" HeightRequest="48">
                         <Picker.Items>
@@ -64,8 +70,12 @@
                     </Picker>
                 </Grid>
 
-                <DatePicker Grid.Row="3" x:Name="RecurrenceEndDatePicker" IsVisible="False" HeightRequest="48" />
-                <Entry Grid.Row="3" x:Name="RecurrenceCountEntry" IsVisible="False" Keyboard="Numeric" Placeholder="Occurrences (e.g. 6)" HeightRequest="48" TextChanged="OnInputChanged" />
+                <DatePicker Grid.Row="2" x:Name="RecurrenceEndDatePicker" IsVisible="False" HeightRequest="48" />
+                <Entry Grid.Row="2" x:Name="RecurrenceCountEntry" IsVisible="False" Keyboard="Numeric" Placeholder="Occurrences (e.g. 6)" HeightRequest="48" TextChanged="OnInputChanged">
+                    <Entry.Behaviors>
+                        <local:SelectAllEntryBehavior />
+                    </Entry.Behaviors>
+                </Entry>
             </Grid>
 
             <Label x:Name="ValidationLabel" TextColor="{StaticResource ValidationDanger}" IsVisible="False" />

@@ -144,4 +144,139 @@ public sealed class BillingServiceReliabilityTests
         Assert.True(deleted);
         Assert.Equal(2026, service.CurrentYear);
     }
+
+    [Fact]
+    public async Task SetIncomeAsync_CurrentAndFutureOnly_StoresEntryPayPeriod()
+    {
+        var repo = new InMemoryBillingRepository();
+        var service = new BillingService(repo);
+        await service.LoadYearAsync(2026);
+
+        await service.SetIncomeAsync(1, 1200m, BillingService.IncomePayPeriodMonthly);
+        await service.SetIncomeAsync(3, 500m, BillingService.IncomePayPeriodWeekly);
+
+        Assert.Equal(1200m, service.GetIncome(1));
+        Assert.Equal(1200m, service.GetIncome(2));
+        Assert.Equal(2166.67m, service.GetIncome(3));
+        Assert.Equal(2166.67m, service.GetIncome(12));
+
+        var februaryEntry = await service.GetIncomeEntryAsync(2);
+        var marchEntry = await service.GetIncomeEntryAsync(3);
+
+        Assert.Equal((1200m, BillingService.IncomePayPeriodMonthly), februaryEntry);
+        Assert.Equal((500m, BillingService.IncomePayPeriodWeekly), marchEntry);
+    }
+
+    [Fact]
+    public async Task AddBillAsync_WeeklyRecurring_CreatesExpectedMonthlyWeekLabels()
+    {
+        var repo = new InMemoryBillingRepository();
+        var service = new BillingService(repo);
+        await service.LoadYearAsync(2026);
+
+        await service.AddBillAsync(2, new BillItem
+        {
+            Name = "Gym",
+            Category = "Health",
+            Amount = 25m,
+            DueDate = new DateTime(2026, 2, 1),
+            IsRecurring = true,
+            RecurrenceFrequency = RecurrenceFrequency.Weekly
+        });
+
+        var februaryBills = service.GetBills(2).OrderBy(x => x.DueDate).ToList();
+
+        Assert.Equal(4, februaryBills.Count);
+        Assert.Equal(
+            ["Gym - Week 1", "Gym - Week 2", "Gym - Week 3", "Gym - Week 4"],
+            februaryBills.Select(x => x.Name).ToArray());
+        Assert.Equal(
+            [new DateTime(2026, 2, 1), new DateTime(2026, 2, 8), new DateTime(2026, 2, 15), new DateTime(2026, 2, 22)],
+            februaryBills.Select(x => x.DueDate).ToArray());
+    }
+
+    [Fact]
+    public async Task TogglePaidAsync_WeeklyOccurrence_OnlyChangesSelectedOccurrence()
+    {
+        var repo = new InMemoryBillingRepository();
+        var service = new BillingService(repo);
+        await service.LoadYearAsync(2026);
+
+        await service.AddBillAsync(2, new BillItem
+        {
+            Name = "Tutoring",
+            Category = "Income Offset",
+            Amount = 40m,
+            DueDate = new DateTime(2026, 2, 1),
+            IsRecurring = true,
+            RecurrenceFrequency = RecurrenceFrequency.Weekly
+        });
+
+        var target = service.GetBills(2).Single(x => x.DueDate == new DateTime(2026, 2, 8));
+        await service.TogglePaidAsync(2, target.Id);
+
+        var februaryBills = service.GetBills(2).OrderBy(x => x.DueDate).ToList();
+
+        Assert.Single(februaryBills, x => x.IsPaid);
+        Assert.True(februaryBills.Single(x => x.DueDate == new DateTime(2026, 2, 8)).IsPaid);
+        Assert.All(
+            februaryBills.Where(x => x.DueDate != new DateTime(2026, 2, 8)),
+            bill => Assert.False(bill.IsPaid));
+    }
+
+    [Fact]
+    public async Task UpdateBillAsync_WeeklyChild_OnlyChangesCurrentAndFutureOccurrences()
+    {
+        var repo = new InMemoryBillingRepository();
+        var service = new BillingService(repo);
+        await service.LoadYearAsync(2026);
+
+        await service.AddBillAsync(2, new BillItem
+        {
+            Name = "Lessons",
+            Category = "Education",
+            Amount = 30m,
+            DueDate = new DateTime(2026, 2, 1),
+            IsRecurring = true,
+            RecurrenceFrequency = RecurrenceFrequency.Weekly
+        });
+
+        var thirdOccurrence = service.GetBills(2).Single(x => x.DueDate == new DateTime(2026, 2, 15));
+        var edited = thirdOccurrence.Clone();
+        edited.Name = "Lessons Updated";
+        edited.Amount = 45m;
+        edited.IsRecurring = true;
+        edited.RecurrenceFrequency = RecurrenceFrequency.Weekly;
+
+        await service.UpdateBillAsync(2, thirdOccurrence.Id, edited);
+
+        var februaryBills = service.GetBills(2).OrderBy(x => x.DueDate).ToList();
+
+        Assert.Equal(
+            ["Lessons - Week 1", "Lessons - Week 2", "Lessons Updated - Week 1", "Lessons Updated - Week 2"],
+            februaryBills.Select(x => x.Name).ToArray());
+        Assert.Equal([30m, 30m, 45m, 45m], februaryBills.Select(x => x.Amount).ToArray());
+    }
+
+    [Fact]
+    public async Task SoonThreshold_RoundTripsAndSkipsPaidOrPastDueBills()
+    {
+        var repo = new InMemoryBillingRepository();
+        var service = new BillingService(repo);
+        await service.LoadYearAsync(2026);
+
+        await service.SetSoonThresholdAsync(2, BillingService.SoonThresholdUnitWeeks);
+        var threshold = await service.GetSoonThresholdAsync();
+
+        var soonBill = new BillItem { DueDate = DateTime.Today.AddDays(10), IsPaid = false };
+        var farBill = new BillItem { DueDate = DateTime.Today.AddDays(20), IsPaid = false };
+        var paidBill = new BillItem { DueDate = DateTime.Today.AddDays(2), IsPaid = true };
+        var pastDueBill = new BillItem { DueDate = DateTime.Today.AddDays(-1), IsPaid = false };
+
+        Assert.Equal((2, BillingService.SoonThresholdUnitWeeks), threshold);
+        Assert.True(service.IsBillSoon(soonBill, threshold.Value, threshold.Unit));
+        Assert.False(service.IsBillSoon(farBill, threshold.Value, threshold.Unit));
+        Assert.False(service.IsBillSoon(paidBill, threshold.Value, threshold.Unit));
+        Assert.False(service.IsBillSoon(pastDueBill, threshold.Value, threshold.Unit));
+    }
 }

@@ -167,5 +167,33 @@ Describe 'Crispy_Bills Release Wizard' {
         $chosen.Count | Should -Be 1
         $chosen[0] | Should -Be 'version.ps1'
     }
+
+    It 'Update-ActivityPercent only advances on pulses and caps at 95' {
+        (Update-ActivityPercent -CurrentPercent 10 -PulseStrength 0) | Should -Be 10
+        (Update-ActivityPercent -CurrentPercent 10 -PulseStrength 2) | Should -BeGreaterThan 10
+        (Update-ActivityPercent -CurrentPercent 94 -PulseStrength 10) | Should -Be 95
+    }
+
+    It 'Format-ActivityBar renders expected width and fill bounds' {
+        (Format-ActivityBar -Percent 0 -Width 10) | Should -Be '[..........]'
+        (Format-ActivityBar -Percent 50 -Width 10) | Should -Be '[#####.....]'
+        (Format-ActivityBar -Percent 100 -Width 10) | Should -Be '[##########]'
+    }
+
+    It 'Get-ProcessTreeActivityPulse can sample current process safely' {
+        $pulse = Get-ProcessTreeActivityPulse -ProcessId $PID -LastCpuTime ([timespan]::Zero) -LastChildCount -1
+        $pulse | Should -Not -BeNullOrEmpty
+        $pulse.PulseStrength | Should -BeGreaterOrEqual 0
+    }
+
+    It 'wizard timeout checks are idle-based and message includes idle wording' {
+        $scriptContent = Get-Content -Path $script -Raw
+        ($scriptContent -match '\$idleSeconds\s*=\s*\(\$nowUtc\s*-\s*\$lastActivityAt\)\.TotalSeconds') | Should -Be $true
+        ($scriptContent -match 'timed out after .*idle') | Should -Be $true
+    }
+
+    It 'wizard script no longer depends on Write-Progress' {
+        (Select-String -Path $script -Pattern 'Write-Progress' -SimpleMatch -Quiet) | Should -Be $false
+    }
 }
 

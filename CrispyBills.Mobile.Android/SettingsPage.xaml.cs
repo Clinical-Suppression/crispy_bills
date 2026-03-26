@@ -7,10 +7,13 @@ public partial class SettingsPage : ContentPage
 {
 	private readonly BillingService _service;
 	private readonly LocalizationService _localization;
+	private readonly AppLockService _appLockService;
 	private readonly int _year;
 	private readonly int _month;
 	private readonly Func<Task> _reloadMainPage;
 	private bool _languageInit;
+	private bool _soonInit;
+	private bool _securityInit;
 
 	private static readonly (string Label, string Code)[] LanguageOptions =
 	[
@@ -22,11 +25,12 @@ public partial class SettingsPage : ContentPage
 		("German (Germany)", "de-DE")
 	];
 
-	public SettingsPage(BillingService service, int year, int month, Func<Task> reloadMainPage, LocalizationService localization)
+	public SettingsPage(BillingService service, int year, int month, Func<Task> reloadMainPage, LocalizationService localization, AppLockService appLockService)
 	{
 		InitializeComponent();
 		_service = service;
 		_localization = localization;
+		_appLockService = appLockService;
 		_year = year;
 		_month = month;
 		_reloadMainPage = reloadMainPage;
@@ -37,12 +41,22 @@ public partial class SettingsPage : ContentPage
 		_languageInit = false;
 		_ = InitLanguagePickerAsync();
 
+		SoonValuePicker.ItemsSource = Enumerable.Range(1, 30).Select(x => x.ToString(CultureInfo.InvariantCulture)).ToList();
+		SoonUnitPicker.ItemsSource = BillingService.SoonThresholdUnits().ToList();
+
 		VersionLabel.Text = $"Version {AppInfo.Current.VersionString} ({AppInfo.Current.BuildString})";
-		DataRootLabel.Text = $"Data: {Path.Combine(FileSystem.Current.AppDataDirectory, "CrispyBills")}";
+		DataRootLabel.Text = $"Private app data: {Path.Combine(FileSystem.Current.AppDataDirectory, "CrispyBills")}";
 
 		DebugToggle.IsToggled = _service.IsDebugDestructiveDeletesEnabled();
 		DeleteMonthButton.IsEnabled = DebugToggle.IsToggled;
 		DeleteYearButton.IsEnabled = DebugToggle.IsToggled;
+	}
+
+	protected override async void OnAppearing()
+	{
+		base.OnAppearing();
+		await InitSoonThresholdAsync();
+		await RefreshSecurityAsync();
 	}
 
 	private async void OnDebugToggleToggled(object? sender, ToggledEventArgs e)
@@ -68,6 +82,11 @@ public partial class SettingsPage : ContentPage
 		_service.SetDebugDestructiveDeletesEnabled(true);
 		DeleteMonthButton.IsEnabled = true;
 		DeleteYearButton.IsEnabled = true;
+	}
+
+	private void OnDebugLabelTapped(object? sender, TappedEventArgs e)
+	{
+		DebugToggle.IsToggled = !DebugToggle.IsToggled;
 	}
 
 	private async void OnDeleteMonthClicked(object? sender, EventArgs e)
@@ -176,6 +195,43 @@ public partial class SettingsPage : ContentPage
 		}
 	}
 
+	private async Task InitSoonThresholdAsync()
+	{
+		try
+		{
+			var threshold = await _service.GetSoonThresholdAsync();
+			_soonInit = true;
+			SoonValuePicker.SelectedItem = threshold.Value.ToString(CultureInfo.InvariantCulture);
+			SoonUnitPicker.SelectedItem = threshold.Unit;
+			_soonInit = false;
+		}
+		catch
+		{
+			_soonInit = false;
+		}
+	}
+
+	private async Task RefreshSecurityAsync()
+	{
+		try
+		{
+			var hasPin = await _appLockService.HasPinAsync();
+			var biometricAvailable = await _appLockService.IsBiometricAvailableAsync();
+			var biometricEnabled = hasPin && await _appLockService.IsBiometricEnabledAsync();
+
+			_securityInit = true;
+			ConfigurePinButton.Text = hasPin ? "Change PIN" : "Set PIN";
+			RemovePinButton.IsVisible = hasPin;
+			BiometricRow.IsVisible = hasPin && biometricAvailable;
+			BiometricSwitch.IsToggled = biometricEnabled;
+			_securityInit = false;
+		}
+		catch
+		{
+			_securityInit = false;
+		}
+	}
+
 	private async void OnLanguageChanged(object? sender, EventArgs e)
 	{
 		if (_languageInit || LanguagePicker.SelectedIndex < 0)
@@ -193,6 +249,71 @@ public partial class SettingsPage : ContentPage
 		{
 			await DiagnosticsLog.WriteAsync("SettingsLanguage", ex);
 			await DisplayAlert("Error", ex.Message, "OK");
+		}
+	}
+
+	private async void OnSoonThresholdChanged(object? sender, EventArgs e)
+	{
+		if (_soonInit || SoonValuePicker.SelectedItem is null || SoonUnitPicker.SelectedItem is null)
+		{
+			return;
+		}
+
+		try
+		{
+			var value = int.Parse(SoonValuePicker.SelectedItem.ToString()!, CultureInfo.InvariantCulture);
+			var unit = SoonUnitPicker.SelectedItem.ToString() ?? BillingService.SoonThresholdUnitDays;
+			await _service.SetSoonThresholdAsync(value, unit);
+			await _reloadMainPage();
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("SettingsSoonThreshold", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
+	}
+
+	private async void OnConfigurePinClicked(object? sender, EventArgs e)
+	{
+		var page = new PinSetupPage(_appLockService, allowSkip: false);
+		await Navigation.PushModalAsync(page);
+		await page.WaitForResultAsync();
+		await RefreshSecurityAsync();
+	}
+
+	private async void OnRemovePinClicked(object? sender, EventArgs e)
+	{
+		var confirm = await DisplayAlert("Remove PIN", "Turn off the app PIN and biometric unlock?", "Remove", "Cancel");
+		if (!confirm)
+		{
+			return;
+		}
+
+		await _appLockService.DisablePinAsync();
+		await RefreshSecurityAsync();
+	}
+
+	private void OnBiometricRowTapped(object? sender, TappedEventArgs e)
+	{
+		BiometricSwitch.IsToggled = !BiometricSwitch.IsToggled;
+	}
+
+	private async void OnBiometricSwitchToggled(object? sender, ToggledEventArgs e)
+	{
+		if (_securityInit)
+		{
+			return;
+		}
+
+		try
+		{
+			await _appLockService.SetBiometricEnabledAsync(e.Value);
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("SettingsBiometricToggle", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+			await RefreshSecurityAsync();
 		}
 	}
 }

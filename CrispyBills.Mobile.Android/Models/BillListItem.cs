@@ -18,9 +18,10 @@ public sealed class BillListItem
     public DateTime DueDate { get; }
     public bool IsPaid { get; }
     public bool IsPastDue { get; }
+    public bool IsSoon { get; }
 
     /// <summary>Short status label used in list views.</summary>
-    public string StatusText => IsPaid ? "Paid" : (IsPastDue ? "Past Due" : "Open");
+    public string StatusText => IsPaid ? "Paid" : (IsPastDue ? "Past Due" : (IsSoon ? "Soon" : "Open"));
 
     /// <summary>Background for the status pill (touch-optimized list).</summary>
     public Color StatusBadgeBackground { get; }
@@ -31,7 +32,7 @@ public sealed class BillListItem
     /// <summary>Constructs a projection from a <see cref="BillItem"/> instance.</summary>
     /// <param name="bill">Source bill to project.</param>
     /// <param name="amountDisplay">Optional formatted currency string; defaults to invariant F2.</param>
-    public BillListItem(BillItem bill, string? amountDisplay = null)
+    public BillListItem(BillItem bill, string? amountDisplay = null, bool isSoon = false)
     {
         Id = bill.Id;
         Name = bill.Name;
@@ -41,6 +42,7 @@ public sealed class BillListItem
         DueDate = bill.DueDate;
         IsPaid = bill.IsPaid;
         IsPastDue = bill.IsPastDue;
+        IsSoon = isSoon;
 
         if (bill.IsPaid)
         {
@@ -51,6 +53,11 @@ public sealed class BillListItem
         {
             StatusBadgeBackground = Color.FromArgb("#FEE2E2");
             StatusBadgeTextColor = Color.FromArgb("#991B1B");
+        }
+        else if (IsSoon)
+        {
+            StatusBadgeBackground = Color.FromArgb("#FEF3C7");
+            StatusBadgeTextColor = Color.FromArgb("#92400E");
         }
         else
         {

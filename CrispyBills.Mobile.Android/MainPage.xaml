@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:models="clr-namespace:CrispyBills.Mobile.Android.Models"
+             xmlns:local="clr-namespace:CrispyBills.Mobile.Android"
              x:Class="CrispyBills.Mobile.Android.MainPage"
              Shell.NavBarIsVisible="False"
              Title="Crispy Bills">
@@ -46,9 +47,27 @@
             <!-- Summary cards -->
             <Grid Grid.Row="0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
                 <Border Grid.Row="0" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
-                    <VerticalStackLayout Spacing="4">
+                    <VerticalStackLayout Spacing="6">
                         <Label Text="Income" FontSize="12" TextColor="{StaticResource MutedText}" />
-                        <Label x:Name="IncomeLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <Entry Grid.Column="0"
+                                   x:Name="IncomeEntry"
+                                   Placeholder="0.00"
+                                   Keyboard="Numeric"
+                                   Completed="OnIncomeEntryCompleted"
+                                   Unfocused="OnIncomeEntryUnfocused"
+                                   HeightRequest="48">
+                                <Entry.Behaviors>
+                                    <local:SelectAllEntryBehavior />
+                                </Entry.Behaviors>
+                            </Entry>
+                            <Picker Grid.Column="1"
+                                    x:Name="IncomePayPeriodPicker"
+                                    Title="Pay period"
+                                    SelectedIndexChanged="OnIncomePayPeriodChanged"
+                                    WidthRequest="140"
+                                    HeightRequest="48" />
+                        </Grid>
                     </VerticalStackLayout>
                 </Border>
                 <Border Grid.Row="0" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
@@ -89,8 +108,7 @@
                        Margin="0,0,0,2" />
             <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
                 <HorizontalStackLayout Spacing="10" Padding="0,4">
-                    <Button Text="Income" Clicked="OnSetIncomeClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
-                    <Button Text="Add" Clicked="OnAddClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
+                    <Button x:Name="AddBillsButton" Text="Add bill(s)" Clicked="OnAddClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
                     <Button Text="Rollover" Clicked="OnRolloverClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
                     <Button Text="New Year" Clicked="OnNewYearClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
                     <Button Text="Import" Clicked="OnImportClicked" Padding="16,12" CornerRadius="20" FontSize="13" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
@@ -101,7 +119,11 @@
 
             <!-- Search + category -->
             <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="10">
-                <Entry x:Name="SearchEntry" Placeholder="Search bills..." TextChanged="OnSearchChanged" HeightRequest="48" />
+                <Entry x:Name="SearchEntry" Placeholder="Search bills..." TextChanged="OnSearchChanged" HeightRequest="48">
+                    <Entry.Behaviors>
+                        <local:SelectAllEntryBehavior />
+                    </Entry.Behaviors>
+                </Entry>
                 <Picker x:Name="CategoryPicker" Grid.Column="1" Title="Category" SelectedIndexChanged="OnCategoryChanged" HeightRequest="48" />
             </Grid>
 
@@ -112,7 +134,7 @@
                         <VerticalStackLayout Padding="24,32" Spacing="16" HorizontalOptions="Center">
                             <Label Text="No bills yet" HorizontalOptions="Center" FontSize="18" TextColor="{StaticResource EmptyText}" />
                             <Label Text="Swipe left on a bill to toggle paid. Swipe right for edit or delete." HorizontalOptions="Center" FontSize="13" TextColor="{StaticResource MutedLight}" HorizontalTextAlignment="Center" />
-                            <Button Text="Add your first bill" Clicked="OnAddClicked" HorizontalOptions="Center" Padding="24,14" />
+                            <Button x:Name="EmptyAddBillsButton" Text="Add your first bill(s)" Clicked="OnAddClicked" HorizontalOptions="Center" Padding="24,14" />
                         </VerticalStackLayout>
                     </CollectionView.EmptyView>
 

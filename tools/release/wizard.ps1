@@ -33,7 +33,8 @@ param(
     [switch]$ApproveMajorVersion,
     [switch]$SkipVersion,
     [string]$ResponsesFile,
-    [switch]$NoProgressJson
+    [switch]$NoProgressJson,
+    [int]$TaskTimeoutSeconds = 0
 )
 
 Set-StrictMode -Version Latest
@@ -62,8 +63,176 @@ if (Test-Path $metadataPath) {
 }
 
 function Clear-WizardProgress {
-    try { Write-Progress -Activity 'Crispy_Bills Release Wizard' -Status 'Clearing' -Completed } catch {}
     Write-Host ''
+}
+
+function Get-ProcessActivityPulse {
+    param(
+        [Parameter(Mandatory = $true)]$Process,
+        [timespan]$LastCpuTime,
+        [int]$LastChildCount = -1,
+        [long]$LastStdOutLength = -1,
+        [long]$LastStdErrLength = -1,
+        [string]$StdOutPath,
+        [string]$StdErrPath
+    )
+
+    $cpuPulse = $false
+    $childPulse = $false
+    $stdoutPulse = $false
+    $stderrPulse = $false
+
+    $cpuNow = $LastCpuTime
+    try {
+        $cpuNow = $Process.TotalProcessorTime
+        if ($LastCpuTime -ne [timespan]::Zero -and ($cpuNow - $LastCpuTime).TotalMilliseconds -gt 5) {
+            $cpuPulse = $true
+        }
+    }
+    catch {}
+
+    $childCount = $LastChildCount
+    try {
+        $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($Process.Id)" -ErrorAction SilentlyContinue)
+        $childCount = $children.Count
+        if ($LastChildCount -ge 0 -and $childCount -ne $LastChildCount) {
+            $childPulse = $true
+        }
+    }
+    catch {}
+
+    $stdoutLength = $LastStdOutLength
+    if ($StdOutPath) {
+        try {
+            if (Test-Path $StdOutPath) {
+                $stdoutLength = (Get-Item $StdOutPath).Length
+                if ($LastStdOutLength -ge 0 -and $stdoutLength -gt $LastStdOutLength) {
+                    $stdoutPulse = $true
+                }
+            }
+        }
+        catch {}
+    }
+
+    $stderrLength = $LastStdErrLength
+    if ($StdErrPath) {
+        try {
+            if (Test-Path $StdErrPath) {
+                $stderrLength = (Get-Item $StdErrPath).Length
+                if ($LastStdErrLength -ge 0 -and $stderrLength -gt $LastStdErrLength) {
+                    $stderrPulse = $true
+                }
+            }
+        }
+        catch {}
+    }
+
+    $pulseStrength = 0
+    if ($cpuPulse) { $pulseStrength += 2 }
+    if ($childPulse) { $pulseStrength += 1 }
+    if ($stdoutPulse) { $pulseStrength += 2 }
+    if ($stderrPulse) { $pulseStrength += 1 }
+
+    return [PSCustomObject]@{
+        PulseStrength = $pulseStrength
+        CpuNow = $cpuNow
+        ChildCount = $childCount
+        StdOutLength = $stdoutLength
+        StdErrLength = $stderrLength
+    }
+}
+
+function Get-ProcessTreeActivityPulse {
+    param(
+        [Parameter(Mandatory = $true)][int]$ProcessId,
+        [timespan]$LastCpuTime,
+        [int]$LastChildCount = -1
+    )
+
+    $cpuPulse = $false
+    $childPulse = $false
+    $cpuNow = $LastCpuTime
+    $childCount = $LastChildCount
+
+    try {
+        $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+        if ($process) {
+            $cpuNow = $process.TotalProcessorTime
+            if ($LastCpuTime -ne [timespan]::Zero -and ($cpuNow - $LastCpuTime).TotalMilliseconds -gt 5) {
+                $cpuPulse = $true
+            }
+        }
+    }
+    catch {}
+
+    try {
+        $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$ProcessId" -ErrorAction SilentlyContinue)
+        $childCount = $children.Count
+        if ($LastChildCount -ge 0 -and $childCount -ne $LastChildCount) {
+            $childPulse = $true
+        }
+    }
+    catch {}
+
+    $pulseStrength = 0
+    if ($cpuPulse) { $pulseStrength += 2 }
+    if ($childPulse) { $pulseStrength += 1 }
+
+    return [PSCustomObject]@{
+        PulseStrength = $pulseStrength
+        CpuNow = $cpuNow
+        ChildCount = $childCount
+    }
+}
+
+function Update-ActivityPercent {
+    param(
+        [double]$CurrentPercent,
+        [int]$PulseStrength
+    )
+
+    $percent = [math]::Max(0, [math]::Min(95, $CurrentPercent))
+    if ($PulseStrength -le 0) {
+        return $percent
+    }
+
+    $increment = [math]::Min(6, [math]::Max(1.0, $PulseStrength * 1.5))
+    return [math]::Min(95, ($percent + $increment))
+}
+
+function Format-ActivityBar {
+    param(
+        [double]$Percent,
+        [int]$Width = 24
+    )
+
+    if ($Width -lt 8) { $Width = 8 }
+    $bounded = [math]::Max(0, [math]::Min(100, $Percent))
+    $filled = [int][math]::Floor(($bounded / 100.0) * $Width)
+    if ($filled -gt $Width) { $filled = $Width }
+    $empty = $Width - $filled
+    return ('[' + ('#' * $filled) + ('.' * $empty) + ']')
+}
+
+function Write-ActivityLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$Activity,
+        [Parameter(Mandatory = $true)][string]$Spinner,
+        [double]$Percent,
+        [timespan]$Elapsed,
+        [double]$IdleSeconds = -1
+    )
+
+    $bar = Format-ActivityBar -Percent $Percent -Width 24
+    $elapsedText = ('{0,5:N1}s' -f $Elapsed.TotalSeconds)
+    $line = "$Activity $Spinner $bar {0,3}%" -f ([int][math]::Round($Percent))
+    if ($IdleSeconds -ge 0) {
+        $idleText = ('{0,5:N1}s' -f $IdleSeconds)
+        Write-Host -NoNewline ("`r{0} elapsed {1} idle {2}" -f $line, $elapsedText, $idleText)
+    }
+    else {
+        Write-Host -NoNewline ("`r{0} elapsed {1}" -f $line, $elapsedText)
+    }
 }
 
 function Is-Interactive {
@@ -630,6 +799,23 @@ function Get-ShellCommand {
     throw 'No PowerShell executable found (pwsh or powershell).'
 }
 
+function Stop-ProcessTree {
+    param([int]$ProcessId)
+
+    try {
+        $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$ProcessId" -ErrorAction SilentlyContinue)
+        foreach ($child in $children) {
+            Stop-ProcessTree -ProcessId ([int]$child.ProcessId)
+        }
+    }
+    catch {}
+
+    try {
+        Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    catch {}
+}
+
 function Show-DirtySummary {
     $root = Get-WorkspaceRoot
     $dirty = Get-GitOutput -Args @('status', '--porcelain') -WorkingDirectory $root
@@ -732,19 +918,20 @@ function Run-ScriptByName {
     }
 
     $activity = "[$CurrentStep/$TotalSteps] Running $ScriptName"
-    $progressPercent = if ($TotalSteps -gt 0) { [math]::Floor(($CurrentStep / $TotalSteps) * 100) } else { 0 }
     if ($RunState -and $CurrentStep -gt 0) {
         Update-WizardStepState -RunState $RunState -StepIndex $CurrentStep -State 'running' -Message $activity
     }
     Write-Host "$activity ..."
-    Write-Progress -Activity 'Crispy_Bills Release Wizard' -Status $activity -PercentComplete $progressPercent
 
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $stepExitCode = 0
+    $metadata = Get-TaskMetadata -ScriptName $ScriptName
+    $metadataTimeout = [int](Get-TaskMetadataValue -Metadata $metadata -Name 'timeoutSeconds' -Default 0)
+    $effectiveTimeoutSeconds = if ($TaskTimeoutSeconds -gt 0) { $TaskTimeoutSeconds } else { $metadataTimeout }
+    $timeoutLabel = if ($effectiveTimeoutSeconds -gt 0) { "$effectiveTimeoutSeconds s idle" } else { 'none' }
 
     try {
         $scriptTextIsInteractive = $false
-        $metadata = Get-TaskMetadata -ScriptName $ScriptName
         $metadataMayPrompt = Get-TaskMetadataValue -Metadata $metadata -Name 'mayPrompt' -Default $null
         if ($null -ne $metadataMayPrompt) {
             $scriptTextIsInteractive = [bool]$metadataMayPrompt
@@ -763,13 +950,32 @@ function Run-ScriptByName {
         $quotedArguments = @($args | ForEach-Object { ConvertTo-CommandLineArgument -Value $_ }) -join ' '
 
         if (-not $useSpinner) {
-            try {
-                Write-Progress -Activity 'Crispy_Bills Release Wizard' -Status 'Completed' -Completed -ErrorAction SilentlyContinue
-            } catch {}
             Write-Host ''
 
             if ($requiresAttachedConsole) {
-                $process = Start-Process -FilePath $command -ArgumentList $quotedArguments -WorkingDirectory (Get-WorkspaceRoot) -NoNewWindow -Wait -PassThru
+                $process = Start-Process -FilePath $command -ArgumentList $quotedArguments -WorkingDirectory (Get-WorkspaceRoot) -NoNewWindow -PassThru
+                $lastActivityAt = [DateTime]::UtcNow
+                $lastCpuTime = [timespan]::Zero
+                try { $lastCpuTime = $process.TotalProcessorTime } catch {}
+                $lastChildCount = -1
+                while (-not $process.HasExited) {
+                    $pulse = Get-ProcessTreeActivityPulse -ProcessId $process.Id -LastCpuTime $lastCpuTime -LastChildCount $lastChildCount
+                    $lastCpuTime = $pulse.CpuNow
+                    $lastChildCount = $pulse.ChildCount
+
+                    $nowUtc = [DateTime]::UtcNow
+                    if ($pulse.PulseStrength -gt 0) {
+                        $lastActivityAt = $nowUtc
+                    }
+
+                    $idleSeconds = ($nowUtc - $lastActivityAt).TotalSeconds
+                    if ($effectiveTimeoutSeconds -gt 0 -and $idleSeconds -ge $effectiveTimeoutSeconds) {
+                        Stop-ProcessTree -ProcessId $process.Id
+                        throw "Script $ScriptName timed out after $timeoutLabel (no activity for $([int][math]::Round($idleSeconds))s)."
+                    }
+                    Start-Sleep -Milliseconds 250
+                }
+                $process.WaitForExit()
                 if ($process.ExitCode -ne 0) {
                     throw "Script $ScriptName failed with exit code $($process.ExitCode)."
                 }
@@ -780,21 +986,74 @@ function Run-ScriptByName {
                 $stepExitCode = [int]$LASTEXITCODE
             }
         } else {
-            $process = Start-Process -FilePath $command -ArgumentList $quotedArguments -WorkingDirectory (Get-WorkspaceRoot) -NoNewWindow -PassThru
-            while (-not $process.HasExited) {
-                for ($i = 0; $i -lt 4 -and -not $process.HasExited; $i++) {
-                    $spinner = @('|','/','-','\')[$i]
-                    Write-Host -NoNewline "`r$activity $spinner"
-                    Write-Progress -Activity 'Crispy_Bills Release Wizard' -Status "$activity $spinner" -PercentComplete $progressPercent
+            $stdoutPath = [System.IO.Path]::GetTempFileName()
+            $stderrPath = [System.IO.Path]::GetTempFileName()
+            $process = $null
+            try {
+                $process = Start-Process -FilePath $command -ArgumentList $quotedArguments -WorkingDirectory (Get-WorkspaceRoot) -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+
+                $spinnerFrames = @('|','/','-','\')
+                $spinnerIndex = 0
+                $activityPercent = 0.0
+                $lastCpuTime = [timespan]::Zero
+                try { $lastCpuTime = $process.TotalProcessorTime } catch {}
+                $lastChildCount = -1
+                $lastStdOutLength = if (Test-Path $stdoutPath) { (Get-Item $stdoutPath).Length } else { -1 }
+                $lastStdErrLength = if (Test-Path $stderrPath) { (Get-Item $stderrPath).Length } else { -1 }
+                $lastActivityAt = [DateTime]::UtcNow
+
+                while (-not $process.HasExited) {
+                    $pulse = Get-ProcessActivityPulse -Process $process -LastCpuTime $lastCpuTime -LastChildCount $lastChildCount -LastStdOutLength $lastStdOutLength -LastStdErrLength $lastStdErrLength -StdOutPath $stdoutPath -StdErrPath $stderrPath
+                    $lastCpuTime = $pulse.CpuNow
+                    $lastChildCount = $pulse.ChildCount
+                    $lastStdOutLength = $pulse.StdOutLength
+                    $lastStdErrLength = $pulse.StdErrLength
+                    $nowUtc = [DateTime]::UtcNow
+                    if ($pulse.PulseStrength -gt 0) {
+                        $lastActivityAt = $nowUtc
+                    }
+                    $idleSeconds = ($nowUtc - $lastActivityAt).TotalSeconds
+                    if ($effectiveTimeoutSeconds -gt 0 -and $idleSeconds -ge $effectiveTimeoutSeconds) {
+                        Stop-ProcessTree -ProcessId $process.Id
+                        throw "Script $ScriptName timed out after $timeoutLabel (no activity for $([int][math]::Round($idleSeconds))s)."
+                    }
+                    $activityPercent = Update-ActivityPercent -CurrentPercent $activityPercent -PulseStrength $pulse.PulseStrength
+
+                    $spinner = $spinnerFrames[$spinnerIndex % $spinnerFrames.Count]
+                    $spinnerIndex++
+                    Write-ActivityLine -Activity $activity -Spinner $spinner -Percent $activityPercent -Elapsed $stopwatch.Elapsed -IdleSeconds $idleSeconds
                     Start-Sleep -Milliseconds 150
                 }
+
+                $process.WaitForExit()
+                $activityPercent = 100
+                Write-ActivityLine -Activity $activity -Spinner ' ' -Percent $activityPercent -Elapsed $stopwatch.Elapsed -IdleSeconds 0
+
+                $stdoutText = if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath -Raw } else { '' }
+                $stderrText = if (Test-Path $stderrPath) { Get-Content -Path $stderrPath -Raw } else { '' }
+                $commandOutput = @()
+                if (-not [string]::IsNullOrWhiteSpace($stdoutText)) {
+                    $commandOutput += $stdoutText.TrimEnd("`r", "`n")
+                }
+                if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
+                    $commandOutput += $stderrText.TrimEnd("`r", "`n")
+                }
+
+                if ($null -ne $commandOutput) {
+                    $commandOutput | Out-Host
+                }
+                Add-TaskDiagnosticsFromOutput -Command $command -OutputText (($commandOutput | Out-String))
+
+                $exitCode = [int]$process.ExitCode
+                if ($exitCode -ne 0) {
+                    throw "Script $ScriptName failed with exit code $exitCode."
+                }
+                $stepExitCode = $exitCode
             }
-            $process.WaitForExit()
-            $exitCode = [int]$process.ExitCode
-            if ($exitCode -ne 0) {
-                throw "Script $ScriptName failed with exit code $exitCode."
+            finally {
+                if (Test-Path $stdoutPath) { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue }
+                if (Test-Path $stderrPath) { Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue }
             }
-            $stepExitCode = $exitCode
         }
 
         $stopwatch.Stop()
@@ -816,9 +1075,6 @@ function Run-ScriptByName {
             Write-Host "Cause: $($_.Exception.InnerException.Message)" -ForegroundColor Red
         }
         return $false
-    }
-    finally {
-        Write-Progress -Activity 'Crispy_Bills Release Wizard' -Status 'Completed' -PercentComplete 100 -Completed
     }
 }
 

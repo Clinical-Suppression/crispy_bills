@@ -8,11 +8,14 @@ using Microsoft.Maui.Controls.Shapes;
 
 namespace CrispyBills.Mobile.Android;
 
-/// <summary>Buffer-style bulk entry (up to 50 rows). Programmatic UI to avoid per-row picker binding issues.</summary>
 public sealed class BulkBillsPage : ContentPage
 {
-    private const int InitialRows = 6;
     private const int MaxRows = 50;
+    private const string RecurrenceMonthly = "Monthly (every month)";
+    private const string RecurrenceEvery2Months = "Every 2 months";
+    private const string RecurrenceEvery3Months = "Every 3 months";
+    private const string RecurrenceWeekly = "Weekly";
+    private const string RecurrenceBiWeekly = "Bi-weekly";
 
     private readonly BillingService _service;
     private readonly int _year;
@@ -29,22 +32,49 @@ public sealed class BulkBillsPage : ContentPage
         _categories = categories.Count > 0 ? categories : new[] { "General" };
         _afterSaveOrCancel = afterSaveOrCancel;
 
-        Title = "Bulk add bills";
+        Title = "Add bill(s)";
+        AddRow();
 
-        for (var i = 0; i < InitialRows; i++)
+        var hint = new Label
         {
-            AddRow();
-        }
+            Text = "Start with one bill, then use Add Another Bill. Rows with a name and valid amount are saved.",
+            FontSize = 13,
+            TextColor = Color.FromArgb("#6B7280")
+        };
 
         var list = new CollectionView
         {
             ItemsSource = _rows,
+            SelectionMode = SelectionMode.None,
+            ItemSizingStrategy = ItemSizingStrategy.MeasureAllItems,
             ItemTemplate = new DataTemplate(() => BuildRowTemplate())
         };
 
-        var saveBtn = new Button { Text = "Save all" };
-        saveBtn.Clicked += OnSaveClicked;
-        var cancelBtn = new Button { Text = "Cancel", BackgroundColor = Color.FromArgb("#F3F4F6") };
+        var addRowButton = new Button
+        {
+            Text = "Add Another Bill",
+            FontSize = 16,
+            HorizontalOptions = LayoutOptions.Fill,
+            HeightRequest = 48
+        };
+        addRowButton.Clicked += (_, _) =>
+        {
+            if (_rows.Count < MaxRows)
+            {
+                AddRow();
+            }
+        };
+        list.Footer = new VerticalStackLayout
+        {
+            Padding = new Thickness(0, 2, 0, 4),
+            Children = { addRowButton }
+        };
+
+        var cancelBtn = new Button
+        {
+            Text = "Cancel",
+            BackgroundColor = Color.FromArgb("#F3F4F6")
+        };
         cancelBtn.Clicked += async (_, _) =>
         {
             await Navigation.PopAsync();
@@ -54,67 +84,108 @@ public sealed class BulkBillsPage : ContentPage
             }
         };
 
-        var buttons = new Grid { ColumnDefinitions = new ColumnDefinitionCollection { new ColumnDefinition(GridLength.Star), new ColumnDefinition(GridLength.Star) }, ColumnSpacing = 12 };
+        var saveBtn = new Button { Text = "Save all" };
+        saveBtn.Clicked += OnSaveClicked;
+
+        var buttons = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitionCollection
+            {
+                new(GridLength.Star),
+                new(GridLength.Star)
+            },
+            ColumnSpacing = 12
+        };
         Grid.SetColumn(cancelBtn, 0);
         Grid.SetColumn(saveBtn, 1);
         buttons.Children.Add(cancelBtn);
         buttons.Children.Add(saveBtn);
 
-        var hint = new Label
+        var layout = new Grid
         {
-            Text = "Rows with a name and valid amount are saved. Completing the bottom row adds another (max 50).",
-            FontSize = 13,
-            TextColor = Color.FromArgb("#6B7280")
-        };
-
-        var grid = new Grid
-        {
+            Padding = new Thickness(12),
+            RowSpacing = 10,
             RowDefinitions = new RowDefinitionCollection
             {
-                new RowDefinition(GridLength.Auto),
-                new RowDefinition(GridLength.Star),
-                new RowDefinition(GridLength.Auto)
-            },
-            Padding = new Thickness(12),
-            RowSpacing = 10
+                new(GridLength.Auto),
+                new(GridLength.Star),
+                new(GridLength.Auto)
+            }
         };
         Grid.SetRow(hint, 0);
         Grid.SetRow(list, 1);
         Grid.SetRow(buttons, 2);
-        grid.Children.Add(hint);
-        grid.Children.Add(list);
-        grid.Children.Add(buttons);
-
-        Content = grid;
+        layout.Children.Add(hint);
+        layout.Children.Add(list);
+        layout.Children.Add(buttons);
+        Content = layout;
     }
 
     private IView BuildRowTemplate()
     {
         var nameEntry = new Entry { Placeholder = "Name", HeightRequest = 44 };
+        nameEntry.Behaviors.Add(new SelectAllEntryBehavior());
         nameEntry.SetBinding(Entry.TextProperty, new Binding(nameof(BulkRow.Name), BindingMode.TwoWay));
 
-        var amtEntry = new Entry { Placeholder = "Amount", Keyboard = Keyboard.Numeric, HeightRequest = 44 };
-        amtEntry.SetBinding(Entry.TextProperty, new Binding(nameof(BulkRow.AmountText), BindingMode.TwoWay));
+        var amountEntry = new Entry { Placeholder = "Amount", Keyboard = Keyboard.Numeric, HeightRequest = 44 };
+        amountEntry.Behaviors.Add(new SelectAllEntryBehavior());
+        amountEntry.SetBinding(Entry.TextProperty, new Binding(nameof(BulkRow.AmountText), BindingMode.TwoWay));
 
-        var catPicker = new Picker { Title = "Category", HeightRequest = 44 };
-        catPicker.SetBinding(Picker.ItemsSourceProperty, new Binding(nameof(BulkRow.CategoryOptions)));
-        catPicker.SetBinding(Picker.SelectedItemProperty, new Binding(nameof(BulkRow.Category), BindingMode.TwoWay));
+        var categoryPicker = new Picker { Title = "Category", HeightRequest = 44 };
+        categoryPicker.SetBinding(Picker.ItemsSourceProperty, new Binding(nameof(BulkRow.CategoryOptions)));
+        categoryPicker.SetBinding(Picker.SelectedItemProperty, new Binding(nameof(BulkRow.Category), BindingMode.TwoWay));
 
-        var due = new DatePicker { HeightRequest = 44 };
-        due.SetBinding(DatePicker.DateProperty, new Binding(nameof(BulkRow.DueDate), BindingMode.TwoWay));
+        var dueDatePicker = new DatePicker { HeightRequest = 44 };
+        dueDatePicker.SetBinding(DatePicker.DateProperty, new Binding(nameof(BulkRow.DueDate), BindingMode.TwoWay));
 
-        var paidSw = new Switch();
-        paidSw.SetBinding(Switch.IsToggledProperty, new Binding(nameof(BulkRow.IsPaid), BindingMode.TwoWay));
-        var recurSw = new Switch();
-        recurSw.SetBinding(Switch.IsToggledProperty, new Binding(nameof(BulkRow.IsRecurring), BindingMode.TwoWay));
+        var paidSwitch = new Switch();
+        paidSwitch.SetBinding(Switch.IsToggledProperty, new Binding(nameof(BulkRow.IsPaid), BindingMode.TwoWay));
+        var paidLabel = new Label { Text = "Paid", VerticalOptions = LayoutOptions.Center, FontSize = 16 };
+        paidLabel.GestureRecognizers.Add(new TapGestureRecognizer
+        {
+            Command = new Command(() =>
+            {
+                if (paidLabel.BindingContext is BulkRow row)
+                {
+                    row.IsPaid = !row.IsPaid;
+                }
+            })
+        });
+        var paidRow = new HorizontalStackLayout { Spacing = 10, Children = { paidSwitch, paidLabel } };
 
-        var paidRow = new HorizontalStackLayout { Spacing = 8, Children = { paidSw, new Label { Text = "Paid", VerticalOptions = LayoutOptions.Center } } };
-        var recurRow = new HorizontalStackLayout { Spacing = 8, Children = { recurSw, new Label { Text = "Recurring", VerticalOptions = LayoutOptions.Center } } };
+        var recurringSwitch = new Switch();
+        recurringSwitch.SetBinding(Switch.IsToggledProperty, new Binding(nameof(BulkRow.IsRecurring), BindingMode.TwoWay));
+        var recurringLabel = new Label { Text = "Recurring", VerticalOptions = LayoutOptions.Center, FontSize = 16 };
+        recurringLabel.GestureRecognizers.Add(new TapGestureRecognizer
+        {
+            Command = new Command(() =>
+            {
+                if (recurringLabel.BindingContext is BulkRow row)
+                {
+                    row.IsRecurring = !row.IsRecurring;
+                }
+            })
+        });
+        var recurringRow = new HorizontalStackLayout { Spacing = 10, Children = { recurringSwitch, recurringLabel } };
+
+        var recurrencePicker = new Picker { Title = "How it repeats", HeightRequest = 44 };
+        recurrencePicker.SetBinding(Picker.ItemsSourceProperty, new Binding(nameof(BulkRow.RecurrenceOptions)));
+        recurrencePicker.SetBinding(Picker.SelectedItemProperty, new Binding(nameof(BulkRow.RecurrenceOption), BindingMode.TwoWay));
+        recurrencePicker.SetBinding(IsVisibleProperty, new Binding(nameof(BulkRow.IsRecurring)));
 
         var stack = new VerticalStackLayout
         {
             Spacing = 8,
-            Children = { nameEntry, amtEntry, catPicker, due, paidRow, recurRow }
+            Children =
+            {
+                nameEntry,
+                amountEntry,
+                categoryPicker,
+                dueDatePicker,
+                paidRow,
+                recurringRow,
+                recurrencePicker
+            }
         };
 
         return new Border
@@ -131,69 +202,46 @@ public sealed class BulkBillsPage : ContentPage
     private void AddRow()
     {
         var day = Math.Min(DateTime.Today.Day, DateTime.DaysInMonth(_year, _month));
-        var row = new BulkRow
+        _rows.Add(new BulkRow
         {
             DueDate = new DateTime(_year, _month, day),
             Category = _categories[0],
             CategoryOptions = _categories.ToList()
-        };
-        row.PropertyChanged += OnRowPropertyChanged;
-        _rows.Add(row);
+        });
     }
 
-    private void OnRowPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private static bool TryParseAmount(string? text, out decimal amount)
     {
-        if (sender is not BulkRow row || _rows.Count >= MaxRows)
-        {
-            return;
-        }
-
-        if (!ReferenceEquals(row, _rows[^1]))
-        {
-            return;
-        }
-
-        if (IsRowComplete(row))
-        {
-            AddRow();
-        }
-    }
-
-    private static bool IsRowComplete(BulkRow r)
-    {
-        if (string.IsNullOrWhiteSpace(r.Name))
-        {
-            return false;
-        }
-
-        if (!TryParseAmount(r.AmountText, out var amt) || amt < 0)
-        {
-            return false;
-        }
-
-        return r.DueDate != default;
-    }
-
-    private static bool TryParseAmount(string? text, out decimal amt)
-    {
-        amt = 0;
+        amount = 0m;
         if (string.IsNullOrWhiteSpace(text))
         {
             return false;
         }
 
-        return decimal.TryParse(text, NumberStyles.Any, CultureInfo.CurrentCulture, out amt)
-               || decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out amt);
+        return decimal.TryParse(text, NumberStyles.Any, CultureInfo.CurrentCulture, out amount)
+            || decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out amount);
+    }
+
+    private static (RecurrenceFrequency Frequency, int EveryMonths) ParseRecurrence(BulkRow row)
+    {
+        return row.RecurrenceOption switch
+        {
+            RecurrenceWeekly => (RecurrenceFrequency.Weekly, 1),
+            RecurrenceBiWeekly => (RecurrenceFrequency.BiWeekly, 1),
+            RecurrenceEvery2Months => (RecurrenceFrequency.MonthlyInterval, 2),
+            RecurrenceEvery3Months => (RecurrenceFrequency.MonthlyInterval, 3),
+            _ => (RecurrenceFrequency.MonthlyInterval, 1)
+        };
     }
 
     private async void OnSaveClicked(object? sender, EventArgs e)
     {
         var drafts = new List<BillItem>();
         var errors = new List<string>();
-        var n = 0;
-        foreach (var row in _rows)
+
+        for (var index = 0; index < _rows.Count; index++)
         {
-            n++;
+            var row = _rows[index];
             if (string.IsNullOrWhiteSpace(row.Name) && string.IsNullOrWhiteSpace(row.AmountText))
             {
                 continue;
@@ -201,32 +249,31 @@ public sealed class BulkBillsPage : ContentPage
 
             if (string.IsNullOrWhiteSpace(row.Name))
             {
-                errors.Add($"Row {n}: name required.");
+                errors.Add($"Row {index + 1}: name required.");
                 continue;
             }
 
-            if (!TryParseAmount(row.AmountText, out var amt) || amt < 0)
+            if (!TryParseAmount(row.AmountText, out var amount) || amount < 0)
             {
-                errors.Add($"Row {n}: amount must be a non-negative number.");
+                errors.Add($"Row {index + 1}: amount must be a non-negative number.");
                 continue;
             }
 
-            if (row.DueDate == default)
-            {
-                errors.Add($"Row {n}: due date required.");
-                continue;
-            }
-
-            var cat = string.IsNullOrWhiteSpace(row.Category) ? "General" : row.Category.Trim();
+            var category = string.IsNullOrWhiteSpace(row.Category) ? "General" : row.Category.Trim();
+            var recurrence = ParseRecurrence(row);
             drafts.Add(new BillItem
             {
                 Name = row.Name.Trim(),
-                Amount = amt,
-                Category = cat,
+                Amount = amount,
+                Category = category,
                 DueDate = row.DueDate,
                 IsPaid = row.IsPaid,
                 IsRecurring = row.IsRecurring,
-                RecurrenceFrequency = row.IsRecurring ? RecurrenceFrequency.MonthlyInterval : RecurrenceFrequency.None,
+                RecurrenceFrequency = row.IsRecurring ? recurrence.Frequency : RecurrenceFrequency.None,
+                RecurrenceEveryMonths = recurrence.EveryMonths,
+                RecurrenceEndMode = RecurrenceEndMode.None,
+                RecurrenceEndDate = null,
+                RecurrenceMaxOccurrences = null,
                 Year = _year,
                 Month = _month
             });
@@ -268,6 +315,7 @@ public sealed class BulkBillsPage : ContentPage
         private DateTime _dueDate;
         private bool _isPaid;
         private bool _isRecurring;
+        private string _recurrenceOption = RecurrenceMonthly;
         private IList<string> _categoryOptions = Array.Empty<string>();
 
         public string Name
@@ -325,6 +373,30 @@ public sealed class BulkBillsPage : ContentPage
             }
         }
 
+        public IList<string> RecurrenceOptions { get; } = new List<string>
+        {
+            RecurrenceMonthly,
+            RecurrenceEvery2Months,
+            RecurrenceEvery3Months,
+            RecurrenceWeekly,
+            RecurrenceBiWeekly
+        };
+
+        public string RecurrenceOption
+        {
+            get => _recurrenceOption;
+            set
+            {
+                if (_recurrenceOption == value)
+                {
+                    return;
+                }
+
+                _recurrenceOption = value;
+                OnPropertyChanged();
+            }
+        }
+
         public DateTime DueDate
         {
             get => _dueDate;
@@ -372,7 +444,7 @@ public sealed class BulkBillsPage : ContentPage
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        private void OnPropertyChanged([CallerMemberName] string? n = null)
-            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }

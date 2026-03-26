@@ -11,8 +11,33 @@
             <Label Text="Light and dark mode follows your device settings." FontSize="14" TextColor="{StaticResource MutedText}" />
 
             <Label Text="Language / formats" FontAttributes="Bold" FontSize="16" TextColor="{StaticResource MidnightBlue}" Margin="0,8,0,0" />
-            <Label Text="Currency and date formats follow the selection below." FontSize="13" TextColor="{StaticResource MutedText}" />
+            <Label Text="Currency, date formats, and month names follow the selection below. Full screen-by-screen translation is still partial." FontSize="13" TextColor="{StaticResource MutedText}" />
             <Picker x:Name="LanguagePicker" Title="Display language" SelectedIndexChanged="OnLanguageChanged" HeightRequest="48" />
+
+            <BoxView HeightRequest="1" Color="{StaticResource Gray200}" Margin="0,4" />
+
+            <Label Text="Bill status" FontAttributes="Bold" FontSize="18" TextColor="{StaticResource MidnightBlue}" />
+            <Label Text="Bills can be marked Soon before their due date so they stand out in yellow." FontSize="13" TextColor="{StaticResource MutedText}" />
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                <Picker x:Name="SoonValuePicker" Title="Threshold" SelectedIndexChanged="OnSoonThresholdChanged" HeightRequest="48" />
+                <Picker x:Name="SoonUnitPicker" Grid.Column="1" Title="Unit" SelectedIndexChanged="OnSoonThresholdChanged" HeightRequest="48" />
+            </Grid>
+
+            <BoxView HeightRequest="1" Color="{StaticResource Gray200}" Margin="0,4" />
+
+            <Label Text="Security" FontAttributes="Bold" FontSize="18" TextColor="{StaticResource MidnightBlue}" />
+            <Label Text="Your yearly databases are stored inside the app's private data folder, not in public shared storage." FontSize="13" TextColor="{StaticResource MutedText}" />
+            <Button x:Name="ConfigurePinButton" Text="Set PIN" Clicked="OnConfigurePinClicked" HeightRequest="48" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+            <Button x:Name="RemovePinButton" Text="Remove PIN" Clicked="OnRemovePinClicked" HeightRequest="48" IsVisible="False" BackgroundColor="{StaticResource DangerLight}" TextColor="{StaticResource Danger}" />
+
+            <Grid x:Name="BiometricRow" ColumnDefinitions="*,Auto" Padding="0,2" IsVisible="False">
+                <Label Text="Allow fingerprint / face unlock" VerticalOptions="Center" FontSize="16">
+                    <Label.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnBiometricRowTapped" />
+                    </Label.GestureRecognizers>
+                </Label>
+                <Switch x:Name="BiometricSwitch" Grid.Column="1" VerticalOptions="Center" Toggled="OnBiometricSwitchToggled" />
+            </Grid>
 
             <BoxView HeightRequest="1" Color="{StaticResource Gray200}" Margin="0,4" />
 
@@ -27,7 +52,11 @@
 
             <HorizontalStackLayout Spacing="12">
                 <Switch x:Name="DebugToggle" Toggled="OnDebugToggleToggled" VerticalOptions="Center" />
-                <Label Text="Enable destructive deletes" VerticalOptions="Center" FontSize="16" />
+                <Label Text="Enable destructive deletes" VerticalOptions="Center" FontSize="16">
+                    <Label.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnDebugLabelTapped" />
+                    </Label.GestureRecognizers>
+                </Label>
             </HorizontalStackLayout>
 
             <Button x:Name="DeleteMonthButton" Text="Delete current month data" Clicked="OnDeleteMonthClicked" IsEnabled="False" HeightRequest="48" />

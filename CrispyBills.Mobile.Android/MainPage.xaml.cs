@@ -11,9 +11,14 @@ public partial class MainPage : ContentPage
 {
 	private readonly BillingService _service;
 	private readonly LocalizationService _localization;
+	private readonly AppLockService _appLockService;
 	private bool _loaded;
 	private bool _startupDiagnosticsShown;
 	private string? _lastDuplicateWarningKey;
+	private bool _incomeControlsInitializing;
+	private int _soonThresholdValue = 7;
+	private string _soonThresholdUnit = BillingService.SoonThresholdUnitDays;
+	private bool _appLockFlowActive;
 
 	private int _currentYear = DateTime.Today.Year;
 	private int _currentMonth = DateTime.Today.Month;
@@ -23,14 +28,19 @@ public partial class MainPage : ContentPage
 	private readonly ObservableCollection<BillListItem> _visibleBills = new();
 	private List<BillItem> _monthBills = new();
 
-	public MainPage(BillingService service, LocalizationService localization)
+	public MainPage(BillingService service, LocalizationService localization, AppLockService appLockService)
 	{
 		InitializeComponent();
 		_service = service;
 		_localization = localization;
+		_appLockService = appLockService;
 
 		CategoryPicker.ItemsSource = new List<string> { "All categories" };
 		CategoryPicker.SelectedIndex = 0;
+		_incomeControlsInitializing = true;
+		IncomePayPeriodPicker.ItemsSource = BillingService.IncomePayPeriodOptions().ToList();
+		IncomePayPeriodPicker.SelectedIndex = 0;
+		_incomeControlsInitializing = false;
 
 		BillsCollection.ItemsSource = _visibleBills;
 	}
@@ -40,28 +50,106 @@ public partial class MainPage : ContentPage
 		base.OnAppearing();
 		try
 		{
-			if (_loaded)
+			if (!_loaded)
 			{
-				return;
-			}
+				_loaded = true;
+				await _localization.InitializeAsync();
+				await LoadYearAsync(_currentYear);
 
-			_loaded = true;
-			await _localization.InitializeAsync();
-			await LoadYearAsync(_currentYear);
-
-			if (StartupDiagnostics.HasIssues && !_startupDiagnosticsShown)
-			{
-				_startupDiagnosticsShown = true;
-				var open = await DisplayAlert("Startup diagnostics", "Issues were detected during startup recovery. Open diagnostics now?", "Open", "Later");
-				if (open)
+				if (StartupDiagnostics.HasIssues && !_startupDiagnosticsShown)
 				{
-					await Navigation.PushAsync(new DiagnosticsPage(_service));
+					_startupDiagnosticsShown = true;
+					var open = await DisplayAlert("Startup diagnostics", "Issues were detected during startup recovery. Open diagnostics now?", "Open", "Later");
+					if (open)
+					{
+						await Navigation.PushAsync(new DiagnosticsPage(_service));
+					}
 				}
 			}
+
+			_ = EnsureAppLockFlowSafeAsync();
 		}
 		catch (Exception ex)
 		{
 			await DisplayAlert("Error", $"An error occurred during startup: {ex.Message}", "OK");
+		}
+	}
+
+	private async Task EnsureAppLockFlowSafeAsync()
+	{
+		try
+		{
+			await EnsureAppLockFlowAsync();
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("EnsureAppLockFlow", ex);
+		}
+	}
+
+	private async Task EnsureAppLockFlowAsync()
+	{
+		if (_appLockFlowActive)
+		{
+			return;
+		}
+
+		_appLockFlowActive = true;
+		try
+		{
+			if (await _appLockService.ShouldRequireUnlockAsync())
+			{
+				var unlockPage = new UnlockPage(_appLockService);
+				await Navigation.PushModalAsync(unlockPage);
+				var unlockTask = unlockPage.WaitForResultAsync();
+				var completed = await Task.WhenAny(unlockTask, Task.Delay(TimeSpan.FromSeconds(45)));
+				if (completed != unlockTask)
+				{
+					try { await Navigation.PopModalAsync(); } catch { }
+					return;
+				}
+
+				var unlocked = unlockTask.Result;
+				if (!unlocked)
+				{
+					return;
+				}
+			}
+
+			if (!await _appLockService.ShouldOfferPinSetupPromptAsync())
+			{
+				return;
+			}
+
+			var enablePin = await DisplayAlert(
+				"Protect your bills?",
+				"Would you like to use a 4-digit PIN to protect the app when your phone has been sitting idle?",
+				"Set PIN",
+				"Not now");
+
+			if (!enablePin)
+			{
+				await _appLockService.MarkPinSetupPromptHandledAsync();
+				return;
+			}
+
+			var setupPage = new PinSetupPage(_appLockService, allowSkip: true);
+			await Navigation.PushModalAsync(setupPage);
+			var setupTask = setupPage.WaitForResultAsync();
+			var setupCompleted = await Task.WhenAny(setupTask, Task.Delay(TimeSpan.FromSeconds(45)));
+			if (setupCompleted == setupTask)
+			{
+				_ = setupTask.Result;
+			}
+			else
+			{
+				try { await Navigation.PopModalAsync(); } catch { }
+			}
+			await _appLockService.MarkPinSetupPromptHandledAsync();
+		}
+		finally
+		{
+			_appLockFlowActive = false;
 		}
 	}
 
@@ -157,15 +245,15 @@ public partial class MainPage : ContentPage
 
 	private async Task EditBillByIdAsync(Guid id)
 	{
-		var existing = _monthBills.FirstOrDefault(x => x.Id == id);
-		if (existing is null)
+		var draft = _service.GetEditableBillDraft(_currentMonth, id);
+		if (draft is null)
 		{
 			return;
 		}
 
 		try
 		{
-			var editor = new BillEditorPage(existing.Clone(), _currentYear, _currentMonth, _service.Categories());
+			var editor = new BillEditorPage(draft, _currentYear, _currentMonth, _service.Categories());
 			await Navigation.PushAsync(editor);
 			var result = await editor.WaitForResultAsync();
 			if (result is null)
@@ -191,8 +279,8 @@ public partial class MainPage : ContentPage
 			return;
 		}
 
-		var warning = existing.IsRecurring
-			? "Delete this recurring bill from this and future months?"
+		var warning = (existing.IsRecurring || existing.RecurrenceGroupId.HasValue)
+			? "Delete this bill from the current occurrence onward?"
 			: "Delete this bill?";
 
 		var confirm = await DisplayAlert("Delete Bill", warning, "Delete", "Cancel");
@@ -234,7 +322,7 @@ public partial class MainPage : ContentPage
 		await ReloadMonthAsync();
 	}
 
-	private Task ReloadMonthAsync()
+	private async Task ReloadMonthAsync()
 	{
 		YearButton.Text = _archivedYears.Contains(_currentYear)
 			? $"{_currentYear} (Archived)"
@@ -251,12 +339,14 @@ public partial class MainPage : ContentPage
 			c.ContextPeriodStart = periodStart;
 			return c;
 		}).ToList();
+		(_soonThresholdValue, _soonThresholdUnit) = await _service.GetSoonThresholdAsync();
+		await RefreshIncomeControlsAsync();
 
 		UpdateCategoryFilter();
 		ApplyFilters();
 		UpdateSummaryCards();
+		UpdateAddButtonText();
 		WarnDuplicateRecurringRules();
-		return Task.CompletedTask;
 	}
 
 	private async Task RefreshAvailableYearsAsync()
@@ -308,14 +398,16 @@ public partial class MainPage : ContentPage
 		_visibleBills.Clear();
 		foreach (var bill in filtered.OrderBy(x => x.DueDate).ThenBy(x => x.Name))
 		{
-			_visibleBills.Add(new BillListItem(bill, _localization.FormatCurrency(bill.Amount)));
+			_visibleBills.Add(new BillListItem(
+				bill,
+				_localization.FormatCurrency(bill.Amount),
+				_service.IsBillSoon(bill, _soonThresholdValue, _soonThresholdUnit)));
 		}
 	}
 
 	private void UpdateSummaryCards()
 	{
 		var summary = _service.GetMonthSummary(_currentMonth);
-		IncomeLabel.Text = _localization.FormatCurrency(_service.GetIncome(_currentMonth));
 		UnpaidLabel.Text = _localization.FormatCurrency(summary.unpaid);
 		RemainingLabel.Text = _localization.FormatCurrency(summary.remaining);
 		BillCountLabel.Text = summary.billCount.ToString();
@@ -339,6 +431,76 @@ public partial class MainPage : ContentPage
 			expenses,
 			GetResourceColor("Danger", "#DC2626"),
 			GetResourceColor("Gray200", "#E2E8F0"));
+	}
+
+	private async Task RefreshIncomeControlsAsync()
+	{
+		var (amount, payPeriod) = await _service.GetIncomeEntryAsync(_currentMonth);
+		_incomeControlsInitializing = true;
+		try
+		{
+			IncomeEntry.Text = amount > 0m
+				? amount.ToString("0.00", _localization.CurrentCulture)
+				: string.Empty;
+			IncomePayPeriodPicker.SelectedItem = payPeriod;
+		}
+		finally
+		{
+			_incomeControlsInitializing = false;
+		}
+	}
+
+	private void UpdateAddButtonText()
+	{
+		var hasBills = _monthBills.Count > 0;
+		var text = hasBills ? "Add bill(s)" : "Add your first bill(s)";
+		AddBillsButton.Text = text;
+		EmptyAddBillsButton.Text = "Add your first bill(s)";
+	}
+
+	private bool TryReadIncomeEntry(out decimal income)
+	{
+		var raw = IncomeEntry.Text?.Trim();
+		if (string.IsNullOrWhiteSpace(raw))
+		{
+			income = 0m;
+			return true;
+		}
+
+		return decimal.TryParse(raw, NumberStyles.Currency, _localization.CurrentCulture, out income)
+			|| decimal.TryParse(raw, NumberStyles.Currency, CultureInfo.InvariantCulture, out income);
+	}
+
+	private string GetSelectedIncomePayPeriod()
+	{
+		return IncomePayPeriodPicker.SelectedItem?.ToString() switch
+		{
+			BillingService.IncomePayPeriodWeekly => BillingService.IncomePayPeriodWeekly,
+			BillingService.IncomePayPeriodBiWeekly => BillingService.IncomePayPeriodBiWeekly,
+			_ => BillingService.IncomePayPeriodMonthly
+		};
+	}
+
+	private async Task SaveIncomeFromControlsAsync(bool showValidation)
+	{
+		if (_incomeControlsInitializing)
+		{
+			return;
+		}
+
+		if (!TryReadIncomeEntry(out var income))
+		{
+			if (showValidation)
+			{
+				await DisplayAlert("Invalid Income", "Enter a valid number.", "OK");
+			}
+
+			await RefreshIncomeControlsAsync();
+			return;
+		}
+
+		await _service.SetIncomeAsync(_currentMonth, income, GetSelectedIncomePayPeriod());
+		await ReloadMonthAsync();
 	}
 
 	private static Color GetResourceColor(string key, string fallback)
@@ -522,43 +684,45 @@ public partial class MainPage : ContentPage
 		try { ApplyFilters(); } catch { }
 	}
 
-	private async void OnSetIncomeClicked(object? sender, EventArgs e)
+	private async void OnIncomeEntryCompleted(object? sender, EventArgs e)
 	{
 		try
 		{
-			var currentIncome = _service.GetIncome(_currentMonth).ToString("0.00", CultureInfo.InvariantCulture);
-			var input = await DisplayPromptAsync(
-				"Set Monthly Income",
-				$"Enter income for {MonthNames.Name(_currentMonth)} and future months of {_currentYear}.",
-				"Save",
-				"Cancel",
-				initialValue: currentIncome,
-				keyboard: Keyboard.Numeric);
-
-			if (string.IsNullOrWhiteSpace(input))
-			{
-				return;
-			}
-
-			if (!decimal.TryParse(input,
-				NumberStyles.Currency | NumberStyles.AllowDecimalPoint,
-				CultureInfo.InvariantCulture,
-				out var income)
-				&& !decimal.TryParse(input,
-				NumberStyles.Currency,
-				CultureInfo.CurrentCulture,
-				out income))
-			{
-				await DisplayAlert("Invalid Income", "Enter a valid number.", "OK");
-				return;
-			}
-
-			await _service.SetIncomeAsync(_currentMonth, income);
-			await ReloadMonthAsync();
+			await SaveIncomeFromControlsAsync(showValidation: true);
 		}
 		catch (Exception ex)
 		{
-			await DiagnosticsLog.WriteAsync("OnSetIncomeClicked", ex);
+			await DiagnosticsLog.WriteAsync("OnIncomeEntryCompleted", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
+	}
+
+	private async void OnIncomeEntryUnfocused(object? sender, FocusEventArgs e)
+	{
+		try
+		{
+			await SaveIncomeFromControlsAsync(showValidation: false);
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnIncomeEntryUnfocused", ex);
+		}
+	}
+
+	private async void OnIncomePayPeriodChanged(object? sender, EventArgs e)
+	{
+		if (_incomeControlsInitializing)
+		{
+			return;
+		}
+
+		try
+		{
+			await SaveIncomeFromControlsAsync(showValidation: false);
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnIncomePayPeriodChanged", ex);
 			await DisplayAlert("Error", ex.Message, "OK");
 		}
 	}
@@ -567,40 +731,7 @@ public partial class MainPage : ContentPage
 	{
 		try
 		{
-			var mode = await DisplayActionSheet("Add bill", "Cancel", null, "Single bill", "Multiple bills");
-			if (string.IsNullOrEmpty(mode) || mode == "Cancel")
-			{
-				return;
-			}
-
-			if (mode == "Multiple bills")
-			{
-				await Navigation.PushAsync(new BulkBillsPage(_service, _currentYear, _currentMonth, _service.Categories().ToList(), ReloadMonthAsync));
-				return;
-			}
-
-			var seed = new BillItem
-			{
-				Name = string.Empty,
-				Amount = 0,
-				Category = "General",
-				DueDate = new DateTime(_currentYear, _currentMonth, Math.Min(DateTime.Today.Day, DateTime.DaysInMonth(_currentYear, _currentMonth))),
-				IsPaid = false,
-				IsRecurring = false,
-				Year = _currentYear,
-				Month = _currentMonth
-			};
-
-			var editor = new BillEditorPage(seed, _currentYear, _currentMonth, _service.Categories());
-			await Navigation.PushAsync(editor);
-			var result = await editor.WaitForResultAsync();
-			if (result is null)
-			{
-				return;
-			}
-
-			await _service.AddBillAsync(_currentMonth, result);
-			await ReloadMonthAsync();
+			await Navigation.PushAsync(new BulkBillsPage(_service, _currentYear, _currentMonth, _service.Categories().ToList(), ReloadMonthAsync));
 		}
 		catch (Exception ex)
 		{
@@ -869,7 +1000,7 @@ public partial class MainPage : ContentPage
 	{
 		try
 		{
-			await Navigation.PushAsync(new SettingsPage(_service, _currentYear, _currentMonth, ReloadMonthAsync, _localization));
+			await Navigation.PushAsync(new SettingsPage(_service, _currentYear, _currentMonth, ReloadMonthAsync, _localization, _appLockService));
 		}
 		catch (Exception ex)
 		{

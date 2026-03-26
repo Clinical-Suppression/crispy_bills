@@ -1,6 +1,8 @@
 using CrispyBills.Mobile.Android.Models;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,6 +17,17 @@ public sealed class BillingService
 {
     private readonly SemaphoreSlim _stateSemaphore = new(1, 1);
     private const string ArchivedYearsMetaKey = "ArchivedYears";
+    private const string IncomeProfilesMetaKey = "IncomeProfiles";
+    private const string SoonThresholdMetaKey = "SoonThreshold";
+    public const string IncomePayPeriodMonthly = "Monthly";
+    public const string IncomePayPeriodBiWeekly = "Bi-weekly";
+    public const string IncomePayPeriodWeekly = "Weekly";
+    public const string SoonThresholdUnitDays = "Days";
+    public const string SoonThresholdUnitWeeks = "Weeks";
+    public const string SoonThresholdUnitMonths = "Months";
+    private static readonly Regex WeekBasedSuffixPattern = new(
+        @"\s-\s(?:Week|Bi-weekly)\s\d+$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private readonly IBillingRepository _repository;
 
     private YearData _currentData = new();
@@ -30,6 +43,12 @@ public sealed class BillingService
 
     /// <summary>Data folder root (for diagnostics and import parse logs).</summary>
     public string DataRoot => _repository.DataRoot;
+
+    public static IReadOnlyList<string> IncomePayPeriodOptions() =>
+        [IncomePayPeriodMonthly, IncomePayPeriodBiWeekly, IncomePayPeriodWeekly];
+
+    public static IReadOnlyList<string> SoonThresholdUnits() =>
+        [SoonThresholdUnitDays, SoonThresholdUnitWeeks, SoonThresholdUnitMonths];
 
     /// <summary>Load data for the specified year into the service and normalize state.</summary>
     /// <param name="year">Year to load.</param>
@@ -63,6 +82,87 @@ public sealed class BillingService
     {
         ValidateMonth(month);
         return _currentData.IncomeByMonth.TryGetValue(month, out var income) ? income : 0m;
+    }
+
+    public async Task<(decimal Amount, string PayPeriod)> GetIncomeEntryAsync(int month)
+    {
+        ValidateMonth(month);
+        await _stateSemaphore.WaitAsync();
+        try
+        {
+            var profiles = await LoadIncomeProfilesAsync();
+            if (profiles.TryGetValue(BuildIncomeProfileKey(CurrentYear, month), out var stored))
+            {
+                return (stored.Amount, NormalizeIncomePayPeriod(stored.PayPeriod));
+            }
+
+            return (GetIncome(month), IncomePayPeriodMonthly);
+        }
+        finally
+        {
+            _stateSemaphore.Release();
+        }
+    }
+
+    public async Task<(int Value, string Unit)> GetSoonThresholdAsync()
+    {
+        await _stateSemaphore.WaitAsync();
+        try
+        {
+            var raw = await _repository.GetAppMetaAsync(SoonThresholdMetaKey);
+            var stored = DeserializeJson<SoonThresholdMeta>(raw);
+            var value = Math.Clamp(stored?.Value ?? 7, 1, 30);
+            var unit = NormalizeSoonThresholdUnit(stored?.Unit);
+            return (value, unit);
+        }
+        finally
+        {
+            _stateSemaphore.Release();
+        }
+    }
+
+    public async Task SetSoonThresholdAsync(int value, string unit)
+    {
+        await _stateSemaphore.WaitAsync();
+        try
+        {
+            var stored = new SoonThresholdMeta
+            {
+                Value = Math.Clamp(value, 1, 30),
+                Unit = NormalizeSoonThresholdUnit(unit)
+            };
+            await _repository.SetAppMetaAsync(SoonThresholdMetaKey, JsonSerializer.Serialize(stored));
+        }
+        finally
+        {
+            _stateSemaphore.Release();
+        }
+    }
+
+    public bool IsBillSoon(BillItem bill, int value, string unit)
+    {
+        if (bill.IsPaid || bill.IsPastDue)
+        {
+            return false;
+        }
+
+        var normalizedValue = Math.Clamp(value, 1, 30);
+        var normalizedUnit = NormalizeSoonThresholdUnit(unit);
+        var today = DateTime.Today;
+        var due = bill.DueDate.Date;
+        if (due < today)
+        {
+            return false;
+        }
+
+        var thresholdDate = normalizedUnit switch
+        {
+            SoonThresholdUnitWeeks => today.AddDays(normalizedValue * 7),
+            SoonThresholdUnitMonths => today.AddMonths(normalizedValue),
+            _ => today.AddDays(normalizedValue)
+        };
+
+        return due <= thresholdDate.Date;
     }
 
     /// <summary>Return the list of years available from the repository.</summary>
@@ -131,6 +231,33 @@ public sealed class BillingService
         return snapshot;
     }
 
+    public BillItem? GetEditableBillDraft(int month, Guid id)
+    {
+        ValidateMonth(month);
+        var existing = _currentData.BillsByMonth[month].FirstOrDefault(x => x.Id == id);
+        if (existing is null)
+        {
+            return null;
+        }
+
+        var draft = existing.Clone();
+        if (existing.RecurrenceGroupId is Guid rootId)
+        {
+            var anchor = FindBillAcrossYear(rootId);
+            if (anchor is not null)
+            {
+                draft.IsRecurring = true;
+                draft.RecurrenceFrequency = anchor.RecurrenceFrequency;
+                draft.RecurrenceEveryMonths = anchor.RecurrenceEveryMonths;
+                draft.RecurrenceEndMode = anchor.RecurrenceEndMode;
+                draft.RecurrenceEndDate = anchor.RecurrenceEndDate;
+                draft.RecurrenceMaxOccurrences = anchor.RecurrenceMaxOccurrences;
+            }
+        }
+
+        return draft;
+    }
+
     /// <summary>Restore in-memory state from a previously created snapshot and persist it.</summary>
     public async Task RestoreYearSnapshotAsync(YearData snapshot)
     {
@@ -157,17 +284,32 @@ public sealed class BillingService
     /// <summary>Set income value for the specified month and persist the change.</summary>
     public async Task SetIncomeAsync(int month, decimal income)
     {
+        await SetIncomeAsync(month, income, IncomePayPeriodMonthly);
+    }
+
+    /// <summary>Set income value using the selected pay period and persist it for the current and future months.</summary>
+    public async Task SetIncomeAsync(int month, decimal income, string payPeriod)
+    {
         ValidateMonth(month);
         await _stateSemaphore.WaitAsync();
         try
         {
-            var clamped = Math.Max(0, income);
+            var normalizedPayPeriod = NormalizeIncomePayPeriod(payPeriod);
+            var enteredAmount = RoundCurrency(Math.Max(0, income));
+            var monthlyAmount = ConvertIncomeToMonthlyAmount(enteredAmount, normalizedPayPeriod);
+            var profiles = await LoadIncomeProfilesAsync();
             for (var targetMonth = month; targetMonth <= 12; targetMonth++)
             {
-                _currentData.IncomeByMonth[targetMonth] = clamped;
+                _currentData.IncomeByMonth[targetMonth] = monthlyAmount;
+                profiles[BuildIncomeProfileKey(CurrentYear, targetMonth)] = new IncomeProfileMeta
+                {
+                    Amount = enteredAmount,
+                    PayPeriod = normalizedPayPeriod
+                };
             }
 
             await SaveAsync();
+            await SaveIncomeProfilesAsync(profiles);
         }
         finally
         {
@@ -415,6 +557,7 @@ public sealed class BillingService
     private void AddBillCoreWithoutSave(int month, BillItem draft)
     {
         var baseDay = Math.Min(draft.DueDate.Day, DateTime.DaysInMonth(CurrentYear, month));
+        var baseName = StripWeekBasedSuffix(draft.Name);
 
         var current = draft.Clone();
         current.Id = draft.IsRecurring
@@ -440,6 +583,7 @@ public sealed class BillingService
         if (draft.IsRecurring && IsWeekBased(current.RecurrenceFrequency))
         {
             ExpandWeeklySeriesIntoYear(current, month, CurrentYear, _currentData);
+            ApplyWeekBasedSeriesLabels(current.Id, baseName, current.RecurrenceFrequency);
         }
         else if (draft.IsRecurring)
         {
@@ -482,13 +626,64 @@ public sealed class BillingService
                 return;
             }
 
-            // One row in a weekly/bi-weekly series (non-anchor): update locally only.
+            // Editing one row in a weekly/bi-weekly series should affect that occurrence and future ones,
+            // while preserving already-completed history.
             if (target.RecurrenceGroupId.HasValue && !target.IsRecurring)
             {
+                var originalGroupId = target.RecurrenceGroupId.Value;
                 var baseDayChild = Math.Min(edited.DueDate.Day, DateTime.DaysInMonth(CurrentYear, month));
-                Apply(target, edited, month, baseDayChild);
-                target.IsRecurring = false;
-                target.RecurrenceFrequency = RecurrenceFrequency.None;
+                var nextFrequency = edited.IsRecurring
+                    ? (edited.RecurrenceFrequency == RecurrenceFrequency.None ? RecurrenceFrequency.MonthlyInterval : edited.RecurrenceFrequency)
+                    : RecurrenceFrequency.None;
+                var newBaseName = StripWeekBasedSuffix(edited.Name);
+
+                DeactivateWeekBasedAnchor(originalGroupId);
+                RemoveWeekBasedOccurrencesFromDate(originalGroupId, target.DueDate.Date);
+
+                var single = edited.Clone();
+                single.Id = id;
+                single.Year = CurrentYear;
+                single.Month = month;
+                single.DueDate = NormalizeDueDate(CurrentYear, month, baseDayChild, edited.DueDate);
+                single.RecurrenceGroupId = null;
+
+                if (!edited.IsRecurring)
+                {
+                    single.IsRecurring = false;
+                    single.RecurrenceFrequency = RecurrenceFrequency.None;
+                    _currentData.BillsByMonth[month].Add(single);
+                    await SaveAsync();
+                    return;
+                }
+
+                single.IsRecurring = true;
+                single.RecurrenceFrequency = nextFrequency;
+                _currentData.BillsByMonth[month].Add(single);
+
+                if (IsWeekBased(nextFrequency))
+                {
+                    ExpandWeeklySeriesIntoYear(single, month, CurrentYear, _currentData);
+                    ApplyWeekBasedSeriesLabels(single.Id, newBaseName, nextFrequency);
+                }
+                else
+                {
+                    for (var futureMonth = month + 1; futureMonth <= 12; futureMonth++)
+                    {
+                        if (!ShouldCreateRecurringOccurrence(single, month, futureMonth, CurrentYear))
+                        {
+                            continue;
+                        }
+
+                        var future = single.Clone();
+                        future.Month = futureMonth;
+                        future.Year = CurrentYear;
+                        future.DueDate = NormalizeDueDate(CurrentYear, futureMonth, baseDayChild, edited.DueDate);
+                        future.IsPaid = false;
+                        future.RecurrenceGroupId = null;
+                        _currentData.BillsByMonth[futureMonth].Add(future);
+                    }
+                }
+
                 await SaveAsync();
                 return;
             }
@@ -531,6 +726,7 @@ public sealed class BillingService
                 if (IsWeekBased(anchor.RecurrenceFrequency))
                 {
                     ExpandWeeklySeriesIntoYear(anchor, month, CurrentYear, _currentData);
+                    ApplyWeekBasedSeriesLabels(anchor.Id, StripWeekBasedSuffix(anchor.Name), anchor.RecurrenceFrequency);
                 }
                 else
                 {
@@ -564,6 +760,7 @@ public sealed class BillingService
                 }
 
                 ExpandWeeklySeriesIntoYear(target, month, CurrentYear, _currentData);
+                ApplyWeekBasedSeriesLabels(target.Id, StripWeekBasedSuffix(edited.Name), edited.RecurrenceFrequency);
             }
             else if (edited.IsRecurring)
             {
@@ -618,6 +815,15 @@ public sealed class BillingService
             var current = _currentData.BillsByMonth[month].FirstOrDefault(x => x.Id == id);
             if (current is null)
             {
+                return;
+            }
+
+            if (current.RecurrenceGroupId.HasValue && !current.IsRecurring)
+            {
+                var recurrenceRootId = current.RecurrenceGroupId.Value;
+                DeactivateWeekBasedAnchor(recurrenceRootId);
+                RemoveWeekBasedOccurrencesFromDate(recurrenceRootId, current.DueDate.Date);
+                await SaveAsync();
                 return;
             }
 
@@ -856,6 +1062,7 @@ public sealed class BillingService
                 anchor.RecurrenceGroupId = null;
                 nextData.BillsByMonth[first.Month].Add(anchor);
                 ExpandWeeklySeriesIntoYear(anchor, first.Month, newYear, nextData);
+                ApplyWeekBasedSeriesLabels(nextData, anchor.Id, StripWeekBasedSuffix(recurringTemplate.Name), recurringTemplate.RecurrenceFrequency);
 
                 if (!recurringTemplate.IsPaid)
                 {
@@ -925,6 +1132,7 @@ public sealed class BillingService
         }
 
         await _repository.SaveYearAsync(newYear, nextData);
+        await CarryIncomeProfileToNewYearAsync(newYear, decemberIncome);
         return true;
         }
         finally
@@ -1361,6 +1569,181 @@ public sealed class BillingService
         await _repository.SaveYearAsync(CurrentYear, _currentData);
     }
 
+    private async Task<Dictionary<string, IncomeProfileMeta>> LoadIncomeProfilesAsync()
+    {
+        var raw = await _repository.GetAppMetaAsync(IncomeProfilesMetaKey);
+        return DeserializeJson<Dictionary<string, IncomeProfileMeta>>(raw)
+            ?? new Dictionary<string, IncomeProfileMeta>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private Task SaveIncomeProfilesAsync(Dictionary<string, IncomeProfileMeta> profiles)
+    {
+        return _repository.SetAppMetaAsync(IncomeProfilesMetaKey, JsonSerializer.Serialize(profiles));
+    }
+
+    private async Task CarryIncomeProfileToNewYearAsync(int newYear, decimal decemberIncome)
+    {
+        var profiles = await LoadIncomeProfilesAsync();
+        if (!profiles.TryGetValue(BuildIncomeProfileKey(CurrentYear, 12), out var decemberProfile))
+        {
+            decemberProfile = new IncomeProfileMeta
+            {
+                Amount = decemberIncome,
+                PayPeriod = IncomePayPeriodMonthly
+            };
+        }
+
+        for (var month = 1; month <= 12; month++)
+        {
+            profiles[BuildIncomeProfileKey(newYear, month)] = new IncomeProfileMeta
+            {
+                Amount = decemberProfile.Amount,
+                PayPeriod = NormalizeIncomePayPeriod(decemberProfile.PayPeriod)
+            };
+        }
+
+        await SaveIncomeProfilesAsync(profiles);
+    }
+
+    private static string BuildIncomeProfileKey(int year, int month) => $"{year:D4}-{month:D2}";
+
+    private static decimal ConvertIncomeToMonthlyAmount(decimal amount, string payPeriod)
+    {
+        var normalized = NormalizeIncomePayPeriod(payPeriod);
+        var monthlyAmount = normalized switch
+        {
+            IncomePayPeriodWeekly => amount * 52m / 12m,
+            IncomePayPeriodBiWeekly => amount * 26m / 12m,
+            _ => amount
+        };
+
+        return RoundCurrency(monthlyAmount);
+    }
+
+    private static string NormalizeIncomePayPeriod(string? payPeriod)
+    {
+        if (string.Equals(payPeriod, IncomePayPeriodWeekly, StringComparison.OrdinalIgnoreCase))
+        {
+            return IncomePayPeriodWeekly;
+        }
+
+        if (string.Equals(payPeriod, IncomePayPeriodBiWeekly, StringComparison.OrdinalIgnoreCase))
+        {
+            return IncomePayPeriodBiWeekly;
+        }
+
+        return IncomePayPeriodMonthly;
+    }
+
+    private static string NormalizeSoonThresholdUnit(string? unit)
+    {
+        if (string.Equals(unit, SoonThresholdUnitWeeks, StringComparison.OrdinalIgnoreCase))
+        {
+            return SoonThresholdUnitWeeks;
+        }
+
+        if (string.Equals(unit, SoonThresholdUnitMonths, StringComparison.OrdinalIgnoreCase))
+        {
+            return SoonThresholdUnitMonths;
+        }
+
+        return SoonThresholdUnitDays;
+    }
+
+    private static decimal RoundCurrency(decimal amount) =>
+        Math.Round(amount, 2, MidpointRounding.AwayFromZero);
+
+    private BillItem? FindBillAcrossYear(Guid id)
+    {
+        foreach (var month in Enumerable.Range(1, 12))
+        {
+            var bill = _currentData.BillsByMonth[month].FirstOrDefault(x => x.Id == id);
+            if (bill is not null)
+            {
+                return bill;
+            }
+        }
+
+        return null;
+    }
+
+    private void DeactivateWeekBasedAnchor(Guid rootId)
+    {
+        var anchor = FindBillAcrossYear(rootId);
+        if (anchor is null)
+        {
+            return;
+        }
+
+        anchor.IsRecurring = false;
+        anchor.RecurrenceFrequency = RecurrenceFrequency.None;
+        anchor.RecurrenceEndMode = RecurrenceEndMode.None;
+        anchor.RecurrenceEndDate = null;
+        anchor.RecurrenceMaxOccurrences = null;
+        anchor.RecurrenceGroupId = null;
+    }
+
+    private void RemoveWeekBasedOccurrencesFromDate(Guid rootId, DateTime fromDate)
+    {
+        foreach (var month in Enumerable.Range(1, 12))
+        {
+            _currentData.BillsByMonth[month].RemoveAll(x =>
+                (x.Id == rootId || x.RecurrenceGroupId == rootId)
+                && x.DueDate.Date >= fromDate.Date);
+        }
+    }
+
+    private void ApplyWeekBasedSeriesLabels(Guid rootId, string baseName, RecurrenceFrequency frequency)
+        => ApplyWeekBasedSeriesLabels(_currentData, rootId, baseName, frequency);
+
+    private static void ApplyWeekBasedSeriesLabels(YearData data, Guid rootId, string baseName, RecurrenceFrequency frequency)
+    {
+        var normalizedBaseName = StripWeekBasedSuffix(baseName);
+        foreach (var month in Enumerable.Range(1, 12))
+        {
+            var occurrences = data.BillsByMonth[month]
+                .Where(x => x.Id == rootId || x.RecurrenceGroupId == rootId)
+                .OrderBy(x => x.DueDate)
+                .ThenBy(x => x.Id)
+                .ToList();
+
+            for (var index = 0; index < occurrences.Count; index++)
+            {
+                occurrences[index].Name = BuildWeekBasedOccurrenceName(normalizedBaseName, frequency, index + 1);
+            }
+        }
+    }
+
+    private static string StripWeekBasedSuffix(string? name)
+    {
+        var normalized = string.IsNullOrWhiteSpace(name) ? "Untitled bill" : name.Trim();
+        return WeekBasedSuffixPattern.Replace(normalized, string.Empty);
+    }
+
+    private static string BuildWeekBasedOccurrenceName(string baseName, RecurrenceFrequency frequency, int occurrenceIndex)
+    {
+        var normalizedBaseName = StripWeekBasedSuffix(baseName);
+        var suffix = frequency == RecurrenceFrequency.BiWeekly ? "Bi-weekly" : "Week";
+        return $"{normalizedBaseName} - {suffix} {occurrenceIndex}";
+    }
+
+    private static T? DeserializeJson<T>(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return default;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(raw);
+        }
+        catch
+        {
+            return default;
+        }
+    }
+
     private void ReportDiagnostic(string area, string message)
     {
         try
@@ -1388,6 +1771,8 @@ public sealed class BillingService
                     {
                         changed = true;
                     }
+
+                    ApplyWeekBasedSeriesLabels(recurring.Id, StripWeekBasedSuffix(recurring.Name), recurring.RecurrenceFrequency);
 
                     continue;
                 }
@@ -1888,6 +2273,18 @@ public sealed class BillingService
         _currentData = await _repository.LoadYearAsync(year);
         NormalizeForYear(CurrentYear);
         await EnsureRecurringCatchUpAsync();
+    }
+
+    private sealed class IncomeProfileMeta
+    {
+        public decimal Amount { get; set; }
+        public string PayPeriod { get; set; } = IncomePayPeriodMonthly;
+    }
+
+    private sealed class SoonThresholdMeta
+    {
+        public int Value { get; set; } = 7;
+        public string Unit { get; set; } = SoonThresholdUnitDays;
     }
 
     private readonly record struct StructuredCsvParseResult(

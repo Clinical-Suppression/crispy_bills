@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage
+    x:Class="CrispyBills.Mobile.Android.PinSetupPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:local="clr-namespace:CrispyBills.Mobile.Android"
+    Title="App PIN">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="24" Spacing="18">
+            <Label
+                FontAttributes="Bold"
+                FontSize="24"
+                Text="Protect the app with a PIN" />
+
+            <Label
+                Text="Use a simple 4-digit PIN so the app can lock when the phone has been sitting in the background."
+                TextColor="{AppThemeBinding Light=#5C4A2D, Dark=#DDDDDD}" />
+
+            <Frame
+                Padding="18"
+                BackgroundColor="{AppThemeBinding Light=#FFF8ED, Dark=#2A2A2A}"
+                BorderColor="{AppThemeBinding Light=#F1D5A0, Dark=#4A4A4A}"
+                CornerRadius="16"
+                HasShadow="False">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="PIN" />
+                    <Entry
+                        x:Name="PinEntry"
+                        ClearButtonVisibility="WhileEditing"
+                        Completed="OnPinCompleted"
+                        IsPassword="True"
+                        Keyboard="Numeric"
+                        MaxLength="4"
+                        Placeholder="4 digits">
+                        <Entry.Behaviors>
+                            <local:SelectAllEntryBehavior />
+                        </Entry.Behaviors>
+                    </Entry>
+
+                    <Label Text="Confirm PIN" />
+                    <Entry
+                        x:Name="ConfirmPinEntry"
+                        ClearButtonVisibility="WhileEditing"
+                        Completed="OnConfirmCompleted"
+                        IsPassword="True"
+                        Keyboard="Numeric"
+                        MaxLength="4"
+                        Placeholder="Repeat PIN">
+                        <Entry.Behaviors>
+                            <local:SelectAllEntryBehavior />
+                        </Entry.Behaviors>
+                    </Entry>
+
+                    <Grid x:Name="BiometricRow" ColumnDefinitions="*,Auto" IsVisible="False" Padding="0,8,0,0">
+                        <Label
+                            x:Name="BiometricLabel"
+                            Text="Allow fingerprint/face unlock"
+                            VerticalOptions="Center">
+                            <Label.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnBiometricRowTapped" />
+                            </Label.GestureRecognizers>
+                        </Label>
+                        <Switch
+                            x:Name="BiometricSwitch"
+                            Grid.Column="1"
+                            HorizontalOptions="End"
+                            IsToggled="True"
+                            VerticalOptions="Center" />
+                    </Grid>
+
+                    <Label
+                        x:Name="StatusLabel"
+                        FontSize="13"
+                        IsVisible="False"
+                        TextColor="#B42318" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <Button
+                Clicked="OnSaveClicked"
+                Text="Save PIN"
+                BackgroundColor="#D97706"
+                TextColor="White" />
+
+            <Button
+                x:Name="CancelButton"
+                Clicked="OnCancelClicked"
+                Text="Not now"
+                BackgroundColor="#EFEFEF"
+                TextColor="#333333" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

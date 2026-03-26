@@ -6,6 +6,7 @@ namespace CrispyBills.Mobile.Android;
 public partial class App : Application
 {
 	private readonly IServiceProvider _services;
+	private readonly AppLockService _appLockService;
 
 	/// <summary>
 	/// Resolves the root service provider from DI so <see cref="CreateWindow"/> does not depend on
@@ -14,6 +15,7 @@ public partial class App : Application
 	public App(IServiceProvider services)
 	{
 		_services = services ?? throw new ArgumentNullException(nameof(services));
+		_appLockService = _services.GetRequiredService<AppLockService>();
 		try
 		{
 			InitializeComponent();
@@ -39,6 +41,7 @@ public partial class App : Application
 	protected override void OnSleep()
 	{
 		base.OnSleep();
+		_appLockService.NoteAppBackgrounded();
 		_ = RoutineBackupTickAsync();
 	}
 
@@ -58,34 +61,16 @@ public partial class App : Application
 	protected override Window CreateWindow(IActivationState? activationState)
 	{
 		StartupDiagnostics.Clear();
-
-		var loadingLabel = new Label
+		try
 		{
-			Text = "Starting Crispy Bills...",
-			Margin = new Thickness(16),
-			HorizontalTextAlignment = TextAlignment.Center,
-			VerticalTextAlignment = TextAlignment.Center
-		};
-		var loadingPage = new ContentPage
+			// Build the root shell up-front to avoid page swapping races
+			// during window handler initialization on Android.
+			return new Window(_services.GetRequiredService<AppShell>());
+		}
+		catch (Exception ex)
 		{
-			Title = "Starting",
-			Content = loadingLabel
-		};
-		var window = new Window(new NavigationPage(loadingPage));
-
-		MainThread.BeginInvokeOnMainThread(() =>
-		{
-			try
-			{
-				window.Page = _services.GetRequiredService<AppShell>();
-			}
-			catch (Exception ex)
-			{
-				window.Page = BuildErrorWindow(ex).Page;
-			}
-		});
-
-		return window;
+			return BuildErrorWindow(ex);
+		}
 	}
 
 	private static Window BuildErrorWindow(Exception ex)

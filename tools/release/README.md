@@ -19,6 +19,7 @@ Wizard parameters (non-exhaustive; see `wizard.ps1` for the full `param` block)
 - **Execution mode**: `-DryRun` (print commands only), `-NoCommit` (skip publish auto-commit / commit step), `-AutoConfirm` (non-interactive defaults; selects all tasks when none specified), `-Verbose`.
 - **Git / tree**: `-AllowDirty` vs `-RequireCleanTree` (mutually exclusive; default allows dirty tree unless you require clean).
 - **UX**: `-NoSpinner` (disable spinner for child scripts; interactive scripts that use `Read-Host` already run attached without spinner).
+- **Timeouts**: `-TaskTimeoutSeconds <n>` (override per-task idle timeout; `0` disables timeout override). `build-mobile.ps1` defaults to a 300-second idle timeout so wizard runs fail fast only when work appears stalled.
 - **Commit metadata** (for `conventional-commit.ps1` or publish pre-commit): `-CommitType`, `-CommitScope`, `-CommitMessage`, `-CommitBody`, `-BreakingChange`, `-AutoCommit`, `-NoCommit`.
 - **Publish / major version**: `-ApproveMajorVersion` (required when a real publish would bump major and automation cannot prompt).
 - **Responses automation**: `-ResponsesFile` (JSON consumed by `prompt-helpers.ps1` when present), `-NonInteractive`, `-RequireNonInteractiveReady` (validates task + dry-run inputs for CI).
@@ -33,9 +34,17 @@ Progress and diagnostics
   - `skipped`: not executed because dry-run mode was enabled.
 - At the end of each run, a step summary is printed with:
   - step number, script name, state, duration, and exit code.
+- While a task runs, the wizard renders an in-place single-line status with:
+  - spinner glyph (`| / - \\`)
+  - activity bar (`[###.....]`) that advances when real work pulses are detected
+    (CPU deltas, child-process changes, and output-file growth).
+  - The activity bar is intentionally liveness-oriented and caps before completion
+    until the task exits.
 - By default, the wizard also writes a machine-readable run artifact:
   - `publish/logs/wizard-progress-<timestamp>.json`
   - This includes run metadata (`RunId`, mode, status, total duration) and full per-step timeline.
+- Progress redraws are in-place console updates only and are not appended into
+  wizard JSON artifacts or release logs.
 - To disable JSON artifact output, pass:
   - `-NoProgressJson`
 
