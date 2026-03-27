@@ -451,3 +451,66 @@ function Write-WizardProgressJson {
     Write-JsonFile -Object $RunState -Path $path
     return $path
 }
+
+<# .SYNOPSIS
+If GitHub CLI is not logged in to github.com, authenticate using a PAT read from a file.
+Token path: -TokenFile, then env CRISPY_BILLS_GH_TOKEN_FILE, then GITHUB_TOKEN_FILE, then a default under the user profile.
+#>
+function Ensure-GitHubCliAuthenticated {
+    param(
+        [string]$TokenFile
+    )
+
+    $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
+    if ($ghCmd) {
+        $gh = $ghCmd.Source
+    }
+    else {
+        $fallback = 'C:\Program Files\GitHub CLI\gh.exe'
+        if (Test-Path -LiteralPath $fallback) {
+            $gh = $fallback
+        }
+        else {
+            throw 'GitHub CLI not found. Install GitHub CLI and/or restart the terminal so PATH updates.'
+        }
+    }
+
+    Write-Host ("Using GitHub CLI: {0}" -f $gh) -ForegroundColor DarkGray
+
+    $null = & $gh auth status -h github.com 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host 'GitHub CLI: already authenticated (github.com).' -ForegroundColor Green
+        return
+    }
+
+    $resolvedPath = Get-FirstPathValue @($TokenFile, [Environment]::GetEnvironmentVariable('CRISPY_BILLS_GH_TOKEN_FILE'), [Environment]::GetEnvironmentVariable('GITHUB_TOKEN_FILE'))
+    if ([string]::IsNullOrWhiteSpace($resolvedPath)) {
+        $resolvedPath = Join-Path $env:USERPROFILE 'Documents\Visual Studio Projects\Projects\Tokens\Clinical_Suppression All Repos Token.txt'
+    }
+
+    if (-not (Test-Path -LiteralPath $resolvedPath)) {
+        throw @'
+GitHub CLI is not authenticated and no token file was found.
+Set environment variable CRISPY_BILLS_GH_TOKEN_FILE or GITHUB_TOKEN_FILE to your PAT file path,
+or pass -GitHubTokenFile to the wizard, or run: gh auth login
+'@
+    }
+
+    $token = (Get-Content -LiteralPath $resolvedPath -Raw).Trim()
+    if ([string]::IsNullOrWhiteSpace($token)) {
+        throw "GitHub token file is empty: $resolvedPath"
+    }
+
+    Write-Host 'GitHub CLI: authenticating with token from file...' -ForegroundColor Yellow
+    $token | & $gh auth login -h github.com --with-token
+    if ($LASTEXITCODE -ne 0) {
+        throw 'gh auth login --with-token failed.'
+    }
+
+    $null = & $gh auth setup-git 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw 'gh auth setup-git failed.'
+    }
+
+    Write-Host 'GitHub CLI: login complete.' -ForegroundColor Green
+}

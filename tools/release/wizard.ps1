@@ -10,6 +10,8 @@ Automation notes:
         -NonInteractive -RequireNonInteractiveReady.
     - Prefer reading machine output (version.ps1 -OutFile) rather than parsing
         stdout when automating.
+    - Publish flows: if gh is not logged in, the wizard reads a PAT from
+        -GitHubTokenFile or CRISPY_BILLS_GH_TOKEN_FILE / GITHUB_TOKEN_FILE.
 #>
 
 param(
@@ -34,7 +36,8 @@ param(
     [switch]$SkipVersion,
     [string]$ResponsesFile,
     [switch]$NoProgressJson,
-    [int]$TaskTimeoutSeconds = 0
+    [int]$TaskTimeoutSeconds = 0,
+    [string]$GitHubTokenFile
 )
 
 Set-StrictMode -Version Latest
@@ -66,6 +69,10 @@ function Clear-WizardProgress {
     Write-Host ''
 }
 
+# Throttle WMI child-process queries; cache descendant PIDs to sum CPU (wrapper pwsh often idles while dotnet/MSBuild work).
+$script:WizardLastChildProcessWmiQueryUtc = [DateTime]::MinValue
+$script:WizardDescendantProcessIdsForCpu = @()
+
 function Get-ProcessActivityPulse {
     param(
         [Parameter(Mandatory = $true)]$Process,
@@ -74,13 +81,15 @@ function Get-ProcessActivityPulse {
         [long]$LastStdOutLength = -1,
         [long]$LastStdErrLength = -1,
         [string]$StdOutPath,
-        [string]$StdErrPath
+        [string]$StdErrPath,
+        [timespan]$LastChildTreeCpuSum = [timespan]::Zero
     )
 
     $cpuPulse = $false
     $childPulse = $false
     $stdoutPulse = $false
     $stderrPulse = $false
+    $descendantCpuPulse = $false
 
     $cpuNow = $LastCpuTime
     try {
@@ -93,13 +102,54 @@ function Get-ProcessActivityPulse {
 
     $childCount = $LastChildCount
     try {
-        $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($Process.Id)" -ErrorAction SilentlyContinue)
-        $childCount = $children.Count
-        if ($LastChildCount -ge 0 -and $childCount -ne $LastChildCount) {
-            $childPulse = $true
+        $nowUtc = [DateTime]::UtcNow
+        $shouldQueryChildren = ($nowUtc - $script:WizardLastChildProcessWmiQueryUtc).TotalSeconds -ge 2.0
+        if ($shouldQueryChildren) {
+            $script:WizardLastChildProcessWmiQueryUtc = $nowUtc
+            $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($Process.Id)" -ErrorAction SilentlyContinue)
+            $childCount = $children.Count
+            if ($LastChildCount -ge 0 -and $childCount -ne $LastChildCount) {
+                $childPulse = $true
+            }
+            $ids = [System.Collections.Generic.HashSet[int]]::new()
+            foreach ($c in $children) {
+                $p = [int]$c.ProcessId
+                [void]$ids.Add($p)
+                try {
+                    $grand = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$p" -ErrorAction SilentlyContinue)
+                    foreach ($g in $grand) {
+                        $gp = [int]$g.ProcessId
+                        [void]$ids.Add($gp)
+                        try {
+                            $great = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$gp" -ErrorAction SilentlyContinue)
+                            foreach ($gg in $great) {
+                                [void]$ids.Add([int]$gg.ProcessId)
+                            }
+                        }
+                        catch {}
+                    }
+                }
+                catch {}
+            }
+            $script:WizardDescendantProcessIdsForCpu = @($ids)
         }
     }
     catch {}
+
+    $childTreeCpuSum = [timespan]::Zero
+    foreach ($procId in $script:WizardDescendantProcessIdsForCpu) {
+        try {
+            $cp = Get-Process -Id $procId -ErrorAction Stop
+            $childTreeCpuSum += $cp.TotalProcessorTime
+        }
+        catch {
+            # Process exited; list refreshes on next WMI pass
+        }
+    }
+
+    if (($childTreeCpuSum - $LastChildTreeCpuSum).TotalMilliseconds -gt 0.5) {
+        $descendantCpuPulse = $true
+    }
 
     $stdoutLength = $LastStdOutLength
     if ($StdOutPath) {
@@ -130,6 +180,7 @@ function Get-ProcessActivityPulse {
     $pulseStrength = 0
     if ($cpuPulse) { $pulseStrength += 2 }
     if ($childPulse) { $pulseStrength += 1 }
+    if ($descendantCpuPulse) { $pulseStrength += 3 }
     if ($stdoutPulse) { $pulseStrength += 2 }
     if ($stderrPulse) { $pulseStrength += 1 }
 
@@ -139,6 +190,7 @@ function Get-ProcessActivityPulse {
         ChildCount = $childCount
         StdOutLength = $stdoutLength
         StdErrLength = $stderrLength
+        ChildTreeCpuSum = $childTreeCpuSum
     }
 }
 
@@ -617,20 +669,21 @@ function Get-RecommendedCommitMessage {
     $root = Get-WorkspaceRoot
     $diffSummary = Get-GitOutput -Args @('diff', '--stat', '--', $files) -WorkingDirectory $root
 
+    # Description only — conventional-commit.ps1 prepends type(scope): itself.
     if ($type -eq 'docs') {
-        return "docs: update documentation based on recent changes"
+        return "update documentation based on recent changes"
     }
     if ($type -eq 'test') {
-        return "test: add/update tests for changed behavior"
+        return "add/update tests for changed behavior"
     }
     if ($type -eq 'build') {
-        return "build: update build process / dependencies"
+        return "update build process / dependencies"
     }
     if ($type -eq 'fix') {
-        return "fix: correct behavior based on current change set"
+        return "correct behavior based on current change set"
     }
 
-    return "feat: implement new behavior and improvements"
+    return "implement new behavior and improvements"
 }
 
 function Prompt-CommitMetadata {
@@ -797,6 +850,27 @@ function Get-ShellCommand {
     if (Get-Command pwsh -ErrorAction SilentlyContinue) { return 'pwsh' }
     if (Get-Command powershell -ErrorAction SilentlyContinue) { return 'powershell' }
     throw 'No PowerShell executable found (pwsh or powershell).'
+}
+
+function Get-NormalizedProcessExitCode {
+    param([System.Diagnostics.Process]$Process)
+
+    if ($null -eq $Process) {
+        return 1
+    }
+
+    try {
+        $Process.Refresh()
+    }
+    catch {}
+
+    # Windows can leave ExitCode unset after WaitForExit; $null -ne 0 is true and would falsely fail the step.
+    $code = $Process.ExitCode
+    if ($null -eq $code) {
+        return 0
+    }
+
+    return [int]$code
 }
 
 function Stop-ProcessTree {
@@ -976,10 +1050,10 @@ function Run-ScriptByName {
                     Start-Sleep -Milliseconds 250
                 }
                 $process.WaitForExit()
-                if ($process.ExitCode -ne 0) {
-                    throw "Script $ScriptName failed with exit code $($process.ExitCode)."
+                $stepExitCode = Get-NormalizedProcessExitCode -Process $process
+                if ($stepExitCode -ne 0) {
+                    throw "Script $ScriptName failed with exit code $stepExitCode."
                 }
-                $stepExitCode = [int]$process.ExitCode
             }
             else {
                 Invoke-LoggedCommand -Command $command -Arguments $args -WorkingDirectory (Get-WorkspaceRoot)
@@ -990,6 +1064,8 @@ function Run-ScriptByName {
             $stderrPath = [System.IO.Path]::GetTempFileName()
             $process = $null
             try {
+                $script:WizardLastChildProcessWmiQueryUtc = [DateTime]::MinValue
+                $script:WizardDescendantProcessIdsForCpu = @()
                 $process = Start-Process -FilePath $command -ArgumentList $quotedArguments -WorkingDirectory (Get-WorkspaceRoot) -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
 
                 $spinnerFrames = @('|','/','-','\')
@@ -997,15 +1073,17 @@ function Run-ScriptByName {
                 $activityPercent = 0.0
                 $lastCpuTime = [timespan]::Zero
                 try { $lastCpuTime = $process.TotalProcessorTime } catch {}
+                $lastChildTreeCpuSum = [timespan]::Zero
                 $lastChildCount = -1
                 $lastStdOutLength = if (Test-Path $stdoutPath) { (Get-Item $stdoutPath).Length } else { -1 }
                 $lastStdErrLength = if (Test-Path $stderrPath) { (Get-Item $stderrPath).Length } else { -1 }
                 $lastActivityAt = [DateTime]::UtcNow
 
                 while (-not $process.HasExited) {
-                    $pulse = Get-ProcessActivityPulse -Process $process -LastCpuTime $lastCpuTime -LastChildCount $lastChildCount -LastStdOutLength $lastStdOutLength -LastStdErrLength $lastStdErrLength -StdOutPath $stdoutPath -StdErrPath $stderrPath
+                    $pulse = Get-ProcessActivityPulse -Process $process -LastCpuTime $lastCpuTime -LastChildCount $lastChildCount -LastStdOutLength $lastStdOutLength -LastStdErrLength $lastStdErrLength -StdOutPath $stdoutPath -StdErrPath $stderrPath -LastChildTreeCpuSum $lastChildTreeCpuSum
                     $lastCpuTime = $pulse.CpuNow
                     $lastChildCount = $pulse.ChildCount
+                    $lastChildTreeCpuSum = $pulse.ChildTreeCpuSum
                     $lastStdOutLength = $pulse.StdOutLength
                     $lastStdErrLength = $pulse.StdErrLength
                     $nowUtc = [DateTime]::UtcNow
@@ -1044,7 +1122,7 @@ function Run-ScriptByName {
                 }
                 Add-TaskDiagnosticsFromOutput -Command $command -OutputText (($commandOutput | Out-String))
 
-                $exitCode = [int]$process.ExitCode
+                $exitCode = Get-NormalizedProcessExitCode -Process $process
                 if ($exitCode -ne 0) {
                     throw "Script $ScriptName failed with exit code $exitCode."
                 }
@@ -1277,6 +1355,11 @@ if (-not $AutoConfirm) {
     Write-Host 'AutoConfirm: proceeding without interactive confirmation.' -ForegroundColor Yellow
 }
 
+if ($containsPublishTask) {
+    Write-Host "`n=== GitHub CLI (publish) ===" -ForegroundColor Cyan
+    Ensure-GitHubCliAuthenticated -TokenFile $GitHubTokenFile
+}
+
 try {
     $total = @($chosen).Count
     $detectedVersion = $null
@@ -1392,9 +1475,13 @@ try {
             if ($BreakingChange) { $commitArgs += '-Breaking' }
             if ($ResponsesFile) { $commitArgs += @('-ResponsesFile', $ResponsesFile) }
             if ($dryRun) { $commitArgs += '-DryRun' }
-            if ($AutoConfirm) { $commitArgs += '-SkipPrompt' }
+            # Wizard already collected metadata (Prompt-CommitMetadata or CLI); avoid duplicate prompts in conventional-commit.ps1.
+            if (-not $AutoCommit) { $commitArgs += '-SkipPrompt' }
 
-            Run-ScriptByName -ScriptName $commitScript -DryRun:$dryRun -ExtraArgs $commitArgs
+            $commitOk = Run-ScriptByName -ScriptName $commitScript -DryRun:$dryRun -ExtraArgs $commitArgs
+            if (-not $commitOk) {
+                throw 'Commit step failed (conventional-commit.ps1 reported failure).'
+            }
         }
         else {
             if ($dryRun) {

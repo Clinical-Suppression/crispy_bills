@@ -17,8 +17,7 @@
   "build-mobile.ps1": {
     "mayPrompt": false,
     "supportsNonInteractive": false,
-    "supportsResponsesFile": false,
-    "timeoutSeconds": 300
+    "supportsResponsesFile": false
   },
   "version.ps1": {
     "mayPrompt": false,
