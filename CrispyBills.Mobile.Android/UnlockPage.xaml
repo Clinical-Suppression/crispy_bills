@@ -32,6 +32,7 @@
                         x:Name="PinEntry"
                         ClearButtonVisibility="WhileEditing"
                         Completed="OnPinEntryCompleted"
+                        TextChanged="OnPinEntryTextChanged"
                         FontSize="24"
                         HorizontalTextAlignment="Center"
                         IsPassword="True"

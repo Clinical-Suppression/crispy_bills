@@ -11,9 +11,7 @@ namespace CrispyBills.Mobile.Android;
 public sealed class BulkBillsPage : ContentPage
 {
     private const int MaxRows = 50;
-    private const string RecurrenceMonthly = "Monthly (every month)";
-    private const string RecurrenceEvery2Months = "Every 2 months";
-    private const string RecurrenceEvery3Months = "Every 3 months";
+    private const string RecurrenceMonthly = "Monthly";
     private const string RecurrenceWeekly = "Weekly";
     private const string RecurrenceBiWeekly = "Bi-weekly";
 
@@ -173,6 +171,16 @@ public sealed class BulkBillsPage : ContentPage
         recurrencePicker.SetBinding(Picker.SelectedItemProperty, new Binding(nameof(BulkRow.RecurrenceOption), BindingMode.TwoWay));
         recurrencePicker.SetBinding(IsVisibleProperty, new Binding(nameof(BulkRow.IsRecurring)));
 
+        var recurrenceEveryMonthsEntry = new Entry
+        {
+            Placeholder = "Every N months (e.g. 3)",
+            Keyboard = Keyboard.Numeric,
+            HeightRequest = 44
+        };
+        recurrenceEveryMonthsEntry.Behaviors.Add(new SelectAllEntryBehavior());
+        recurrenceEveryMonthsEntry.SetBinding(Entry.TextProperty, new Binding(nameof(BulkRow.RecurrenceEveryMonthsText), BindingMode.TwoWay));
+        recurrenceEveryMonthsEntry.SetBinding(IsVisibleProperty, new Binding(nameof(BulkRow.ShowMonthlyIntervalInput)));
+
         var stack = new VerticalStackLayout
         {
             Spacing = 8,
@@ -184,7 +192,8 @@ public sealed class BulkBillsPage : ContentPage
                 dueDatePicker,
                 paidRow,
                 recurringRow,
-                recurrencePicker
+                recurrencePicker,
+                recurrenceEveryMonthsEntry
             }
         };
 
@@ -224,13 +233,14 @@ public sealed class BulkBillsPage : ContentPage
 
     private static (RecurrenceFrequency Frequency, int EveryMonths) ParseRecurrence(BulkRow row)
     {
+        var monthlyInterval = int.TryParse(row.RecurrenceEveryMonthsText, out var parsedEveryMonths)
+            ? Math.Max(1, parsedEveryMonths)
+            : 1;
         return row.RecurrenceOption switch
         {
             RecurrenceWeekly => (RecurrenceFrequency.Weekly, 1),
             RecurrenceBiWeekly => (RecurrenceFrequency.BiWeekly, 1),
-            RecurrenceEvery2Months => (RecurrenceFrequency.MonthlyInterval, 2),
-            RecurrenceEvery3Months => (RecurrenceFrequency.MonthlyInterval, 3),
-            _ => (RecurrenceFrequency.MonthlyInterval, 1)
+            _ => (RecurrenceFrequency.MonthlyInterval, monthlyInterval)
         };
     }
 
@@ -257,6 +267,15 @@ public sealed class BulkBillsPage : ContentPage
             {
                 errors.Add($"Row {index + 1}: amount must be a non-negative number.");
                 continue;
+            }
+
+            if (row.IsRecurring && row.RecurrenceOption == RecurrenceMonthly)
+            {
+                if (!int.TryParse(row.RecurrenceEveryMonthsText, out var everyMonths) || everyMonths < 1)
+                {
+                    errors.Add($"Row {index + 1}: monthly interval must be a positive integer.");
+                    continue;
+                }
             }
 
             var category = string.IsNullOrWhiteSpace(row.Category) ? "General" : row.Category.Trim();
@@ -316,6 +335,7 @@ public sealed class BulkBillsPage : ContentPage
         private bool _isPaid;
         private bool _isRecurring;
         private string _recurrenceOption = RecurrenceMonthly;
+        private string _recurrenceEveryMonthsText = "1";
         private IList<string> _categoryOptions = Array.Empty<string>();
 
         public string Name
@@ -376,8 +396,6 @@ public sealed class BulkBillsPage : ContentPage
         public IList<string> RecurrenceOptions { get; } = new List<string>
         {
             RecurrenceMonthly,
-            RecurrenceEvery2Months,
-            RecurrenceEvery3Months,
             RecurrenceWeekly,
             RecurrenceBiWeekly
         };
@@ -394,8 +412,26 @@ public sealed class BulkBillsPage : ContentPage
 
                 _recurrenceOption = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowMonthlyIntervalInput));
             }
         }
+
+        public string RecurrenceEveryMonthsText
+        {
+            get => _recurrenceEveryMonthsText;
+            set
+            {
+                if (_recurrenceEveryMonthsText == value)
+                {
+                    return;
+                }
+
+                _recurrenceEveryMonthsText = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool ShowMonthlyIntervalInput => IsRecurring && RecurrenceOption == RecurrenceMonthly;
 
         public DateTime DueDate
         {
@@ -439,6 +475,7 @@ public sealed class BulkBillsPage : ContentPage
 
                 _isRecurring = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowMonthlyIntervalInput));
             }
         }
 

@@ -11,6 +11,8 @@ public partial class SummaryPage : ContentPage
 	private readonly LocalizationService _localization;
 	private readonly int _year;
 	private readonly int _month;
+	private readonly List<PieLegendItem> _chartItems;
+	private readonly PieChartDrawable _pieDrawable;
 
 	public SummaryPage(int year, int month, BillingService service, LocalizationService localization)
 	{
@@ -51,13 +53,13 @@ public partial class SummaryPage : ContentPage
 			.ToList();
 
 		HeaderLabel.Text = $"{MonthNames.Name(month)} {year}";
-		YearIncomeLabel.Text = $"${yearSummary.income:F2}";
-		YearExpensesLabel.Text = $"${yearSummary.expenses:F2}";
-		YearRemainingLabel.Text = $"${yearSummary.remaining:F2}";
+		YearIncomeLabel.Text = _localization.FormatCurrency(yearSummary.income);
+		YearExpensesLabel.Text = _localization.FormatCurrency(yearSummary.expenses);
+		YearRemainingLabel.Text = _localization.FormatCurrency(yearSummary.remaining);
 		YearRemainingLabel.TextColor = yearSummary.remaining >= 0 ? GetResourceColor("Success", "#16A34A") : GetResourceColor("Danger", "#DC2626");
 		MonthBillCountLabel.Text = monthSummary.billCount.ToString();
 
-		var chartItems = categoryRows.Select((row, index) =>
+		_chartItems = categoryRows.Select((row, index) =>
 			new PieLegendItem(
 				row.category,
 				row.total,
@@ -65,8 +67,42 @@ public partial class SummaryPage : ContentPage
 				paletteArr[index % paletteArr.Length]))
 			.ToList();
 
-		CategoryCollection.ItemsSource = chartItems;
-		PieChartView.Drawable = new PieChartDrawable(chartItems);
+		CategoryCollection.ItemsSource = _chartItems;
+		_pieDrawable = new PieChartDrawable(_chartItems);
+		PieChartView.Drawable = _pieDrawable;
+	}
+
+	private async void OnPieChartTapped(object? sender, TappedEventArgs e)
+	{
+		try
+		{
+			var point = e.GetPosition(PieChartView);
+			if (point is null)
+			{
+				return;
+			}
+
+			var category = _pieDrawable.GetCategoryAtPoint((float)point.Value.X, (float)point.Value.Y, (float)PieChartView.Width, (float)PieChartView.Height);
+			if (string.IsNullOrWhiteSpace(category))
+			{
+				return;
+			}
+
+			var item = _chartItems.FirstOrDefault(x => x.Category.Equals(category, StringComparison.OrdinalIgnoreCase));
+			if (item is null)
+			{
+				return;
+			}
+
+			var bills = _service.GetBillsInCategory(_month, item.Category);
+			var list = bills.Select(b => new BillListItem(b, _localization.FormatCurrency(b.Amount))).ToList();
+			await Navigation.PushAsync(new CategoryBillsPage(item.Category, _year, _month, list, _localization));
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("SummaryPieTap", ex);
+			await DisplayAlert("Could not open category", ex.Message, "OK");
+		}
 	}
 
 	private async void OnCategorySelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -119,6 +155,8 @@ public partial class SummaryPage : ContentPage
 	private sealed class PieChartDrawable : IDrawable
 	{
 		private readonly IReadOnlyList<PieLegendItem> _items;
+		private readonly List<(string category, float startAngle, float endAngle)> _sliceAngles = new();
+		private RectF _arcRect;
 
 		public PieChartDrawable(IReadOnlyList<PieLegendItem> items)
 		{
@@ -150,6 +188,8 @@ public partial class SummaryPage : ContentPage
 			var left = dirtyRect.Center.X - (size / 2f);
 			var top = dirtyRect.Center.Y - (size / 2f);
 			var arcRect = new RectF(left, top, size, size);
+			_arcRect = arcRect;
+			_sliceAngles.Clear();
 
 			var startAngle = -90f;
 			foreach (var item in _items)
@@ -157,6 +197,19 @@ public partial class SummaryPage : ContentPage
 				var sweep = ((float)item.Amount / total) * 360f;
 				canvas.FillColor = item.Color;
 				FillPieSlice(canvas, arcRect, startAngle, sweep);
+				_sliceAngles.Add((item.Category, startAngle, startAngle + sweep));
+
+				if (sweep >= 18f)
+				{
+					var labelAngle = startAngle + (sweep / 2f);
+					var labelRadians = MathF.PI * labelAngle / 180f;
+					var labelRadius = (size / 2f) * 0.72f;
+					var labelX = arcRect.Center.X + (labelRadius * MathF.Cos(labelRadians));
+					var labelY = arcRect.Center.Y + (labelRadius * MathF.Sin(labelRadians));
+					canvas.FontColor = ResourcesColor("White", "#FFFFFF");
+					canvas.FontSize = 10;
+					canvas.DrawString(item.Category, labelX - 40f, labelY - 8f, 80f, 16f, HorizontalAlignment.Center, VerticalAlignment.Center);
+				}
 				startAngle += sweep;
 			}
 
@@ -171,7 +224,39 @@ public partial class SummaryPage : ContentPage
 			canvas.DrawString("Total", new RectF(dirtyRect.Center.X - 40f, dirtyRect.Center.Y - 16f, 80f, 16f), HorizontalAlignment.Center, VerticalAlignment.Center);
 			canvas.FontSize = 14;
 			canvas.Font = Microsoft.Maui.Graphics.Font.DefaultBold;
-			canvas.DrawString($"${total:F0}", new RectF(dirtyRect.Center.X - 45f, dirtyRect.Center.Y, 90f, 20f), HorizontalAlignment.Center, VerticalAlignment.Center);
+			canvas.DrawString(total.ToString("F0"), new RectF(dirtyRect.Center.X - 45f, dirtyRect.Center.Y, 90f, 20f), HorizontalAlignment.Center, VerticalAlignment.Center);
+		}
+
+		public string? GetCategoryAtPoint(float x, float y, float width, float height)
+		{
+			if (_sliceAngles.Count == 0 || _arcRect.Width <= 0f || _arcRect.Height <= 0f)
+			{
+				return null;
+			}
+
+			var dx = x - _arcRect.Center.X;
+			var dy = y - _arcRect.Center.Y;
+			var distance = MathF.Sqrt((dx * dx) + (dy * dy));
+			var outerRadius = _arcRect.Width / 2f;
+			var innerRadius = outerRadius * 0.42f;
+			if (distance > outerRadius || distance < innerRadius)
+			{
+				return null;
+			}
+
+			var angle = MathF.Atan2(dy, dx) * (180f / MathF.PI);
+			while (angle < -90f) angle += 360f;
+			while (angle >= 270f) angle -= 360f;
+
+			foreach (var slice in _sliceAngles)
+			{
+				if (angle >= slice.startAngle && angle < slice.endAngle)
+				{
+					return slice.category;
+				}
+			}
+
+			return null;
 		}
 
 		private static Color ResourcesColor(string key, string fallback)

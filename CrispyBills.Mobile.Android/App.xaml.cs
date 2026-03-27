@@ -19,6 +19,11 @@ public partial class App : Application
 		try
 		{
 			InitializeComponent();
+			var savedTheme = Preferences.Default.Get("app_theme_mode", AppTheme.Unspecified.ToString());
+			if (Enum.TryParse<AppTheme>(savedTheme, out var parsedTheme))
+			{
+				UserAppTheme = parsedTheme;
+			}
 		}
 		catch (Exception ex)
 		{

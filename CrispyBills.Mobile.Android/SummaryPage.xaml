@@ -10,25 +10,25 @@
             <Label x:Name="HeaderLabel" FontSize="22" FontAttributes="Bold" />
 
             <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="10" ColumnSpacing="10">
-                <Border Grid.Row="0" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                <Border Grid.Row="0" Grid.Column="0" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
                         <Label Text="Year income" FontSize="12" TextColor="{StaticResource MutedText}" />
                         <Label x:Name="YearIncomeLabel" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
                     </VerticalStackLayout>
                 </Border>
-                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
                         <Label Text="Year expenses" FontSize="12" TextColor="{StaticResource MutedText}" />
                         <Label x:Name="YearExpensesLabel" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Danger}" />
                     </VerticalStackLayout>
                 </Border>
-                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
                         <Label Text="Year remaining" FontSize="12" TextColor="{StaticResource MutedText}" />
                         <Label x:Name="YearRemainingLabel" FontSize="18" FontAttributes="Bold" />
                     </VerticalStackLayout>
                 </Border>
-                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="0" BackgroundColor="{StaticResource SurfaceLight}" Padding="12" StrokeShape="RoundRectangle 12">
+                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
                         <Label Text="Bills this month" FontSize="12" TextColor="{StaticResource MutedText}" />
                         <Label x:Name="MonthBillCountLabel" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
@@ -36,10 +36,14 @@
                 </Border>
             </Grid>
 
-            <Border StrokeThickness="0" BackgroundColor="{StaticResource CardBackground}" Padding="14" StrokeShape="RoundRectangle 14">
+            <Border StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="14" StrokeShape="RoundRectangle 14">
                 <VerticalStackLayout Spacing="10">
                     <Label Text="Category breakdown" FontSize="17" FontAttributes="Bold" />
-                    <GraphicsView x:Name="PieChartView" HeightRequest="280" />
+                    <GraphicsView x:Name="PieChartView" HeightRequest="280">
+                        <GraphicsView.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnPieChartTapped" />
+                        </GraphicsView.GestureRecognizers>
+                    </GraphicsView>
                 </VerticalStackLayout>
             </Border>
 

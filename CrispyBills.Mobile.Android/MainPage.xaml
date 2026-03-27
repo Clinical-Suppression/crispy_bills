@@ -21,7 +21,7 @@
                        FontSize="22"
                        FontAttributes="Bold" />
 
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                     <Button Grid.Column="0" x:Name="PrevYearButton" Text="&#x25C0;" Clicked="OnPrevYearClicked"
                             WidthRequest="48" HeightRequest="48" Padding="0" />
                     <Button Grid.Column="1" x:Name="YearButton" Clicked="OnYearSelectClicked"
@@ -29,7 +29,6 @@
                             FontAttributes="Bold" FontSize="18" MinimumHeightRequest="48" />
                     <Button Grid.Column="2" x:Name="NextYearButton" Text="&#x25B6;" Clicked="OnNextYearClicked"
                             WidthRequest="48" HeightRequest="48" Padding="0" />
-                    <Button Grid.Column="3" Text="Archive" Clicked="OnArchiveYearClicked" HeightRequest="48" FontSize="13" Padding="12,8" />
                 </Grid>
 
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
@@ -47,28 +46,15 @@
 
             <!-- Summary cards -->
             <Grid Grid.Row="0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
-                <Border Grid.Row="0" Grid.Column="0" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
+                <Border Grid.Row="0" Grid.Column="0" x:Name="IncomeCardBorder" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnIncomeCardTapped" />
+                        <PointerGestureRecognizer PointerPressed="OnIncomeCardPointerPressed" PointerReleased="OnIncomeCardPointerReleased" />
+                        <PanGestureRecognizer PanUpdated="OnIncomeCardPanUpdated" />
+                    </Border.GestureRecognizers>
                     <VerticalStackLayout Spacing="6">
                         <Label Text="Income" FontSize="12" TextColor="{StaticResource MutedText}" />
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                            <Entry Grid.Column="0"
-                                   x:Name="IncomeEntry"
-                                   Placeholder="0.00"
-                                   Keyboard="Numeric"
-                                   Completed="OnIncomeEntryCompleted"
-                                   Unfocused="OnIncomeEntryUnfocused"
-                                   HeightRequest="48">
-                                <Entry.Behaviors>
-                                    <local:SelectAllEntryBehavior />
-                                </Entry.Behaviors>
-                            </Entry>
-                            <Picker Grid.Column="1"
-                                    x:Name="IncomePayPeriodPicker"
-                                    Title="Pay period"
-                                    SelectedIndexChanged="OnIncomePayPeriodChanged"
-                                    WidthRequest="140"
-                                    HeightRequest="48" />
-                        </Grid>
+                        <Label x:Name="IncomeValueLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource NeutralText}" />
                     </VerticalStackLayout>
                 </Border>
                 <Border Grid.Row="0" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
@@ -92,25 +78,25 @@
             </Grid>
 
             <!-- Month income vs bill totals -->
-            <VerticalStackLayout Grid.Row="1" Spacing="4">
-                <Label x:Name="IncomeExpenseBarCaption"
-                       FontSize="11"
-                       TextColor="{StaticResource MutedText}"
-                       LineBreakMode="WordWrap" />
-                <GraphicsView x:Name="IncomeExpenseBarView" HeightRequest="28" />
-            </VerticalStackLayout>
+            <GraphicsView Grid.Row="1" x:Name="IncomeExpenseBarView" HeightRequest="28">
+                <GraphicsView.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnIncomeExpenseBarTapped" />
+                </GraphicsView.GestureRecognizers>
+            </GraphicsView>
 
             <!-- Swipe hint + action pills -->
             <VerticalStackLayout Grid.Row="2" Spacing="6">
-                <Label Text="Tip: Swipe a bill left to mark paid or unpaid. Swipe right for Edit and Delete."
+                <Label Text="Tip: Swipe left to delete. Swipe right to mark as paid/unpaid."
                        FontSize="12"
                        TextColor="{StaticResource MutedText}"
                        LineBreakMode="WordWrap"
                        Margin="0,0,0,2" />
             <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
                 <HorizontalStackLayout Spacing="10" Padding="0,4">
-                    <Button Text="Rollover" Clicked="OnRolloverClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
+                    <Button Text="Add Bills" Clicked="OnAddClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
+                    <Button Text="Rollover Past Due" Clicked="OnRolloverClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
                     <Button Text="New Year" Clicked="OnNewYearClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
+                    <Button Text="Archive" Clicked="OnArchiveYearClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
                     <Button Text="Import" Clicked="OnImportClicked" Padding="16,12" CornerRadius="20" FontSize="13" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
                     <Button Text="Export" Clicked="OnExportClicked" Padding="16,12" CornerRadius="20" FontSize="13" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
                 </HorizontalStackLayout>
@@ -118,13 +104,14 @@
             </VerticalStackLayout>
 
             <!-- Search + category -->
-            <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="10">
+            <Grid Grid.Row="3" ColumnDefinitions="*,*,*" ColumnSpacing="10">
                 <Entry x:Name="SearchEntry" Placeholder="Search bills..." TextChanged="OnSearchChanged" HeightRequest="48">
                     <Entry.Behaviors>
                         <local:SelectAllEntryBehavior />
                     </Entry.Behaviors>
                 </Entry>
                 <Picker x:Name="CategoryPicker" Grid.Column="1" Title="Category" SelectedIndexChanged="OnCategoryChanged" HeightRequest="48" />
+                <Picker x:Name="SortPicker" Grid.Column="2" Title="Sort" SelectedIndexChanged="OnSortChanged" HeightRequest="48" />
             </Grid>
 
             <!-- Bill list: add button only when month has bills (see UpdateAddButtonText) -->
@@ -143,7 +130,7 @@
                     <CollectionView.EmptyView>
                         <VerticalStackLayout Padding="24,32" Spacing="16" HorizontalOptions="Center">
                             <Label Text="No bills yet" HorizontalOptions="Center" FontSize="18" TextColor="{StaticResource EmptyText}" />
-                            <Label Text="Swipe left on a bill to toggle paid. Swipe right for edit or delete." HorizontalOptions="Center" FontSize="13" TextColor="{StaticResource MutedLight}" HorizontalTextAlignment="Center" />
+                            <Label Text="Swipe left to delete. Swipe right to toggle paid/unpaid. Tap and hold for 1 second to edit." HorizontalOptions="Center" FontSize="13" TextColor="{StaticResource MutedLight}" HorizontalTextAlignment="Center" />
                             <Button x:Name="EmptyAddBillsButton" Text="Add your first bill(s)" Clicked="OnAddClicked" HorizontalOptions="Center" Padding="24,14" />
                         </VerticalStackLayout>
                     </CollectionView.EmptyView>
@@ -155,19 +142,16 @@
                                     StrokeShape="RoundRectangle 14"
                                     Padding="0"
                                     Margin="0,0,0,10">
-                                <SwipeView>
+                                <SwipeView SwipeStarted="OnBillSwipeStarted">
                                     <SwipeView.LeftItems>
                                         <SwipeItems Mode="Execute">
-                                            <SwipeItem Text="Paid"
+                                            <SwipeItem Text="Paid / Unpaid"
                                                        BackgroundColor="{StaticResource Success}"
                                                        Invoked="OnSwipeTogglePaid" />
                                         </SwipeItems>
                                     </SwipeView.LeftItems>
                                     <SwipeView.RightItems>
-                                        <SwipeItems Mode="Reveal">
-                                            <SwipeItem Text="Edit"
-                                                       BackgroundColor="{StaticResource Info}"
-                                                       Invoked="OnSwipeEdit" />
+                                        <SwipeItems Mode="Execute">
                                             <SwipeItem Text="Delete"
                                                        BackgroundColor="{StaticResource Danger}"
                                                        Invoked="OnSwipeDelete" />
@@ -178,7 +162,8 @@
                                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                                             <VerticalStackLayout Grid.Column="0" Spacing="6">
                                                 <VerticalStackLayout.GestureRecognizers>
-                                                    <TapGestureRecognizer Tapped="OnBillCardTapped" />
+                                                    <PointerGestureRecognizer PointerPressed="OnBillPointerPressed" PointerReleased="OnBillPointerReleased" />
+                                                    <PanGestureRecognizer PanUpdated="OnBillPanUpdated" />
                                                 </VerticalStackLayout.GestureRecognizers>
                                                 <HorizontalStackLayout Spacing="10">
                                                     <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="17" LineBreakMode="TailTruncation" HorizontalOptions="FillAndExpand" TextColor="{StaticResource NeutralText}" />

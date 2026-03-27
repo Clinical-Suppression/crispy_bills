@@ -1,6 +1,5 @@
 using CrispyBills.Mobile.Android.Models;
 using CrispyBills.Mobile.Android.Services;
-using Microsoft.Maui.ApplicationModel.DataTransfer;
 using Microsoft.Maui.Graphics;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -15,7 +14,12 @@ public partial class MainPage : ContentPage
 	private bool _loaded;
 	private bool _startupDiagnosticsShown;
 	private string? _lastDuplicateWarningKey;
-	private bool _incomeControlsInitializing;
+	private decimal _incomeAmount;
+	private string _incomePayPeriod = BillingService.IncomePayPeriodMonthly;
+	private bool _incomeCardEditable;
+	private readonly Dictionary<Guid, CancellationTokenSource> _billHoldTokens = new();
+	private CancellationTokenSource? _incomeHoldToken;
+	private const int HoldToEditMs = 1000;
 	private int _soonThresholdValue = 7;
 	private string _soonThresholdUnit = BillingService.SoonThresholdUnitDays;
 	private bool _appLockFlowActive;
@@ -27,6 +31,16 @@ public partial class MainPage : ContentPage
 
 	private readonly ObservableCollection<BillListItem> _visibleBills = new();
 	private List<BillItem> _monthBills = new();
+	private BillSortMode _billSortMode = BillSortMode.DueDate;
+
+	private enum BillSortMode
+	{
+		DueDate,
+		Alphabetical,
+		Amount,
+		Status,
+		Category
+	}
 
 	public MainPage(BillingService service, LocalizationService localization, AppLockService appLockService)
 	{
@@ -37,10 +51,8 @@ public partial class MainPage : ContentPage
 
 		CategoryPicker.ItemsSource = new List<string> { "All categories" };
 		CategoryPicker.SelectedIndex = 0;
-		_incomeControlsInitializing = true;
-		IncomePayPeriodPicker.ItemsSource = BillingService.IncomePayPeriodOptions().ToList();
-		IncomePayPeriodPicker.SelectedIndex = 0;
-		_incomeControlsInitializing = false;
+		SortPicker.ItemsSource = new List<string> { "Due Date", "Alphabetical", "Amount", "Status", "Category" };
+		SortPicker.SelectedIndex = 0;
 
 		BillsCollection.ItemsSource = _visibleBills;
 	}
@@ -211,17 +223,6 @@ public partial class MainPage : ContentPage
 		}
 	}
 
-	private async void OnSwipeEdit(object? sender, EventArgs e)
-	{
-		var item = BillFromElement(sender);
-		if (item is null)
-		{
-			return;
-		}
-
-		await EditBillByIdAsync(item.Id);
-	}
-
 	private async void OnSwipeDelete(object? sender, EventArgs e)
 	{
 		var item = BillFromElement(sender);
@@ -233,14 +234,95 @@ public partial class MainPage : ContentPage
 		await DeleteBillByIdAsync(item.Id);
 	}
 
-	private async void OnBillCardTapped(object? sender, TappedEventArgs e)
+	private void OnBillPointerPressed(object? sender, PointerEventArgs e)
+	{
+		if (sender is not BindableObject b || b.BindingContext is not BillListItem item)
+		{
+			return;
+		}
+		StartBillHold(item.Id);
+	}
+
+	private void OnBillPointerReleased(object? sender, PointerEventArgs e)
+	{
+		if (sender is not BindableObject b || b.BindingContext is not BillListItem item)
+		{
+			return;
+		}
+		StopBillHold(item.Id);
+	}
+
+	private void StartBillHold(Guid billId)
+	{
+		if (_billHoldTokens.TryGetValue(billId, out var existing))
+		{
+			existing.Cancel();
+			existing.Dispose();
+		}
+
+		var cts = new CancellationTokenSource();
+		_billHoldTokens[billId] = cts;
+		_ = BeginBillHoldEditAsync(billId, cts.Token);
+	}
+
+	private void StopBillHold(Guid billId)
+	{
+		if (_billHoldTokens.TryGetValue(billId, out var cts))
+		{
+			cts.Cancel();
+			cts.Dispose();
+			_billHoldTokens.Remove(billId);
+		}
+	}
+
+	private async Task BeginBillHoldEditAsync(Guid billId, CancellationToken token)
+	{
+		try
+		{
+			await Task.Delay(HoldToEditMs, token);
+			if (token.IsCancellationRequested)
+			{
+				return;
+			}
+
+			await MainThread.InvokeOnMainThreadAsync(async () =>
+			{
+				await EditBillByIdAsync(billId);
+			});
+		}
+		catch (OperationCanceledException)
+		{
+			// Ignore canceled hold.
+		}
+	}
+
+	private void OnBillPanUpdated(object? sender, PanUpdatedEventArgs e)
 	{
 		if (sender is not BindableObject b || b.BindingContext is not BillListItem item)
 		{
 			return;
 		}
 
-		await EditBillByIdAsync(item.Id);
+		switch (e.StatusType)
+		{
+			case GestureStatus.Started:
+				StartBillHold(item.Id);
+				break;
+			case GestureStatus.Canceled:
+			case GestureStatus.Completed:
+				StopBillHold(item.Id);
+				break;
+		}
+	}
+
+	private void OnBillSwipeStarted(object? sender, SwipeStartedEventArgs e)
+	{
+		foreach (var kv in _billHoldTokens.ToList())
+		{
+			kv.Value.Cancel();
+			kv.Value.Dispose();
+			_billHoldTokens.Remove(kv.Key);
+		}
 	}
 
 	private async Task EditBillByIdAsync(Guid id)
@@ -391,18 +473,42 @@ public partial class MainPage : ContentPage
 
 		var filtered = _monthBills.Where(b =>
 			(string.IsNullOrWhiteSpace(search)
-			 || b.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
-			 || b.Category.Contains(search, StringComparison.OrdinalIgnoreCase))
-			&& (category == "All categories" || b.Category.Equals(category, StringComparison.OrdinalIgnoreCase)));
+			 || (b.Name ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase)
+			 || (b.Category ?? string.Empty).Contains(search, StringComparison.OrdinalIgnoreCase))
+			&& (category == "All categories" || (b.Category ?? string.Empty).Equals(category, StringComparison.OrdinalIgnoreCase)));
+
+		IEnumerable<BillItem> sorted = _billSortMode switch
+		{
+			BillSortMode.Alphabetical => filtered.OrderBy(x => x.Name),
+			BillSortMode.Amount => filtered.OrderByDescending(x => x.Amount).ThenBy(x => x.Name),
+			BillSortMode.Status => filtered.OrderBy(x => GetStatusSortKey(x)).ThenBy(x => x.DueDate).ThenBy(x => x.Name),
+			BillSortMode.Category => filtered.OrderBy(x => x.Category).ThenBy(x => x.DueDate).ThenBy(x => x.Name),
+			_ => filtered.OrderBy(x => x.DueDate).ThenBy(x => x.Name)
+		};
 
 		_visibleBills.Clear();
-		foreach (var bill in filtered.OrderBy(x => x.DueDate).ThenBy(x => x.Name))
+		foreach (var bill in sorted)
 		{
 			_visibleBills.Add(new BillListItem(
 				bill,
 				_localization.FormatCurrency(bill.Amount),
 				_service.IsBillSoon(bill, _soonThresholdValue, _soonThresholdUnit)));
 		}
+	}
+
+	private int GetStatusSortKey(BillItem bill)
+	{
+		if (bill.IsPaid)
+		{
+			return 0;
+		}
+
+		var isSoon = _service.IsBillSoon(bill, _soonThresholdValue, _soonThresholdUnit);
+		if (bill.IsPastDue)
+		{
+			return 3;
+		}
+		return isSoon ? 2 : 1;
 	}
 
 	private void UpdateSummaryCards()
@@ -414,40 +520,34 @@ public partial class MainPage : ContentPage
 		RemainingLabel.TextColor = summary.remaining >= 0 ? GetResourceColor("Success", "#16A34A") : GetResourceColor("Danger", "#991B1B");
 
 		var income = _service.GetIncome(_currentMonth);
-		var expenses = _monthBills.Sum(b => b.Amount);
-		if (income > 0m || expenses > 0m)
+		var categoryTotals = _service.GetCategoryTotals(_currentMonth).Where(x => x.total > 0m).OrderByDescending(x => x.total).ToList();
+		var palette = GetSummaryPalette();
+		var segments = new List<(decimal amount, Color color)>();
+		for (var i = 0; i < categoryTotals.Count; i++)
 		{
-			IncomeExpenseBarCaption.Text = income > 0m
-				? $"This month: bill total {_localization.FormatCurrency(expenses)} vs income {_localization.FormatCurrency(income)}"
-				: $"This month: bill total {_localization.FormatCurrency(expenses)} (no income set)";
+			segments.Add((categoryTotals[i].total, palette[i % palette.Count]));
 		}
-		else
-		{
-			IncomeExpenseBarCaption.Text = "Set income and add bills to see the month bar.";
-		}
-
 		IncomeExpenseBarView.Drawable = new IncomeExpenseBarDrawable(
 			income,
-			expenses,
-			GetResourceColor("Danger", "#DC2626"),
+			segments,
 			GetResourceColor("Gray200", "#E2E8F0"));
+	}
+
+	private List<Color> GetSummaryPalette()
+	{
+		var keys = new[] { "Magenta", "Success", "Info", "Tertiary", "Danger", "Primary", "SecondaryDarkText", "PrimaryDark" };
+		return keys.Select(k => GetResourceColor(k, "#2563EB")).ToList();
 	}
 
 	private async Task RefreshIncomeControlsAsync()
 	{
 		var (amount, payPeriod) = await _service.GetIncomeEntryAsync(_currentMonth);
-		_incomeControlsInitializing = true;
-		try
-		{
-			IncomeEntry.Text = amount > 0m
-				? amount.ToString("0.00", _localization.CurrentCulture)
-				: string.Empty;
-			IncomePayPeriodPicker.SelectedItem = payPeriod;
-		}
-		finally
-		{
-			_incomeControlsInitializing = false;
-		}
+		_incomeAmount = amount;
+		_incomePayPeriod = payPeriod;
+		_incomeCardEditable = amount > 0m;
+		IncomeValueLabel.Text = amount > 0m
+			? _localization.FormatCurrency(amount)
+			: "Enter Income";
 	}
 
 	private void UpdateAddButtonText()
@@ -462,48 +562,47 @@ public partial class MainPage : ContentPage
 		EmptyAddBillsButton.Text = "Add your first bill(s)";
 	}
 
-	private bool TryReadIncomeEntry(out decimal income)
+	private async Task PromptAndSaveIncomeAsync()
 	{
-		var raw = IncomeEntry.Text?.Trim();
-		if (string.IsNullOrWhiteSpace(raw))
+		var amountInput = await DisplayPromptAsync(
+			"Income",
+			"Enter income amount",
+			accept: "Save",
+			cancel: "Cancel",
+			initialValue: _incomeAmount > 0m ? _incomeAmount.ToString("0.00", _localization.CurrentCulture) : string.Empty,
+			keyboard: Keyboard.Numeric);
+		if (amountInput is null)
 		{
-			income = 0m;
-			return true;
+			return;
 		}
 
-		return decimal.TryParse(raw, NumberStyles.Currency, _localization.CurrentCulture, out income)
-			|| decimal.TryParse(raw, NumberStyles.Currency, CultureInfo.InvariantCulture, out income);
-	}
-
-	private string GetSelectedIncomePayPeriod()
-	{
-		return IncomePayPeriodPicker.SelectedItem?.ToString() switch
+		if (!decimal.TryParse(amountInput, NumberStyles.Currency, _localization.CurrentCulture, out var income)
+			&& !decimal.TryParse(amountInput, NumberStyles.Currency, CultureInfo.InvariantCulture, out income))
 		{
-			BillingService.IncomePayPeriodWeekly => BillingService.IncomePayPeriodWeekly,
-			BillingService.IncomePayPeriodBiWeekly => BillingService.IncomePayPeriodBiWeekly,
+			await DisplayAlert("Invalid Income", "Enter a valid number.", "OK");
+			return;
+		}
+
+		var periodSelection = await DisplayActionSheet(
+			"Income timeframe",
+			"Cancel",
+			null,
+			"Monthly",
+			"Weekly",
+			"Bi-weekly");
+		if (periodSelection == "Cancel")
+		{
+			return;
+		}
+
+		var payPeriod = periodSelection switch
+		{
+			"Weekly" => BillingService.IncomePayPeriodWeekly,
+			"Bi-weekly" => BillingService.IncomePayPeriodBiWeekly,
 			_ => BillingService.IncomePayPeriodMonthly
 		};
-	}
 
-	private async Task SaveIncomeFromControlsAsync(bool showValidation)
-	{
-		if (_incomeControlsInitializing)
-		{
-			return;
-		}
-
-		if (!TryReadIncomeEntry(out var income))
-		{
-			if (showValidation)
-			{
-				await DisplayAlert("Invalid Income", "Enter a valid number.", "OK");
-			}
-
-			await RefreshIncomeControlsAsync();
-			return;
-		}
-
-		await _service.SetIncomeAsync(_currentMonth, income, GetSelectedIncomePayPeriod());
+		await _service.SetIncomeAsync(_currentMonth, income, payPeriod);
 		await ReloadMonthAsync();
 	}
 
@@ -520,15 +619,13 @@ public partial class MainPage : ContentPage
 	private sealed class IncomeExpenseBarDrawable : IDrawable
 	{
 		private readonly decimal _income;
-		private readonly decimal _expenses;
-		private readonly Color _expenseColor;
+		private readonly IReadOnlyList<(decimal amount, Color color)> _segments;
 		private readonly Color _trackColor;
 
-		public IncomeExpenseBarDrawable(decimal income, decimal expenses, Color expenseColor, Color trackColor)
+		public IncomeExpenseBarDrawable(decimal income, IReadOnlyList<(decimal amount, Color color)> segments, Color trackColor)
 		{
 			_income = income;
-			_expenses = expenses;
-			_expenseColor = expenseColor;
+			_segments = segments;
 			_trackColor = trackColor;
 		}
 
@@ -540,22 +637,31 @@ public partial class MainPage : ContentPage
 			canvas.FillColor = _trackColor;
 			canvas.FillRoundedRectangle(track, 6f);
 
-			if (_income <= 0m && _expenses <= 0m)
+			var totalExpenses = _segments.Sum(x => x.amount);
+			if (_income <= 0m && totalExpenses <= 0m)
 			{
 				return;
 			}
 
-			var ratio = _income > 0m
-				? Math.Min(1d, (double)(_expenses / _income))
-				: 1d;
-			var fillW = (float)(track.Width * ratio);
-			if (fillW < 1f)
+			var maxRange = _income > 0m ? _income : totalExpenses;
+			if (maxRange <= 0m)
 			{
-				fillW = 1f;
+				return;
 			}
 
-			canvas.FillColor = _expenseColor;
-			canvas.FillRoundedRectangle(new RectF(track.X, track.Y, fillW, track.Height), 6f);
+			var cursorX = track.X;
+			foreach (var segment in _segments.Where(x => x.amount > 0m))
+			{
+				var width = (float)(track.Width * (double)(segment.amount / maxRange));
+				if (width <= 0f)
+				{
+					continue;
+				}
+
+				canvas.FillColor = segment.color;
+				canvas.FillRectangle(new RectF(cursorX, track.Y, width, track.Height));
+				cursorX += width;
+			}
 		}
 	}
 
@@ -688,46 +794,99 @@ public partial class MainPage : ContentPage
 		try { ApplyFilters(); } catch { }
 	}
 
-	private async void OnIncomeEntryCompleted(object? sender, EventArgs e)
+	private void OnSortChanged(object? sender, EventArgs e)
+	{
+		_billSortMode = SortPicker.SelectedItem?.ToString() switch
+		{
+			"Alphabetical" => BillSortMode.Alphabetical,
+			"Amount" => BillSortMode.Amount,
+			"Status" => BillSortMode.Status,
+			"Category" => BillSortMode.Category,
+			_ => BillSortMode.DueDate
+		};
+		try { ApplyFilters(); } catch { }
+	}
+
+	private async void OnIncomeExpenseBarTapped(object? sender, TappedEventArgs e)
+	{
+		await Navigation.PushAsync(new SummaryPage(_currentYear, _currentMonth, _service, _localization));
+	}
+
+	private async void OnIncomeCardTapped(object? sender, TappedEventArgs e)
 	{
 		try
 		{
-			await SaveIncomeFromControlsAsync(showValidation: true);
+			if (_incomeCardEditable)
+			{
+				// Existing income requires hold-to-edit.
+				return;
+			}
+			await PromptAndSaveIncomeAsync();
 		}
 		catch (Exception ex)
 		{
-			await DiagnosticsLog.WriteAsync("OnIncomeEntryCompleted", ex);
+			await DiagnosticsLog.WriteAsync("OnIncomeCardTapped", ex);
 			await DisplayAlert("Error", ex.Message, "OK");
 		}
 	}
 
-	private async void OnIncomeEntryUnfocused(object? sender, FocusEventArgs e)
+	private void OnIncomeCardPointerPressed(object? sender, PointerEventArgs e)
 	{
-		try
-		{
-			await SaveIncomeFromControlsAsync(showValidation: false);
-		}
-		catch (Exception ex)
-		{
-			await DiagnosticsLog.WriteAsync("OnIncomeEntryUnfocused", ex);
-		}
-	}
-
-	private async void OnIncomePayPeriodChanged(object? sender, EventArgs e)
-	{
-		if (_incomeControlsInitializing)
+		if (!_incomeCardEditable)
 		{
 			return;
 		}
+		StartIncomeHold();
+	}
 
+	private void OnIncomeCardPointerReleased(object? sender, PointerEventArgs e)
+	{
+		StopIncomeHold();
+	}
+
+	private void StartIncomeHold()
+	{
+		_incomeHoldToken?.Cancel();
+		_incomeHoldToken?.Dispose();
+		_incomeHoldToken = new CancellationTokenSource();
+		_ = BeginIncomeHoldEditAsync(_incomeHoldToken.Token);
+	}
+
+	private void StopIncomeHold()
+	{
+		_incomeHoldToken?.Cancel();
+		_incomeHoldToken?.Dispose();
+		_incomeHoldToken = null;
+	}
+
+	private void OnIncomeCardPanUpdated(object? sender, PanUpdatedEventArgs e)
+	{
+		switch (e.StatusType)
+		{
+			case GestureStatus.Started:
+				StartIncomeHold();
+				break;
+			case GestureStatus.Canceled:
+			case GestureStatus.Completed:
+				StopIncomeHold();
+				break;
+		}
+	}
+
+	private async Task BeginIncomeHoldEditAsync(CancellationToken token)
+	{
 		try
 		{
-			await SaveIncomeFromControlsAsync(showValidation: false);
+			await Task.Delay(HoldToEditMs, token);
+			if (token.IsCancellationRequested)
+			{
+				return;
+			}
+			await MainThread.InvokeOnMainThreadAsync(async () => await PromptAndSaveIncomeAsync());
 		}
-		catch (Exception ex)
+		catch (OperationCanceledException)
 		{
-			await DiagnosticsLog.WriteAsync("OnIncomePayPeriodChanged", ex);
-			await DisplayAlert("Error", ex.Message, "OK");
+			// Ignore canceled hold.
 		}
 	}
 
@@ -824,10 +983,15 @@ public partial class MainPage : ContentPage
 	{
 		try
 		{
-			var pick = await FilePicker.Default.PickAsync(new PickOptions
+			var preferred = await TryPickExportFromDefaultFolderAsync();
+			FileResult? pick = preferred;
+			if (pick is null)
 			{
-				PickerTitle = "Select CSV export"
-			});
+				pick = await FilePicker.Default.PickAsync(new PickOptions
+				{
+					PickerTitle = "Select CSV export"
+				});
+			}
 
 			if (pick is null)
 			{
@@ -917,24 +1081,54 @@ public partial class MainPage : ContentPage
 		}
 	}
 
+	private async Task<FileResult?> TryPickExportFromDefaultFolderAsync()
+	{
+		try
+		{
+			var defaultFolder = _service.DataRoot;
+			if (!Directory.Exists(defaultFolder))
+			{
+				return null;
+			}
+
+			var files = Directory
+				.GetFiles(defaultFolder, "*.csv", SearchOption.TopDirectoryOnly)
+				.OrderByDescending(File.GetLastWriteTimeUtc)
+				.Take(10)
+				.ToList();
+			if (files.Count == 0)
+			{
+				return null;
+			}
+
+			var display = files
+				.Select(x => Path.GetFileName(x))
+				.ToArray();
+			var selected = await DisplayActionSheet("Import from exports folder", "Browse...", null, display);
+			if (string.IsNullOrWhiteSpace(selected) || selected == "Browse...")
+			{
+				return null;
+			}
+
+			var selectedPath = files.FirstOrDefault(f => string.Equals(Path.GetFileName(f), selected, StringComparison.OrdinalIgnoreCase));
+			if (string.IsNullOrWhiteSpace(selectedPath))
+			{
+				return null;
+			}
+
+			return new FileResult(selectedPath);
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
 	private async void OnExportClicked(object? sender, EventArgs e)
 	{
 		try
 		{
 			var path = await _service.ExportFullReportCsvAsync();
-			try
-			{
-				await Share.Default.RequestAsync(new ShareFileRequest
-				{
-					Title = "Crispy Bills export",
-					File = new ShareFile(path)
-				});
-			}
-			catch
-			{
-				// Sharing can be cancelled or unavailable; file is still on disk.
-			}
-
 			await DisplayAlert("Exported", $"Full report saved to:\n{path}", "OK");
 		}
 		catch (Exception ex)

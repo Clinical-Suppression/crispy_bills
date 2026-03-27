@@ -48,12 +48,11 @@ public partial class BillEditorPage : ContentPage
 			? 0
 			: seed.RecurrenceFrequency switch
 			{
-				RecurrenceFrequency.Weekly => 3,
-				RecurrenceFrequency.BiWeekly => 4,
-				_ when seed.RecurrenceEveryMonths >= 3 => 2,
-				_ when seed.RecurrenceEveryMonths == 2 => 1,
+				RecurrenceFrequency.Weekly => 1,
+				RecurrenceFrequency.BiWeekly => 2,
 				_ => 0
 			};
+		RecurrenceEveryMonthsEntry.Text = Math.Max(1, seed.RecurrenceEveryMonths).ToString();
 		RecurrenceEndModePicker.SelectedIndex = seed.RecurrenceEndMode switch
 		{
 			RecurrenceEndMode.EndOnDate => 1,
@@ -64,6 +63,7 @@ public partial class BillEditorPage : ContentPage
 		RecurrenceCountEntry.Text = seed.RecurrenceMaxOccurrences?.ToString() ?? string.Empty;
 
 		RecurringOptionsGrid.IsVisible = seed.IsRecurring;
+		RecurrenceEveryMonthsGrid.IsVisible = seed.IsRecurring && RecurrenceFrequencyPicker.SelectedIndex == 0;
 		UpdateEndModeVisibility();
 
 		DueDatePicker.MinimumDate = new DateTime(year, month, 1);
@@ -97,19 +97,26 @@ public partial class BillEditorPage : ContentPage
 			return;
 		}
 
-		_ = decimal.TryParse(AmountEntry.Text, out var amount);
+		if (!decimal.TryParse(AmountEntry.Text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.CurrentCulture, out var amount)
+			&& !decimal.TryParse(AmountEntry.Text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out amount))
+		{
+			ValidationLabel.IsVisible = true;
+			ValidationLabel.Text = "Amount must be a valid number.";
+			return;
+		}
 
 		if (CategoryPicker.SelectedItem is not string category || string.IsNullOrWhiteSpace(category))
 		{
 			category = "General";
 		}
 
-		var recurrenceEveryMonths = RecurrenceFrequencyPicker.SelectedIndex switch
+		var recurrenceEveryMonths = 1;
+		if (RecurrenceFrequencyPicker.SelectedIndex == 0)
 		{
-			1 => 2,
-			2 => 3,
-			_ => 1
-		};
+			recurrenceEveryMonths = int.TryParse(RecurrenceEveryMonthsEntry.Text, out var parsedEveryMonths)
+				? Math.Max(1, parsedEveryMonths)
+				: 1;
+		}
 
 		var endMode = RecurrenceEndModePicker.SelectedIndex switch
 		{
@@ -128,8 +135,8 @@ public partial class BillEditorPage : ContentPage
 
 		var recurrenceFrequency = RecurrenceFrequencyPicker.SelectedIndex switch
 		{
-			3 => RecurrenceFrequency.Weekly,
-			4 => RecurrenceFrequency.BiWeekly,
+			1 => RecurrenceFrequency.Weekly,
+			2 => RecurrenceFrequency.BiWeekly,
 			_ => RecurrenceFrequency.MonthlyInterval
 		};
 
@@ -158,6 +165,7 @@ public partial class BillEditorPage : ContentPage
 	private void OnRecurringToggled(object? sender, ToggledEventArgs e)
 	{
 		RecurringOptionsGrid.IsVisible = e.Value;
+		RecurrenceEveryMonthsGrid.IsVisible = e.Value && RecurrenceFrequencyPicker.SelectedIndex == 0;
 		if (!e.Value)
 		{
 			RecurrenceEndModePicker.SelectedIndex = 0;
@@ -173,6 +181,7 @@ public partial class BillEditorPage : ContentPage
 
 	private void OnRecurrenceFrequencyChanged(object? sender, EventArgs e)
 	{
+		RecurrenceEveryMonthsGrid.IsVisible = RecurrenceFrequencyPicker.SelectedIndex == 0;
 		ValidateInputs(showValidation: false);
 	}
 
@@ -217,6 +226,14 @@ public partial class BillEditorPage : ContentPage
 			if (!int.TryParse(RecurrenceCountEntry.Text, out var count) || count < 1)
 			{
 				errors.Add("Occurrences must be a positive integer.");
+			}
+		}
+
+		if (RecurringSwitch.IsToggled && RecurrenceFrequencyPicker.SelectedIndex == 0)
+		{
+			if (!int.TryParse(RecurrenceEveryMonthsEntry.Text, out var everyMonths) || everyMonths < 1)
+			{
+				errors.Add("Monthly interval must be a positive integer.");
 			}
 		}
 

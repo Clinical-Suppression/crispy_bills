@@ -12,6 +12,7 @@ public partial class SettingsPage : ContentPage
 	private readonly int _month;
 	private readonly Func<Task> _reloadMainPage;
 	private bool _languageInit;
+	private bool _themeInit;
 	private bool _soonInit;
 	private bool _securityInit;
 
@@ -23,6 +24,12 @@ public partial class SettingsPage : ContentPage
 		("Spanish (Spain)", "es-ES"),
 		("French (France)", "fr-FR"),
 		("German (Germany)", "de-DE")
+	];
+	private static readonly (string Label, AppTheme Theme)[] ThemeOptions =
+	[
+		("Follow system", AppTheme.Unspecified),
+		("Light", AppTheme.Light),
+		("Dark", AppTheme.Dark)
 	];
 
 	public SettingsPage(BillingService service, int year, int month, Func<Task> reloadMainPage, LocalizationService localization, AppLockService appLockService)
@@ -40,6 +47,11 @@ public partial class SettingsPage : ContentPage
 		LanguagePicker.SelectedIndex = 0;
 		_languageInit = false;
 		_ = InitLanguagePickerAsync();
+		ThemeModePicker.ItemsSource = ThemeOptions.Select(x => x.Label).ToList();
+		_themeInit = true;
+		ThemeModePicker.SelectedIndex = ThemeOptions.ToList().FindIndex(x => x.Theme == Application.Current?.UserAppTheme);
+		if (ThemeModePicker.SelectedIndex < 0) ThemeModePicker.SelectedIndex = 0;
+		_themeInit = false;
 
 		SoonValuePicker.ItemsSource = Enumerable.Range(1, 30).Select(x => x.ToString(CultureInfo.InvariantCulture)).ToList();
 		SoonUnitPicker.ItemsSource = BillingService.SoonThresholdUnits().ToList();
@@ -250,6 +262,21 @@ public partial class SettingsPage : ContentPage
 			await DiagnosticsLog.WriteAsync("SettingsLanguage", ex);
 			await DisplayAlert("Error", ex.Message, "OK");
 		}
+	}
+
+	private void OnThemeModeChanged(object? sender, EventArgs e)
+	{
+		if (_themeInit || ThemeModePicker.SelectedIndex < 0)
+		{
+			return;
+		}
+
+		var selected = ThemeOptions[ThemeModePicker.SelectedIndex].Theme;
+		if (Application.Current != null)
+		{
+			Application.Current.UserAppTheme = selected;
+		}
+		Preferences.Default.Set("app_theme_mode", selected.ToString());
 	}
 
 	private async void OnSoonThresholdChanged(object? sender, EventArgs e)

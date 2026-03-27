@@ -7,6 +7,8 @@ public partial class UnlockPage : ContentPage
     private readonly AppLockService _appLockService;
     private readonly TaskCompletionSource<bool> _resultTcs = new();
     private bool _autoBiometricAttempted;
+    private bool _pinUnlockInProgress;
+    private bool _allowClose;
 
     public UnlockPage(AppLockService appLockService)
     {
@@ -34,7 +36,16 @@ public partial class UnlockPage : ContentPage
     protected override void OnDisappearing()
     {
         base.OnDisappearing();
-        _resultTcs.TrySetResult(false);
+        if (!_allowClose)
+        {
+            _resultTcs.TrySetResult(false);
+        }
+    }
+
+    protected override bool OnBackButtonPressed()
+    {
+        // Do not allow bypassing app lock by hardware/software back navigation.
+        return true;
     }
 
     private async void OnUnlockClicked(object? sender, EventArgs e)
@@ -52,28 +63,54 @@ public partial class UnlockPage : ContentPage
         await TryUnlockWithPinAsync();
     }
 
+    private async void OnPinEntryTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (_pinUnlockInProgress)
+        {
+            return;
+        }
+
+        var pin = (e.NewTextValue ?? string.Empty).Trim();
+        if (pin.Length == 4)
+        {
+            await TryUnlockWithPinAsync();
+        }
+    }
+
     private async Task TryUnlockWithPinAsync()
     {
+        if (_pinUnlockInProgress)
+        {
+            return;
+        }
+
+        _pinUnlockInProgress = true;
         SetStatus(string.Empty);
-
-        var pin = (PinEntry.Text ?? string.Empty).Trim();
-        if (pin.Length != 4)
+        try
         {
-            SetStatus("Enter your 4-digit PIN.");
-            PinEntry.Focus();
-            return;
-        }
+            var pin = (PinEntry.Text ?? string.Empty).Trim();
+            if (pin.Length != 4)
+            {
+                SetStatus("Enter your 4-digit PIN.");
+                PinEntry.Focus();
+                return;
+            }
 
-        var unlocked = await _appLockService.VerifyPinAsync(pin);
-        if (!unlocked)
+            var unlocked = await _appLockService.VerifyPinAsync(pin);
+            if (!unlocked)
+            {
+                PinEntry.Text = string.Empty;
+                SetStatus("That PIN did not match.");
+                PinEntry.Focus();
+                return;
+            }
+
+            await CloseAsync(true);
+        }
+        finally
         {
-            PinEntry.Text = string.Empty;
-            SetStatus("That PIN did not match.");
-            PinEntry.Focus();
-            return;
+            _pinUnlockInProgress = false;
         }
-
-        await CloseAsync(true);
     }
 
     private async Task AttemptBiometricUnlockAsync()
@@ -103,6 +140,7 @@ public partial class UnlockPage : ContentPage
             return;
         }
 
+        _allowClose = true;
         _resultTcs.TrySetResult(result);
         await Navigation.PopModalAsync();
     }

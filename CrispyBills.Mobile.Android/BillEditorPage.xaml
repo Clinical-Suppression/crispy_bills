@@ -45,21 +45,33 @@
                 </Label>
             </HorizontalStackLayout>
 
-            <Grid x:Name="RecurringOptionsGrid" IsVisible="False" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+            <Grid x:Name="RecurringOptionsGrid" IsVisible="False" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
                     <Label Text="Repeat" VerticalOptions="Center" />
                     <Picker Grid.Column="1" x:Name="RecurrenceFrequencyPicker" Title="How it repeats" SelectedIndexChanged="OnRecurrenceFrequencyChanged" HeightRequest="48">
                         <Picker.Items>
-                            <x:String>Monthly (every month)</x:String>
-                            <x:String>Every 2 months</x:String>
-                            <x:String>Every 3 months</x:String>
+                            <x:String>Monthly</x:String>
                             <x:String>Weekly</x:String>
                             <x:String>Bi-weekly</x:String>
                         </Picker.Items>
                     </Picker>
                 </Grid>
 
-                <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8" x:Name="RecurrenceEveryMonthsGrid">
+                    <Label Text="Every" VerticalOptions="Center" />
+                    <Entry Grid.Column="1"
+                           x:Name="RecurrenceEveryMonthsEntry"
+                           Keyboard="Numeric"
+                           Placeholder="Months (e.g. 3)"
+                           HeightRequest="48"
+                           TextChanged="OnInputChanged">
+                        <Entry.Behaviors>
+                            <local:SelectAllEntryBehavior />
+                        </Entry.Behaviors>
+                    </Entry>
+                </Grid>
+
+                <Grid Grid.Row="2" ColumnDefinitions="Auto,*" ColumnSpacing="8">
                     <Label Text="Ends" VerticalOptions="Center" />
                     <Picker Grid.Column="1" x:Name="RecurrenceEndModePicker" SelectedIndexChanged="OnEndModeChanged" HeightRequest="48">
                         <Picker.Items>
@@ -70,8 +82,8 @@
                     </Picker>
                 </Grid>
 
-                <DatePicker Grid.Row="2" x:Name="RecurrenceEndDatePicker" IsVisible="False" HeightRequest="48" />
-                <Entry Grid.Row="2" x:Name="RecurrenceCountEntry" IsVisible="False" Keyboard="Numeric" Placeholder="Occurrences (e.g. 6)" HeightRequest="48" TextChanged="OnInputChanged">
+                <DatePicker Grid.Row="3" x:Name="RecurrenceEndDatePicker" IsVisible="False" HeightRequest="48" />
+                <Entry Grid.Row="3" x:Name="RecurrenceCountEntry" IsVisible="False" Keyboard="Numeric" Placeholder="Occurrences (e.g. 6)" HeightRequest="48" TextChanged="OnInputChanged">
                     <Entry.Behaviors>
                         <local:SelectAllEntryBehavior />
                     </Entry.Behaviors>

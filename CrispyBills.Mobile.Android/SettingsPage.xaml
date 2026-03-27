@@ -8,7 +8,8 @@
         <VerticalStackLayout Padding="18" Spacing="20">
 
             <Label Text="Appearance" FontAttributes="Bold" FontSize="18" TextColor="{StaticResource MidnightBlue}" />
-            <Label Text="Light and dark mode follows your device settings." FontSize="14" TextColor="{StaticResource MutedText}" />
+            <Label Text="Choose app theme mode." FontSize="14" TextColor="{StaticResource MutedText}" />
+            <Picker x:Name="ThemeModePicker" Title="Theme mode" SelectedIndexChanged="OnThemeModeChanged" HeightRequest="48" />
 
             <Label Text="Language / formats" FontAttributes="Bold" FontSize="16" TextColor="{StaticResource MidnightBlue}" Margin="0,8,0,0" />
             <Label Text="Currency, date formats, and month names follow the selection below. Full screen-by-screen translation is still partial." FontSize="13" TextColor="{StaticResource MutedText}" />
