@@ -135,10 +135,63 @@ function Invoke-LoggedCommand {
     try {
         $stdoutPath = [System.IO.Path]::GetTempFileName()
         $stderrPath = [System.IO.Path]::GetTempFileName()
+        $exitCode = 0
         try {
+            function Write-OutputDelta {
+                param(
+                    [Parameter(Mandatory = $true)][string]$Path,
+                    [Parameter(Mandatory = $true)][ref]$LastLength
+                )
+
+                if (-not (Test-Path -Path $Path)) { return }
+
+                $currentLength = 0L
+                try {
+                    $currentLength = (Get-Item -LiteralPath $Path).Length
+                }
+                catch {
+                    return
+                }
+
+                if ($currentLength -le $LastLength.Value) { return }
+
+                $stream = $null
+                try {
+                    $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+                    [void]$stream.Seek($LastLength.Value, [System.IO.SeekOrigin]::Begin)
+                    $bufferSize = [int]($currentLength - $LastLength.Value)
+                    if ($bufferSize -le 0) { return }
+
+                    $buffer = New-Object byte[] $bufferSize
+                    $bytesRead = $stream.Read($buffer, 0, $bufferSize)
+                    if ($bytesRead -gt 0) {
+                        [Console]::Out.Write([System.Text.Encoding]::UTF8.GetString($buffer, 0, $bytesRead))
+                    }
+                    $LastLength.Value = $currentLength
+                }
+                catch {
+                    # Temp output files can be briefly inaccessible while the child process writes.
+                    return
+                }
+                finally {
+                    if ($null -ne $stream) { $stream.Dispose() }
+                }
+            }
+
             # Start-Process: build one quoted string (array quoting is unreliable).
             $quotedArguments = @($Arguments | ForEach-Object { ConvertTo-CommandLineArgument -Value $_ }) -join ' '
-            $process = Start-Process -FilePath $Command -ArgumentList $quotedArguments -WorkingDirectory $WorkingDirectory -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+            $process = Start-Process -FilePath $Command -ArgumentList $quotedArguments -WorkingDirectory $WorkingDirectory -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+
+            $stdoutLength = 0L
+            $stderrLength = 0L
+            while (-not $process.HasExited) {
+                Write-OutputDelta -Path $stdoutPath -LastLength ([ref]$stdoutLength)
+                Write-OutputDelta -Path $stderrPath -LastLength ([ref]$stderrLength)
+                Start-Sleep -Milliseconds 200
+            }
+            $process.WaitForExit()
+            Write-OutputDelta -Path $stdoutPath -LastLength ([ref]$stdoutLength)
+            Write-OutputDelta -Path $stderrPath -LastLength ([ref]$stderrLength)
 
             $stdoutText = if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath -Raw } else { '' }
             $stderrText = if (Test-Path $stderrPath) { Get-Content -Path $stderrPath -Raw } else { '' }
@@ -151,26 +204,23 @@ function Invoke-LoggedCommand {
                 $commandOutput += $stderrText.TrimEnd("`r", "`n")
             }
 
-            $global:LASTEXITCODE = $process.ExitCode
+            $exitCode = [int]$process.ExitCode
+            $global:LASTEXITCODE = $exitCode
         }
         finally {
             if (Test-Path $stdoutPath) { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue }
             if (Test-Path $stderrPath) { Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue }
         }
 
-        if ($null -ne $commandOutput) {
-            $commandOutput | Out-Host
-        }
-
         Add-TaskDiagnosticsFromOutput -Command $Command -OutputText (($commandOutput | Out-String))
 
-        if ($LASTEXITCODE -ne 0) {
+        if ($exitCode -ne 0) {
             $outputText = ($commandOutput | Out-String).Trim()
             if ([string]::IsNullOrWhiteSpace($outputText)) {
-                throw "Command failed with exit code ${LASTEXITCODE}: $display"
+                throw "Command failed with exit code ${exitCode}: $display"
             }
 
-            throw "Command failed with exit code ${LASTEXITCODE}: $display`n$outputText"
+            throw "Command failed with exit code ${exitCode}: $display`n$outputText"
         }
     }
     finally {

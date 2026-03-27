@@ -68,7 +68,7 @@ function Acquire-BuildLock {
             $holder = 'unknown holder'
         }
 
-        throw "Another build appears to be running (lock file: $buildLockPath). Holder details: $holder"
+        throw "Another build appears to be running (lock file: $buildLockPath). Holder details: $holder`nIf this lock is stale, close old build processes and remove the lock file."
     }
 }
 
@@ -89,7 +89,8 @@ function Invoke-BuildWithRetry {
         Invoke-LoggedCommand -Command 'dotnet' -Arguments $BuildArgs -WorkingDirectory $root
     }
     catch {
-        Write-Warning "Build failed for $Project. Running clean and retrying once."
+        Write-Warning "Build failed for $Project. Cause: $($_.Exception.Message)"
+        Write-Warning 'Running clean and retrying once.'
 
         if ($CleanArgs -and $CleanArgs.Count -gt 0) {
             Invoke-LoggedCommand -Command 'dotnet' -Arguments $CleanArgs -WorkingDirectory $root
@@ -103,6 +104,7 @@ function Invoke-BuildWithRetry {
 }
 
 function Build-Windows {
+    Write-Host '--- Build Phase: Windows ---' -ForegroundColor Cyan
     $generatedDir = Join-Path $root (Join-Path 'obj' (Join-Path $Configuration 'net8.0-windows'))
     if (Test-Path $generatedDir) {
         # WPF generated files can occasionally become stale across incremental builds.
@@ -110,13 +112,16 @@ function Build-Windows {
     }
 
     Invoke-BuildWithRetry -Project $windowsProject -BuildArgs @('build', $windowsProject, '-c', $Configuration) -CleanArgs @('clean', $windowsProject, '-c', $Configuration)
+    Write-Host '--- Build Phase Completed: Windows ---' -ForegroundColor Green
 }
 
 function Build-Mobile {
+    Write-Host '--- Build Phase: Android Mobile ---' -ForegroundColor Cyan
     $sdk = Get-JavaAndAndroidSdk
     $buildArgs = @('build', $androidProject, '-f', 'net9.0-android', '-c', $Configuration, "-p:JavaSdkDirectory=$($sdk.JdkPath)", "-p:AndroidSdkDirectory=$($sdk.SdkPath)")
     $cleanArgs = @('clean', $androidProject, '-f', 'net9.0-android', '-c', $Configuration, "-p:JavaSdkDirectory=$($sdk.JdkPath)", "-p:AndroidSdkDirectory=$($sdk.SdkPath)")
     Invoke-BuildWithRetry -Project $androidProject -BuildArgs $buildArgs -CleanArgs $cleanArgs
+    Write-Host '--- Build Phase Completed: Android Mobile ---' -ForegroundColor Green
 }
 
 try {

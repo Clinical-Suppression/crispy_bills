@@ -16,6 +16,7 @@ if ($Configuration -is [System.Array]) {
 
 Write-Host 'Running clean before build to avoid stale generated files.' -ForegroundColor Yellow
 $windowsProj = Join-Path (Get-WorkspaceRoot) 'CrispyBills.csproj'
-& dotnet clean $windowsProj -c $Configuration | Out-Null
+Invoke-LoggedCommand -Command 'dotnet' -Arguments @('clean', $windowsProj, '-c', $Configuration) -WorkingDirectory (Get-WorkspaceRoot)
+Write-Host 'Clean completed. Starting combined Windows + Android build...' -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot 'build.ps1') -Target both -Configuration $Configuration
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

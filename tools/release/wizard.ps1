@@ -69,131 +69,6 @@ function Clear-WizardProgress {
     Write-Host ''
 }
 
-# Throttle WMI child-process queries; cache descendant PIDs to sum CPU (wrapper pwsh often idles while dotnet/MSBuild work).
-$script:WizardLastChildProcessWmiQueryUtc = [DateTime]::MinValue
-$script:WizardDescendantProcessIdsForCpu = @()
-
-function Get-ProcessActivityPulse {
-    param(
-        [Parameter(Mandatory = $true)]$Process,
-        [timespan]$LastCpuTime,
-        [int]$LastChildCount = -1,
-        [long]$LastStdOutLength = -1,
-        [long]$LastStdErrLength = -1,
-        [string]$StdOutPath,
-        [string]$StdErrPath,
-        [timespan]$LastChildTreeCpuSum = [timespan]::Zero
-    )
-
-    $cpuPulse = $false
-    $childPulse = $false
-    $stdoutPulse = $false
-    $stderrPulse = $false
-    $descendantCpuPulse = $false
-
-    $cpuNow = $LastCpuTime
-    try {
-        $cpuNow = $Process.TotalProcessorTime
-        if ($LastCpuTime -ne [timespan]::Zero -and ($cpuNow - $LastCpuTime).TotalMilliseconds -gt 5) {
-            $cpuPulse = $true
-        }
-    }
-    catch {}
-
-    $childCount = $LastChildCount
-    try {
-        $nowUtc = [DateTime]::UtcNow
-        $shouldQueryChildren = ($nowUtc - $script:WizardLastChildProcessWmiQueryUtc).TotalSeconds -ge 2.0
-        if ($shouldQueryChildren) {
-            $script:WizardLastChildProcessWmiQueryUtc = $nowUtc
-            $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($Process.Id)" -ErrorAction SilentlyContinue)
-            $childCount = $children.Count
-            if ($LastChildCount -ge 0 -and $childCount -ne $LastChildCount) {
-                $childPulse = $true
-            }
-            $ids = [System.Collections.Generic.HashSet[int]]::new()
-            foreach ($c in $children) {
-                $p = [int]$c.ProcessId
-                [void]$ids.Add($p)
-                try {
-                    $grand = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$p" -ErrorAction SilentlyContinue)
-                    foreach ($g in $grand) {
-                        $gp = [int]$g.ProcessId
-                        [void]$ids.Add($gp)
-                        try {
-                            $great = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$gp" -ErrorAction SilentlyContinue)
-                            foreach ($gg in $great) {
-                                [void]$ids.Add([int]$gg.ProcessId)
-                            }
-                        }
-                        catch {}
-                    }
-                }
-                catch {}
-            }
-            $script:WizardDescendantProcessIdsForCpu = @($ids)
-        }
-    }
-    catch {}
-
-    $childTreeCpuSum = [timespan]::Zero
-    foreach ($procId in $script:WizardDescendantProcessIdsForCpu) {
-        try {
-            $cp = Get-Process -Id $procId -ErrorAction Stop
-            $childTreeCpuSum += $cp.TotalProcessorTime
-        }
-        catch {
-            # Process exited; list refreshes on next WMI pass
-        }
-    }
-
-    if (($childTreeCpuSum - $LastChildTreeCpuSum).TotalMilliseconds -gt 0.5) {
-        $descendantCpuPulse = $true
-    }
-
-    $stdoutLength = $LastStdOutLength
-    if ($StdOutPath) {
-        try {
-            if (Test-Path $StdOutPath) {
-                $stdoutLength = (Get-Item $StdOutPath).Length
-                if ($LastStdOutLength -ge 0 -and $stdoutLength -gt $LastStdOutLength) {
-                    $stdoutPulse = $true
-                }
-            }
-        }
-        catch {}
-    }
-
-    $stderrLength = $LastStdErrLength
-    if ($StdErrPath) {
-        try {
-            if (Test-Path $StdErrPath) {
-                $stderrLength = (Get-Item $StdErrPath).Length
-                if ($LastStdErrLength -ge 0 -and $stderrLength -gt $LastStdErrLength) {
-                    $stderrPulse = $true
-                }
-            }
-        }
-        catch {}
-    }
-
-    $pulseStrength = 0
-    if ($cpuPulse) { $pulseStrength += 2 }
-    if ($childPulse) { $pulseStrength += 1 }
-    if ($descendantCpuPulse) { $pulseStrength += 3 }
-    if ($stdoutPulse) { $pulseStrength += 2 }
-    if ($stderrPulse) { $pulseStrength += 1 }
-
-    return [PSCustomObject]@{
-        PulseStrength = $pulseStrength
-        CpuNow = $cpuNow
-        ChildCount = $childCount
-        StdOutLength = $stdoutLength
-        StdErrLength = $stderrLength
-        ChildTreeCpuSum = $childTreeCpuSum
-    }
-}
-
 function Get-ProcessTreeActivityPulse {
     param(
         [Parameter(Mandatory = $true)][int]$ProcessId,
@@ -234,56 +109,6 @@ function Get-ProcessTreeActivityPulse {
         PulseStrength = $pulseStrength
         CpuNow = $cpuNow
         ChildCount = $childCount
-    }
-}
-
-function Update-ActivityPercent {
-    param(
-        [double]$CurrentPercent,
-        [int]$PulseStrength
-    )
-
-    $percent = [math]::Max(0, [math]::Min(95, $CurrentPercent))
-    if ($PulseStrength -le 0) {
-        return $percent
-    }
-
-    $increment = [math]::Min(6, [math]::Max(1.0, $PulseStrength * 1.5))
-    return [math]::Min(95, ($percent + $increment))
-}
-
-function Format-ActivityBar {
-    param(
-        [double]$Percent,
-        [int]$Width = 24
-    )
-
-    if ($Width -lt 8) { $Width = 8 }
-    $bounded = [math]::Max(0, [math]::Min(100, $Percent))
-    $filled = [int][math]::Floor(($bounded / 100.0) * $Width)
-    if ($filled -gt $Width) { $filled = $Width }
-    $empty = $Width - $filled
-    return ('[' + ('#' * $filled) + ('.' * $empty) + ']')
-}
-
-function Write-ActivityLine {
-    param(
-        [Parameter(Mandatory = $true)][string]$Activity,
-        [Parameter(Mandatory = $true)][string]$Spinner,
-        [double]$Percent,
-        [timespan]$Elapsed,
-        [double]$IdleSeconds = -1
-    )
-
-    $bar = Format-ActivityBar -Percent $Percent -Width 24
-    $elapsedText = ('{0,5:N1}s' -f $Elapsed.TotalSeconds)
-    $line = "$Activity $Spinner $bar {0,3}%" -f ([int][math]::Round($Percent))
-    if ($IdleSeconds -ge 0) {
-        $idleText = ('{0,5:N1}s' -f $IdleSeconds)
-        Write-Host -NoNewline ("`r{0} elapsed {1} idle {2}" -f $line, $elapsedText, $idleText)
-    }
-    else {
-        Write-Host -NoNewline ("`r{0} elapsed {1}" -f $line, $elapsedText)
     }
 }
 
@@ -1018,120 +843,43 @@ function Run-ScriptByName {
         }
 
         $requiresAttachedConsole = (Is-Interactive) -and $scriptTextIsInteractive
-        $useSpinner = -not $NoSpinner -and -not $requiresAttachedConsole
 
         # Interactive targets must stay attached: Invoke-LoggedCommand redirects streams and breaks Read-Host.
         $quotedArguments = @($args | ForEach-Object { ConvertTo-CommandLineArgument -Value $_ }) -join ' '
+        Write-Host ''
 
-        if (-not $useSpinner) {
-            Write-Host ''
+        if ($requiresAttachedConsole) {
+            $process = Start-Process -FilePath $command -ArgumentList $quotedArguments -WorkingDirectory (Get-WorkspaceRoot) -NoNewWindow -PassThru
+            $lastActivityAt = [DateTime]::UtcNow
+            $lastCpuTime = [timespan]::Zero
+            try { $lastCpuTime = $process.TotalProcessorTime } catch {}
+            $lastChildCount = -1
+            while (-not $process.HasExited) {
+                $pulse = Get-ProcessTreeActivityPulse -ProcessId $process.Id -LastCpuTime $lastCpuTime -LastChildCount $lastChildCount
+                $lastCpuTime = $pulse.CpuNow
+                $lastChildCount = $pulse.ChildCount
 
-            if ($requiresAttachedConsole) {
-                $process = Start-Process -FilePath $command -ArgumentList $quotedArguments -WorkingDirectory (Get-WorkspaceRoot) -NoNewWindow -PassThru
-                $lastActivityAt = [DateTime]::UtcNow
-                $lastCpuTime = [timespan]::Zero
-                try { $lastCpuTime = $process.TotalProcessorTime } catch {}
-                $lastChildCount = -1
-                while (-not $process.HasExited) {
-                    $pulse = Get-ProcessTreeActivityPulse -ProcessId $process.Id -LastCpuTime $lastCpuTime -LastChildCount $lastChildCount
-                    $lastCpuTime = $pulse.CpuNow
-                    $lastChildCount = $pulse.ChildCount
-
-                    $nowUtc = [DateTime]::UtcNow
-                    if ($pulse.PulseStrength -gt 0) {
-                        $lastActivityAt = $nowUtc
-                    }
-
-                    $idleSeconds = ($nowUtc - $lastActivityAt).TotalSeconds
-                    if ($effectiveTimeoutSeconds -gt 0 -and $idleSeconds -ge $effectiveTimeoutSeconds) {
-                        Stop-ProcessTree -ProcessId $process.Id
-                        throw "Script $ScriptName timed out after $timeoutLabel (no activity for $([int][math]::Round($idleSeconds))s)."
-                    }
-                    Start-Sleep -Milliseconds 250
+                $nowUtc = [DateTime]::UtcNow
+                if ($pulse.PulseStrength -gt 0) {
+                    $lastActivityAt = $nowUtc
                 }
-                $process.WaitForExit()
-                $stepExitCode = Get-NormalizedProcessExitCode -Process $process
-                if ($stepExitCode -ne 0) {
-                    throw "Script $ScriptName failed with exit code $stepExitCode."
+
+                $idleSeconds = ($nowUtc - $lastActivityAt).TotalSeconds
+                if ($effectiveTimeoutSeconds -gt 0 -and $idleSeconds -ge $effectiveTimeoutSeconds) {
+                    Stop-ProcessTree -ProcessId $process.Id
+                    throw "Script $ScriptName timed out after $timeoutLabel (no activity for $([int][math]::Round($idleSeconds))s)."
                 }
+                Start-Sleep -Milliseconds 250
             }
-            else {
-                Invoke-LoggedCommand -Command $command -Arguments $args -WorkingDirectory (Get-WorkspaceRoot)
-                $stepExitCode = [int]$LASTEXITCODE
+            $process.WaitForExit()
+            $stepExitCode = Get-NormalizedProcessExitCode -Process $process
+            if ($stepExitCode -ne 0) {
+                throw "Script $ScriptName failed with exit code $stepExitCode."
             }
-        } else {
-            $stdoutPath = [System.IO.Path]::GetTempFileName()
-            $stderrPath = [System.IO.Path]::GetTempFileName()
-            $process = $null
-            try {
-                $script:WizardLastChildProcessWmiQueryUtc = [DateTime]::MinValue
-                $script:WizardDescendantProcessIdsForCpu = @()
-                $process = Start-Process -FilePath $command -ArgumentList $quotedArguments -WorkingDirectory (Get-WorkspaceRoot) -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
-
-                $spinnerFrames = @('|','/','-','\')
-                $spinnerIndex = 0
-                $activityPercent = 0.0
-                $lastCpuTime = [timespan]::Zero
-                try { $lastCpuTime = $process.TotalProcessorTime } catch {}
-                $lastChildTreeCpuSum = [timespan]::Zero
-                $lastChildCount = -1
-                $lastStdOutLength = if (Test-Path $stdoutPath) { (Get-Item $stdoutPath).Length } else { -1 }
-                $lastStdErrLength = if (Test-Path $stderrPath) { (Get-Item $stderrPath).Length } else { -1 }
-                $lastActivityAt = [DateTime]::UtcNow
-
-                while (-not $process.HasExited) {
-                    $pulse = Get-ProcessActivityPulse -Process $process -LastCpuTime $lastCpuTime -LastChildCount $lastChildCount -LastStdOutLength $lastStdOutLength -LastStdErrLength $lastStdErrLength -StdOutPath $stdoutPath -StdErrPath $stderrPath -LastChildTreeCpuSum $lastChildTreeCpuSum
-                    $lastCpuTime = $pulse.CpuNow
-                    $lastChildCount = $pulse.ChildCount
-                    $lastChildTreeCpuSum = $pulse.ChildTreeCpuSum
-                    $lastStdOutLength = $pulse.StdOutLength
-                    $lastStdErrLength = $pulse.StdErrLength
-                    $nowUtc = [DateTime]::UtcNow
-                    if ($pulse.PulseStrength -gt 0) {
-                        $lastActivityAt = $nowUtc
-                    }
-                    $idleSeconds = ($nowUtc - $lastActivityAt).TotalSeconds
-                    if ($effectiveTimeoutSeconds -gt 0 -and $idleSeconds -ge $effectiveTimeoutSeconds) {
-                        Stop-ProcessTree -ProcessId $process.Id
-                        throw "Script $ScriptName timed out after $timeoutLabel (no activity for $([int][math]::Round($idleSeconds))s)."
-                    }
-                    $activityPercent = Update-ActivityPercent -CurrentPercent $activityPercent -PulseStrength $pulse.PulseStrength
-
-                    $spinner = $spinnerFrames[$spinnerIndex % $spinnerFrames.Count]
-                    $spinnerIndex++
-                    Write-ActivityLine -Activity $activity -Spinner $spinner -Percent $activityPercent -Elapsed $stopwatch.Elapsed -IdleSeconds $idleSeconds
-                    Start-Sleep -Milliseconds 150
-                }
-
-                $process.WaitForExit()
-                $activityPercent = 100
-                Write-ActivityLine -Activity $activity -Spinner ' ' -Percent $activityPercent -Elapsed $stopwatch.Elapsed -IdleSeconds 0
-
-                $stdoutText = if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath -Raw } else { '' }
-                $stderrText = if (Test-Path $stderrPath) { Get-Content -Path $stderrPath -Raw } else { '' }
-                $commandOutput = @()
-                if (-not [string]::IsNullOrWhiteSpace($stdoutText)) {
-                    $commandOutput += $stdoutText.TrimEnd("`r", "`n")
-                }
-                if (-not [string]::IsNullOrWhiteSpace($stderrText)) {
-                    $commandOutput += $stderrText.TrimEnd("`r", "`n")
-                }
-
-                if ($null -ne $commandOutput) {
-                    $commandOutput | Out-Host
-                }
-                Add-TaskDiagnosticsFromOutput -Command $command -OutputText (($commandOutput | Out-String))
-
-                $exitCode = Get-NormalizedProcessExitCode -Process $process
-                if ($exitCode -ne 0) {
-                    throw "Script $ScriptName failed with exit code $exitCode."
-                }
-                $stepExitCode = $exitCode
-            }
-            finally {
-                if (Test-Path $stdoutPath) { Remove-Item $stdoutPath -Force -ErrorAction SilentlyContinue }
-                if (Test-Path $stderrPath) { Remove-Item $stderrPath -Force -ErrorAction SilentlyContinue }
-            }
+        }
+        else {
+            Invoke-LoggedCommand -Command $command -Arguments $args -WorkingDirectory (Get-WorkspaceRoot)
+            $stepExitCode = [int]$LASTEXITCODE
         }
 
         $stopwatch.Stop()
