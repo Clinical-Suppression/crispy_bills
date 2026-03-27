@@ -1,5 +1,6 @@
 using CrispyBills.Mobile.Android.Models;
 using CrispyBills.Mobile.Android.Services;
+using static CrispyBills.Mobile.Android.Services.BillingService;
 using Xunit;
 using System;
 using System.Threading.Tasks;
@@ -274,9 +275,9 @@ public sealed class BillingServiceReliabilityTests
         var pastDueBill = new BillItem { DueDate = DateTime.Today.AddDays(-1), IsPaid = false };
 
         Assert.Equal((2, BillingService.SoonThresholdUnitWeeks), threshold);
-        Assert.True(service.IsBillSoon(soonBill, threshold.Value, threshold.Unit));
-        Assert.False(service.IsBillSoon(farBill, threshold.Value, threshold.Unit));
-        Assert.False(service.IsBillSoon(paidBill, threshold.Value, threshold.Unit));
-        Assert.False(service.IsBillSoon(pastDueBill, threshold.Value, threshold.Unit));
+        Assert.True(global::CrispyBills.Mobile.Android.Services.BillingService.IsBillSoon(soonBill, threshold.Value, threshold.Unit));
+        Assert.False(global::CrispyBills.Mobile.Android.Services.BillingService.IsBillSoon(farBill, threshold.Value, threshold.Unit));
+        Assert.False(global::CrispyBills.Mobile.Android.Services.BillingService.IsBillSoon(paidBill, threshold.Value, threshold.Unit));
+        Assert.False(global::CrispyBills.Mobile.Android.Services.BillingService.IsBillSoon(pastDueBill, threshold.Value, threshold.Unit));
     }
 }

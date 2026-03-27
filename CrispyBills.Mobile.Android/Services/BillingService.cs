@@ -5,6 +5,9 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+#if ANDROID
+using AndroidEnvironment = Android.OS.Environment;
+#endif
 
 namespace CrispyBills.Mobile.Android.Services;
 
@@ -13,7 +16,7 @@ namespace CrispyBills.Mobile.Android.Services;
 /// Loads/saves year data via an <see cref="IBillingRepository"/>, provides business
 /// operations such as creating drafts, adding/updating bills, and generating reports.
 /// </summary>
-public sealed class BillingService
+public sealed partial class BillingService(IBillingRepository repository)
 {
     private readonly SemaphoreSlim _stateSemaphore = new(1, 1);
     private const string ArchivedYearsMetaKey = "ArchivedYears";
@@ -25,19 +28,13 @@ public sealed class BillingService
     public const string SoonThresholdUnitDays = "Days";
     public const string SoonThresholdUnitWeeks = "Weeks";
     public const string SoonThresholdUnitMonths = "Months";
-    private static readonly Regex WeekBasedSuffixPattern = new(
-        @"\s-\s(?:Week|Bi-weekly)\s\d+$",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private readonly IBillingRepository _repository;
+    [GeneratedRegex(@"\s-\s(?:Week|Bi-weekly)\s\d+$", RegexOptions.IgnoreCase)]
+    private static partial Regex WeekBasedSuffixRegex();
+    private readonly IBillingRepository _repository = repository;
 
     private YearData _currentData = new();
     // Destructive debug deletes require an explicit per-session toggle (not persisted).
     private bool _debugDestructiveDeletesEnabled = false;
-
-    public BillingService(IBillingRepository repository)
-    {
-        _repository = repository;
-    }
 
     public int CurrentYear { get; private set; } = DateTime.Today.Year;
 
@@ -70,10 +67,12 @@ public sealed class BillingService
     public IReadOnlyList<BillItem> GetBills(int month)
     {
         ValidateMonth(month);
-        return _currentData.BillsByMonth[month]
+        return
+        [
+            .. _currentData.BillsByMonth[month]
             .OrderBy(x => x.DueDate)
             .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        ];
     }
 
     /// <summary>Get the configured income for the specified month.</summary>
@@ -139,7 +138,7 @@ public sealed class BillingService
         }
     }
 
-    public bool IsBillSoon(BillItem bill, int value, string unit)
+    public static bool IsBillSoon(BillItem bill, int value, string unit)
     {
         if (bill.IsPaid || bill.IsPastDue)
         {
@@ -177,15 +176,17 @@ public sealed class BillingService
         var raw = await _repository.GetAppMetaAsync(ArchivedYearsMetaKey);
         if (string.IsNullOrWhiteSpace(raw))
         {
-            return Array.Empty<int>();
+            return [];
         }
 
-        return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        return
+        [
+            .. raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(x => int.TryParse(x, out var y) ? y : 0)
             .Where(x => x > 0)
             .Distinct()
             .OrderBy(x => x)
-            .ToList();
+        ];
     }
 
     /// <summary>Mark or unmark a year as archived in app metadata.</summary>
@@ -210,12 +211,14 @@ public sealed class BillingService
     public IReadOnlyList<IReadOnlyList<BillItem>> FindDuplicateRecurringRules(int month)
     {
         ValidateMonth(month);
-        return _currentData.BillsByMonth[month]
+        return
+        [
+            .. _currentData.BillsByMonth[month]
             .Where(x => x.IsRecurring)
             .GroupBy(x => BuildRecurringSignature(x), StringComparer.OrdinalIgnoreCase)
             .Where(g => g.Count() > 1)
-            .Select(g => (IReadOnlyList<BillItem>)g.ToList())
-            .ToList();
+            .Select(g => (IReadOnlyList<BillItem>)[.. g])
+        ];
     }
 
     /// <summary>Create an in-memory snapshot copy of the currently loaded year data.</summary>
@@ -224,7 +227,7 @@ public sealed class BillingService
         var snapshot = new YearData();
         foreach (var month in Enumerable.Range(1, 12))
         {
-            snapshot.BillsByMonth[month] = _currentData.BillsByMonth[month].Select(x => x.Clone()).ToList();
+            snapshot.BillsByMonth[month] = [.. _currentData.BillsByMonth[month].Select(x => x.Clone())];
             snapshot.IncomeByMonth[month] = _currentData.IncomeByMonth[month];
         }
 
@@ -267,7 +270,7 @@ public sealed class BillingService
             _currentData = new YearData();
             foreach (var month in Enumerable.Range(1, 12))
             {
-                _currentData.BillsByMonth[month] = snapshot.BillsByMonth[month].Select(x => x.Clone()).ToList();
+                _currentData.BillsByMonth[month] = [.. snapshot.BillsByMonth[month].Select(x => x.Clone())];
                 _currentData.IncomeByMonth[month] = snapshot.IncomeByMonth[month];
             }
 
@@ -488,8 +491,8 @@ public sealed class BillingService
     }
 
     // Common household categories copied from the desktop app's `BillDialog`.
-    private static readonly string[] DefaultCategories = new[]
-    {
+    private static readonly string[] DefaultCategories =
+    [
         "General",
         "Housing",
         "Utilities",
@@ -504,7 +507,7 @@ public sealed class BillingService
         "Education",
         "Personal Care",
         "Miscellaneous"
-    };
+    ];
 
     /// <summary>Add a bill to the specified month, optionally expanding recurring instances.</summary>
     public async Task AddBillAsync(int month, BillItem draft)
@@ -565,7 +568,7 @@ public sealed class BillingService
             : (draft.Id == Guid.Empty ? Guid.NewGuid() : draft.Id);
         current.Year = CurrentYear;
         current.Month = month;
-        current.DueDate = NormalizeDueDate(CurrentYear, month, baseDay, draft.DueDate);
+        current.DueDate = NormalizeDueDate(CurrentYear, month, baseDay);
         current.RecurrenceGroupId = null;
         if (draft.IsRecurring)
         {
@@ -582,7 +585,7 @@ public sealed class BillingService
 
         if (draft.IsRecurring && IsWeekBased(current.RecurrenceFrequency))
         {
-            ExpandWeeklySeriesIntoYear(current, month, CurrentYear, _currentData);
+            ExpandWeeklySeriesIntoYear(current, CurrentYear, _currentData);
             ApplyWeekBasedSeriesLabels(current.Id, baseName, current.RecurrenceFrequency);
         }
         else if (draft.IsRecurring)
@@ -597,7 +600,7 @@ public sealed class BillingService
 
                 var future = current.Clone();
                 future.Month = target;
-                future.DueDate = NormalizeDueDate(CurrentYear, target, baseDay, draft.DueDate);
+                future.DueDate = NormalizeDueDate(CurrentYear, target, baseDay);
                 future.IsPaid = false;
                 future.RecurrenceGroupId = null;
                 _currentData.BillsByMonth[target].Add(future);
@@ -644,7 +647,7 @@ public sealed class BillingService
                 single.Id = id;
                 single.Year = CurrentYear;
                 single.Month = month;
-                single.DueDate = NormalizeDueDate(CurrentYear, month, baseDayChild, edited.DueDate);
+                single.DueDate = NormalizeDueDate(CurrentYear, month, baseDayChild);
                 single.RecurrenceGroupId = null;
 
                 if (!edited.IsRecurring)
@@ -662,7 +665,7 @@ public sealed class BillingService
 
                 if (IsWeekBased(nextFrequency))
                 {
-                    ExpandWeeklySeriesIntoYear(single, month, CurrentYear, _currentData);
+                    ExpandWeeklySeriesIntoYear(single, CurrentYear, _currentData);
                     ApplyWeekBasedSeriesLabels(single.Id, newBaseName, nextFrequency);
                 }
                 else
@@ -677,7 +680,7 @@ public sealed class BillingService
                         var future = single.Clone();
                         future.Month = futureMonth;
                         future.Year = CurrentYear;
-                        future.DueDate = NormalizeDueDate(CurrentYear, futureMonth, baseDayChild, edited.DueDate);
+                        future.DueDate = NormalizeDueDate(CurrentYear, futureMonth, baseDayChild);
                         future.IsPaid = false;
                         future.RecurrenceGroupId = null;
                         _currentData.BillsByMonth[futureMonth].Add(future);
@@ -702,7 +705,7 @@ public sealed class BillingService
                     single.Id = id;
                     single.Year = CurrentYear;
                     single.Month = month;
-                    single.DueDate = NormalizeDueDate(CurrentYear, month, baseDay, edited.DueDate);
+                    single.DueDate = NormalizeDueDate(CurrentYear, month, baseDay);
                     single.IsRecurring = false;
                     single.RecurrenceFrequency = RecurrenceFrequency.None;
                     single.RecurrenceGroupId = null;
@@ -715,7 +718,7 @@ public sealed class BillingService
                 anchor.Id = id;
                 anchor.Year = CurrentYear;
                 anchor.Month = month;
-                anchor.DueDate = NormalizeDueDate(CurrentYear, month, baseDay, edited.DueDate);
+                anchor.DueDate = NormalizeDueDate(CurrentYear, month, baseDay);
                 anchor.RecurrenceGroupId = null;
                 anchor.IsRecurring = true;
                 anchor.RecurrenceFrequency = edited.RecurrenceFrequency == RecurrenceFrequency.None
@@ -725,7 +728,7 @@ public sealed class BillingService
 
                 if (IsWeekBased(anchor.RecurrenceFrequency))
                 {
-                    ExpandWeeklySeriesIntoYear(anchor, month, CurrentYear, _currentData);
+                    ExpandWeeklySeriesIntoYear(anchor, CurrentYear, _currentData);
                     ApplyWeekBasedSeriesLabels(anchor.Id, StripWeekBasedSuffix(anchor.Name), anchor.RecurrenceFrequency);
                 }
                 else
@@ -739,7 +742,7 @@ public sealed class BillingService
 
                         var future = anchor.Clone();
                         future.Month = futureMonth;
-                        future.DueDate = NormalizeDueDate(CurrentYear, futureMonth, baseDay, edited.DueDate);
+                        future.DueDate = NormalizeDueDate(CurrentYear, futureMonth, baseDay);
                         future.IsPaid = false;
                         future.RecurrenceGroupId = null;
                         _currentData.BillsByMonth[futureMonth].Add(future);
@@ -759,7 +762,7 @@ public sealed class BillingService
                     _currentData.BillsByMonth[futureMonth].RemoveAll(x => x.Id == id);
                 }
 
-                ExpandWeeklySeriesIntoYear(target, month, CurrentYear, _currentData);
+                ExpandWeeklySeriesIntoYear(target, CurrentYear, _currentData);
                 ApplyWeekBasedSeriesLabels(target.Id, StripWeekBasedSuffix(edited.Name), edited.RecurrenceFrequency);
             }
             else if (edited.IsRecurring)
@@ -769,7 +772,7 @@ public sealed class BillingService
                 {
                     if (!ShouldCreateRecurringOccurrence(edited, month, futureMonth, CurrentYear))
                     {
-                        futureListRemoveById(futureMonth, id);
+                        FutureListRemoveById(futureMonth, id);
                         continue;
                     }
 
@@ -885,7 +888,7 @@ public sealed class BillingService
                 rollover.RecurrenceGroupId = null;
                 rollover.IsPaid = false;
                 rollover.Name = $"{bill.Name} - Rolled over from {sourceMonthName}";
-                rollover.DueDate = NormalizeDueDate(CurrentYear, month + 1, bill.DueDate.Day, bill.DueDate);
+                rollover.DueDate = NormalizeDueDate(CurrentYear, month + 1, bill.DueDate.Day);
 
                 if (!bill.Name.Contains("Rolled over", StringComparison.OrdinalIgnoreCase))
                 {
@@ -916,43 +919,7 @@ public sealed class BillingService
         await _stateSemaphore.WaitAsync();
         try
         {
-        if (replaceYear)
-        {
-            _currentData = importedYear;
-        }
-        else
-        {
-            foreach (var month in Enumerable.Range(1, 12))
-            {
-                var existing = _currentData.BillsByMonth[month];
-                foreach (var incoming in importedYear.BillsByMonth[month])
-                {
-                    var idx = existing.FindIndex(x => x.Id == incoming.Id);
-                    if (idx < 0)
-                    {
-                        idx = existing.FindIndex(x => IsSameBillForMerge(x, incoming));
-                    }
-
-                    if (idx >= 0)
-                    {
-                        existing[idx] = incoming.Clone();
-                    }
-                    else
-                    {
-                        existing.Add(incoming.Clone());
-                    }
-                }
-
-                if (importedYear.IncomeByMonth[month] > 0)
-                {
-                    _currentData.IncomeByMonth[month] = importedYear.IncomeByMonth[month];
-                }
-            }
-        }
-
-        NormalizeForYear(year);
-        ValidateInvariants();
-        await SaveAsync();
+            await ImportStructuredCsvForYearCoreAsync(importedYear, year, replaceYear);
         }
         finally
         {
@@ -976,43 +943,7 @@ public sealed class BillingService
         await _stateSemaphore.WaitAsync();
         try
         {
-        if (replaceYear)
-        {
-            _currentData = importedYear;
-        }
-        else
-        {
-            foreach (var month in Enumerable.Range(1, 12))
-            {
-                var existing = _currentData.BillsByMonth[month];
-                foreach (var incoming in importedYear.BillsByMonth[month])
-                {
-                    var idx = existing.FindIndex(x => x.Id == incoming.Id);
-                    if (idx < 0)
-                    {
-                        idx = existing.FindIndex(x => IsSameBillForMerge(x, incoming));
-                    }
-
-                    if (idx >= 0)
-                    {
-                        existing[idx] = incoming.Clone();
-                    }
-                    else
-                    {
-                        existing.Add(incoming.Clone());
-                    }
-                }
-
-                if (importedYear.IncomeByMonth[month] > 0)
-                {
-                    _currentData.IncomeByMonth[month] = importedYear.IncomeByMonth[month];
-                }
-            }
-        }
-
-        NormalizeForYear(year);
-        ValidateInvariants();
-        await SaveAsync();
+            await ImportStructuredCsvForYearCoreAsync(importedYear, year, replaceYear);
         }
         finally
         {
@@ -1020,6 +951,69 @@ public sealed class BillingService
         }
 
         return parsed.Report;
+    }
+
+    private async Task ImportStructuredCsvForYearCoreAsync(YearData importedYear, int year, bool replaceYear)
+    {
+        var previousYear = CurrentYear;
+        var previousData = _currentData;
+        var switchedYearContext = false;
+
+        if (year != CurrentYear)
+        {
+            _currentData = await _repository.LoadYearAsync(year);
+            CurrentYear = year;
+            switchedYearContext = true;
+        }
+
+        try
+        {
+            if (replaceYear)
+            {
+                _currentData = importedYear;
+            }
+            else
+            {
+                foreach (var month in Enumerable.Range(1, 12))
+                {
+                    var existing = _currentData.BillsByMonth[month];
+                    foreach (var incoming in importedYear.BillsByMonth[month])
+                    {
+                        var idx = existing.FindIndex(x => x.Id == incoming.Id);
+                        if (idx < 0)
+                        {
+                            idx = existing.FindIndex(x => IsSameBillForMerge(x, incoming));
+                        }
+
+                        if (idx >= 0)
+                        {
+                            existing[idx] = incoming.Clone();
+                        }
+                        else
+                        {
+                            existing.Add(incoming.Clone());
+                        }
+                    }
+
+                    if (importedYear.IncomeByMonth[month] > 0)
+                    {
+                        _currentData.IncomeByMonth[month] = importedYear.IncomeByMonth[month];
+                    }
+                }
+            }
+
+            NormalizeForYear(year);
+            ValidateInvariants();
+            await SaveAsync();
+        }
+        finally
+        {
+            if (switchedYearContext)
+            {
+                CurrentYear = previousYear;
+                _currentData = previousData;
+            }
+        }
     }
 
     /// <summary>Create a new year database from recurring templates found in December.</summary>
@@ -1061,7 +1055,7 @@ public sealed class BillingService
                 anchor.IsRecurring = true;
                 anchor.RecurrenceGroupId = null;
                 nextData.BillsByMonth[first.Month].Add(anchor);
-                ExpandWeeklySeriesIntoYear(anchor, first.Month, newYear, nextData);
+                ExpandWeeklySeriesIntoYear(anchor, newYear, nextData);
                 ApplyWeekBasedSeriesLabels(nextData, anchor.Id, StripWeekBasedSuffix(recurringTemplate.Name), recurringTemplate.RecurrenceFrequency);
 
                 if (!recurringTemplate.IsPaid)
@@ -1074,7 +1068,7 @@ public sealed class BillingService
                     unpaidCarry.IsPaid = false;
                     unpaidCarry.RecurrenceGroupId = null;
                     unpaidCarry.RecurrenceFrequency = RecurrenceFrequency.None;
-                    unpaidCarry.DueDate = NormalizeDueDate(newYear, 1, recurringTemplate.DueDate.Day, recurringTemplate.DueDate);
+                    unpaidCarry.DueDate = NormalizeDueDate(newYear, 1, recurringTemplate.DueDate.Day);
                     nextData.BillsByMonth[1].Add(unpaidCarry);
                 }
 
@@ -1095,7 +1089,7 @@ public sealed class BillingService
                 copy.Month = month;
                 copy.IsPaid = false;
                 copy.RecurrenceGroupId = null;
-                copy.DueDate = NormalizeDueDate(newYear, month, recurringTemplate.DueDate.Day, recurringTemplate.DueDate);
+                copy.DueDate = NormalizeDueDate(newYear, month, recurringTemplate.DueDate.Day);
                 nextData.BillsByMonth[month].Add(copy);
             }
 
@@ -1121,7 +1115,7 @@ public sealed class BillingService
             copy.Month = 1;
             copy.IsRecurring = false;
             copy.IsPaid = false;
-            copy.DueDate = NormalizeDueDate(newYear, 1, unpaidOneTime.DueDate.Day, unpaidOneTime.DueDate);
+            copy.DueDate = NormalizeDueDate(newYear, 1, unpaidOneTime.DueDate.Day);
             nextData.BillsByMonth[1].Add(copy);
         }
 
@@ -1200,13 +1194,21 @@ public sealed class BillingService
             sb.AppendLine($"INCOME,{year},{MonthNames.Name(month)},,,{GetIncome(month).ToString("0.00", CultureInfo.InvariantCulture)},,,");
         }
 
-        var filePath = Path.Combine(_repository.DataRoot, $"crispybills_export_{year}_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
-        await File.WriteAllTextAsync(filePath, sb.ToString());
+        var fileName = $"crispybills_export_{year}_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+        var filePath = Path.Combine(_repository.DataRoot, fileName);
+        await WriteExportWithPublicCopyAsync(fileName, sb.ToString());
         return filePath;
     }
 
     /// <summary>Export every stored year plus notes using the same structured CSV shape as the desktop app.</summary>
     public async Task<string> ExportFullReportCsvAsync()
+    {
+        var result = await ExportFullReportCsvWithLocationsAsync();
+        return result.PrivatePath;
+    }
+
+    /// <summary>Export full report to app-private storage and copy to public Downloads/CrispyBills when available.</summary>
+    public async Task<ExportPathsResult> ExportFullReportCsvWithLocationsAsync()
     {
         var sb = new StringBuilder();
         sb.AppendLine($"REPORT,{Escape("Crispy_Bills Export")}");
@@ -1218,9 +1220,7 @@ public sealed class BillingService
         foreach (var year in years)
         {
             var data = await _repository.LoadYearAsync(year);
-            var yearIncome = Enumerable.Range(1, 12).Sum(m => data.IncomeByMonth.GetValueOrDefault(m, 0m));
-            var yearExpenses = Enumerable.Range(1, 12).Sum(m => data.BillsByMonth[m].Sum(b => b.Amount));
-            var yearRemaining = Enumerable.Range(1, 12).Sum(m => data.BillsByMonth[m].Where(b => !b.IsPaid).Sum(b => b.Amount));
+            var (yearIncome, yearExpenses, yearRemaining) = ComputeYearFinancialTotals(data);
 
             sb.AppendLine($"===== YEAR =====,{year}");
             sb.AppendLine($"YEAR SUMMARY,Income,{yearIncome.ToString(CultureInfo.InvariantCulture)},Expenses,{yearExpenses.ToString(CultureInfo.InvariantCulture)},Remaining,{yearRemaining.ToString(CultureInfo.InvariantCulture)},Net,{(yearIncome - yearExpenses).ToString(CultureInfo.InvariantCulture)}");
@@ -1276,9 +1276,81 @@ public sealed class BillingService
             sb.AppendLine($"{i + 1},{Escape(noteLines[i])}");
         }
 
-        var filePath = Path.Combine(_repository.DataRoot, $"CrispyBills_Report_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
-        await File.WriteAllTextAsync(filePath, sb.ToString());
-        return filePath;
+        var fileName = $"CrispyBills_Report_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+        return await WriteExportWithPublicCopyAsync(fileName, sb.ToString());
+    }
+
+    private async Task<ExportPathsResult> WriteExportWithPublicCopyAsync(string fileName, string contents)
+    {
+        Directory.CreateDirectory(_repository.DataRoot);
+        var privatePath = Path.Combine(_repository.DataRoot, fileName);
+        await File.WriteAllTextAsync(privatePath, contents);
+
+        string? publicPath = null;
+        try
+        {
+            var publicDir = GetPublicExportDirectoryPath();
+            if (!string.IsNullOrWhiteSpace(publicDir))
+            {
+                Directory.CreateDirectory(publicDir);
+                publicPath = Path.Combine(publicDir, fileName);
+                await File.WriteAllTextAsync(publicPath, contents);
+            }
+        }
+        catch
+        {
+            // Best effort only. Private export remains the source of truth.
+            publicPath = null;
+        }
+
+        return new ExportPathsResult(privatePath, publicPath);
+    }
+
+    private static (decimal Income, decimal Expenses, decimal Remaining) ComputeYearFinancialTotals(YearData data)
+    {
+        decimal income = 0m;
+        decimal expenses = 0m;
+        decimal remaining = 0m;
+
+        for (var month = 1; month <= 12; month++)
+        {
+            income += data.IncomeByMonth.GetValueOrDefault(month, 0m);
+
+            foreach (var bill in data.BillsByMonth[month])
+            {
+                expenses += bill.Amount;
+                if (!bill.IsPaid)
+                {
+                    remaining += bill.Amount;
+                }
+            }
+        }
+
+        return (income, expenses, remaining);
+    }
+
+    private static string? GetPublicExportDirectoryPath()
+    {
+#if ANDROID
+        var downloads = AndroidEnvironment.GetExternalStoragePublicDirectory(AndroidEnvironment.DirectoryDownloads)?.AbsolutePath;
+        if (string.IsNullOrWhiteSpace(downloads))
+        {
+            var externalRoot = AndroidEnvironment.ExternalStorageDirectory?.AbsolutePath;
+            if (!string.IsNullOrWhiteSpace(externalRoot))
+            {
+                downloads = Path.Combine(externalRoot, "Download");
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(downloads))
+        {
+            return null;
+        }
+
+        return Path.Combine(downloads, "CrispyBills");
+#else
+        return null;
+#endif
     }
 
     /// <summary>HTML summary for the currently loaded year (for viewing in a browser).</summary>
@@ -1290,14 +1362,16 @@ public sealed class BillingService
     {
         ValidateMonth(month);
         var key = string.IsNullOrWhiteSpace(category) ? "General" : category.Trim();
-        return _currentData.BillsByMonth[month]
+        return
+        [
+            .. _currentData.BillsByMonth[month]
             .Where(b => string.Equals(
                 string.IsNullOrWhiteSpace(b.Category) ? "General" : b.Category.Trim(),
                 key,
                 StringComparison.OrdinalIgnoreCase))
             .OrderBy(b => b.DueDate)
             .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        ];
     }
 
     /// <summary>Normalize due dates to the bill's calendar month (preserves unpaid carryovers before month start).</summary>
@@ -1410,7 +1484,7 @@ public sealed class BillingService
                         c.Year = targetYearValue;
                         c.Month = monthNum;
                         c.ContextPeriodStart = new DateTime(targetYearValue, monthNum, 1);
-                        c.DueDate = NormalizeDueDate(targetYearValue, monthNum, c.DueDate.Day, c.DueDate);
+                        c.DueDate = NormalizeDueDate(targetYearValue, monthNum, c.DueDate.Day);
                         c.RecurrenceGroupId = null;
                         return c;
                     }).ToList();
@@ -1461,7 +1535,7 @@ public sealed class BillingService
                 bill.Category = string.IsNullOrWhiteSpace(bill.Category) ? "General" : bill.Category.Trim();
                 bill.Name = string.IsNullOrWhiteSpace(bill.Name) ? "Untitled bill" : bill.Name.Trim();
                 bill.Amount = Math.Max(0, bill.Amount);
-                bill.DueDate = NormalizeDueDate(year, month, bill.DueDate.Day, bill.DueDate);
+                bill.DueDate = NormalizeDueDate(year, month, bill.DueDate.Day);
             }
 
             data.IncomeByMonth[month] = Math.Max(0, data.IncomeByMonth.GetValueOrDefault(month, 0m));
@@ -1545,7 +1619,7 @@ public sealed class BillingService
                     report.DuplicateIdRepaired++;
                 }
 
-                var normalizedDate = NormalizeDueDate(CurrentYear, month, bill.DueDate.Day, bill.DueDate);
+                var normalizedDate = NormalizeDueDate(CurrentYear, month, bill.DueDate.Day);
                 if (bill.DueDate.Date != normalizedDate.Date)
                 {
                     bill.DueDate = normalizedDate;
@@ -1717,7 +1791,7 @@ public sealed class BillingService
     private static string StripWeekBasedSuffix(string? name)
     {
         var normalized = string.IsNullOrWhiteSpace(name) ? "Untitled bill" : name.Trim();
-        return WeekBasedSuffixPattern.Replace(normalized, string.Empty);
+        return WeekBasedSuffixRegex().Replace(normalized, string.Empty);
     }
 
     private static string BuildWeekBasedOccurrenceName(string baseName, RecurrenceFrequency frequency, int occurrenceIndex)
@@ -1767,7 +1841,7 @@ public sealed class BillingService
             {
                 if (IsWeekBased(recurring.RecurrenceFrequency))
                 {
-                    if (ExpandWeeklySeriesIntoYear(recurring, month, CurrentYear, _currentData) > 0)
+                    if (ExpandWeeklySeriesIntoYear(recurring, CurrentYear, _currentData) > 0)
                     {
                         changed = true;
                     }
@@ -1792,7 +1866,7 @@ public sealed class BillingService
                         copy.Month = targetMonth;
                         copy.Year = CurrentYear;
                         copy.IsPaid = false;
-                        copy.DueDate = NormalizeDueDate(CurrentYear, targetMonth, dueDay, recurring.DueDate);
+                        copy.DueDate = NormalizeDueDate(CurrentYear, targetMonth, dueDay);
                         copy.RecurrenceGroupId = null;
                         _currentData.BillsByMonth[targetMonth].Add(copy);
                         changed = true;
@@ -1820,7 +1894,7 @@ public sealed class BillingService
                 bill.Category = string.IsNullOrWhiteSpace(bill.Category) ? "General" : bill.Category.Trim();
                 bill.Name = string.IsNullOrWhiteSpace(bill.Name) ? "Untitled bill" : bill.Name.Trim();
                 bill.Amount = Math.Max(0, bill.Amount);
-                bill.DueDate = NormalizeDueDate(CurrentYear, month, bill.DueDate.Day, bill.DueDate);
+                bill.DueDate = NormalizeDueDate(CurrentYear, month, bill.DueDate.Day);
                 if (bill.Id == Guid.Empty)
                 {
                     bill.Id = Guid.NewGuid();
@@ -1871,7 +1945,7 @@ public sealed class BillingService
 
             if (!result.TryGetValue(year, out var yearData))
             {
-                yearData = new YearData();
+                yearData = new();
                 result[year] = yearData;
             }
 
@@ -1922,7 +1996,7 @@ public sealed class BillingService
             }
 
             var isRecurring = recurringText.Equals("Yes", StringComparison.OrdinalIgnoreCase);
-            var bill = new BillItem
+            BillItem bill = new()
             {
                 Id = Guid.NewGuid(),
                 Name = name.Trim(),
@@ -1931,11 +2005,10 @@ public sealed class BillingService
                 DueDate = dueDate,
                 IsPaid = status.Equals("Paid", StringComparison.OrdinalIgnoreCase),
                 IsRecurring = isRecurring,
-                RecurrenceFrequency = isRecurring ? RecurrenceFrequency.MonthlyInterval : RecurrenceFrequency.None
+                RecurrenceFrequency = isRecurring ? RecurrenceFrequency.MonthlyInterval : RecurrenceFrequency.None,
+                Year = year,
+                Month = month
             };
-
-            bill.Year = year;
-            bill.Month = month;
             yearData.BillsByMonth[month].Add(bill);
             report.ImportedBillRows++;
         }
@@ -2020,7 +2093,7 @@ public sealed class BillingService
         }
     }
 
-    private static DateTime NormalizeDueDate(int year, int month, int requestedDay, DateTime original)
+    private static DateTime NormalizeDueDate(int year, int month, int requestedDay)
     {
         var maxDay = DateTime.DaysInMonth(year, month);
         var day = Math.Clamp(requestedDay, 1, maxDay);
@@ -2044,7 +2117,7 @@ public sealed class BillingService
         target.RecurrenceMaxOccurrences = source.RecurrenceMaxOccurrences;
         target.IsPaid = source.IsPaid;
         target.Month = month;
-        target.DueDate = NormalizeDueDate(target.Year, month, baseDay, source.DueDate);
+        target.DueDate = NormalizeDueDate(target.Year, month, baseDay);
     }
 
     private void NormalizeForYear(int year)
@@ -2055,7 +2128,7 @@ public sealed class BillingService
             {
                 bill.Month = month;
                 bill.Year = year;
-                bill.DueDate = NormalizeDueDate(year, month, bill.DueDate.Day, bill.DueDate);
+                bill.DueDate = NormalizeDueDate(year, month, bill.DueDate.Day);
             }
         }
     }
@@ -2095,7 +2168,7 @@ public sealed class BillingService
         if (recurring.RecurrenceEndMode == RecurrenceEndMode.EndOnDate
             && recurring.RecurrenceEndDate is DateTime endDate)
         {
-            var occurrenceDate = NormalizeDueDate(targetYear, targetMonth, recurring.DueDate.Day, recurring.DueDate);
+            var occurrenceDate = NormalizeDueDate(targetYear, targetMonth, recurring.DueDate.Day);
             if (occurrenceDate.Date > endDate.Date)
             {
                 return false;
@@ -2105,7 +2178,7 @@ public sealed class BillingService
         return true;
     }
 
-    private void futureListRemoveById(int month, Guid id)
+    private void FutureListRemoveById(int month, Guid id)
     {
         _currentData.BillsByMonth[month].RemoveAll(x => x.Id == id);
     }
@@ -2123,7 +2196,7 @@ public sealed class BillingService
 
     /// <summary>Adds weekly/bi-weekly child occurrences for the rest of <paramref name="year"/> after <paramref name="anchor"/> (anchor is already stored).</summary>
     /// <returns>Number of new rows added.</returns>
-    private static int ExpandWeeklySeriesIntoYear(BillItem anchor, int anchorMonth, int year, YearData data)
+    private static int ExpandWeeklySeriesIntoYear(BillItem anchor, int year, YearData data)
     {
         if (!anchor.IsRecurring || !IsWeekBased(anchor.RecurrenceFrequency))
         {
@@ -2303,3 +2376,4 @@ public sealed class ImportStructuredCsvReport
 }
 
 public sealed record StructuredReportApplyResult(int ImportedBillCount = 0, int ImportedMonthCount = 0, bool NotesImported = false);
+public sealed record ExportPathsResult(string PrivatePath, string? PublicPath);

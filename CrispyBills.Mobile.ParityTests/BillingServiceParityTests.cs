@@ -171,11 +171,88 @@ public sealed class BillingServiceParityTests
         Assert.Equal("Existing", service.GetBills(1).Single().Name);
     }
 
+    [Fact]
+    public async Task ImportStructuredCsvForYearAsync_TargetYearDifferentFromCurrentYear_SavesToTargetAndKeepsCurrentContext()
+    {
+        var repo = new InMemoryBillingRepository();
+        var service = new BillingService(repo);
+        await service.LoadYearAsync(2026);
+
+        await service.AddBillAsync(1, new BillItem
+        {
+            Name = "Current Year Bill",
+            Amount = 10m,
+            Category = "General",
+            DueDate = new DateTime(2026, 1, 5),
+            IsRecurring = false
+        });
+
+        var lines = new[]
+        {
+            "TYPE,Year,Month,Name,Category,Amount,DueDate,Status,Recurring",
+            "MONTH,2027,January,,,,,,",
+            "BILL,2027,January,Imported 2027,Utilities,45.00,2027-01-20,Unpaid,No",
+            "INCOME,2027,January,,,1200.00,,,"
+        };
+
+        await service.ImportStructuredCsvForYearAsync(lines, 2027, replaceYear: true);
+
+        Assert.Equal(2026, service.CurrentYear);
+        Assert.Contains(2027, repo.SaveYears);
+        Assert.DoesNotContain(2026, repo.SaveYears.Where(x => x == 2026).Skip(1));
+
+        var verify2026 = new BillingService(repo);
+        await verify2026.LoadYearAsync(2026);
+        Assert.Contains(verify2026.GetBills(1), b => b.Name == "Current Year Bill");
+
+        var verify2027 = new BillingService(repo);
+        await verify2027.LoadYearAsync(2027);
+        Assert.Contains(verify2027.GetBills(1), b => b.Name == "Imported 2027");
+        Assert.Equal(1200m, verify2027.GetIncome(1));
+    }
+
+    [Fact]
+    public async Task ImportStructuredCsvForYearAsync_MergeIntoDifferentYear_DoesNotMutateLoadedYear()
+    {
+        var repo = new InMemoryBillingRepository();
+        var service = new BillingService(repo);
+        await service.LoadYearAsync(2026);
+
+        await service.AddBillAsync(2, new BillItem
+        {
+            Name = "Current-2026",
+            Amount = 25m,
+            Category = "General",
+            DueDate = new DateTime(2026, 2, 10),
+            IsRecurring = false
+        });
+
+        var lines = new[]
+        {
+            "TYPE,Year,Month,Name,Category,Amount,DueDate,Status,Recurring",
+            "MONTH,2027,February,,,,,,",
+            "BILL,2027,February,Merged-2027,Utilities,55.00,2027-02-11,Unpaid,No",
+            "INCOME,2027,February,,,1800.00,,,"
+        };
+
+        await service.ImportStructuredCsvForYearAsync(lines, 2027, replaceYear: false);
+
+        Assert.Equal(2026, service.CurrentYear);
+        Assert.Contains(service.GetBills(2), b => b.Name == "Current-2026");
+        Assert.DoesNotContain(service.GetBills(2), b => b.Name == "Merged-2027");
+
+        var verify2027 = new BillingService(repo);
+        await verify2027.LoadYearAsync(2027);
+        Assert.Contains(verify2027.GetBills(2), b => b.Name == "Merged-2027");
+        Assert.Equal(1800m, verify2027.GetIncome(2));
+    }
+
     private sealed class InMemoryBillingRepository : IBillingRepository
     {
         private readonly Dictionary<int, YearData> _store = new();
         private readonly Dictionary<string, string> _meta = new(StringComparer.OrdinalIgnoreCase);
         private string _notes = string.Empty;
+        public List<int> SaveYears { get; } = [];
 
         public string DataRoot => Path.GetTempPath();
 
@@ -212,6 +289,7 @@ public sealed class BillingServiceParityTests
 
         public Task SaveYearAsync(int year, YearData data)
         {
+            SaveYears.Add(year);
             _store[year] = Clone(data);
             return Task.CompletedTask;
         }

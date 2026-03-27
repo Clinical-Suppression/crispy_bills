@@ -1,5 +1,6 @@
 using CrispyBills.Mobile.Android.Models;
 using CrispyBills.Mobile.Android.Services;
+using CrispyBills.Core.Security;
 using Microsoft.Maui.Graphics;
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -117,7 +118,11 @@ public partial class MainPage : ContentPage
 				var completed = await Task.WhenAny(unlockTask, Task.Delay(TimeSpan.FromSeconds(45)));
 				if (completed != unlockTask)
 				{
-					try { await Navigation.PopModalAsync(); } catch { }
+					await DiagnosticsLog.WriteAsync("EnsureAppLockFlow", new TimeoutException("Unlock timeout reached; keeping lock screen active."));
+					if (AppLockTimeoutPolicy.ShouldDismissModalOnTimeout(AppLockFlowStep.Unlock))
+					{
+						try { await Navigation.PopModalAsync(); } catch { }
+					}
 					return;
 				}
 
@@ -155,7 +160,10 @@ public partial class MainPage : ContentPage
 			}
 			else
 			{
-				try { await Navigation.PopModalAsync(); } catch { }
+				if (AppLockTimeoutPolicy.ShouldDismissModalOnTimeout(AppLockFlowStep.PinSetup))
+				{
+					try { await Navigation.PopModalAsync(); } catch { }
+				}
 			}
 			await _appLockService.MarkPinSetupPromptHandledAsync();
 		}
@@ -492,7 +500,7 @@ public partial class MainPage : ContentPage
 			_visibleBills.Add(new BillListItem(
 				bill,
 				_localization.FormatCurrency(bill.Amount),
-				_service.IsBillSoon(bill, _soonThresholdValue, _soonThresholdUnit)));
+				BillingService.IsBillSoon(bill, _soonThresholdValue, _soonThresholdUnit)));
 		}
 	}
 
@@ -503,7 +511,7 @@ public partial class MainPage : ContentPage
 			return 0;
 		}
 
-		var isSoon = _service.IsBillSoon(bill, _soonThresholdValue, _soonThresholdUnit);
+		var isSoon = BillingService.IsBillSoon(bill, _soonThresholdValue, _soonThresholdUnit);
 		if (bill.IsPastDue)
 		{
 			return 3;
@@ -1128,8 +1136,13 @@ public partial class MainPage : ContentPage
 	{
 		try
 		{
-			var path = await _service.ExportFullReportCsvAsync();
-			await DisplayAlert("Exported", $"Full report saved to:\n{path}", "OK");
+			var export = await _service.ExportFullReportCsvWithLocationsAsync();
+			var message = $"Full report saved to app storage:\n{export.PrivatePath}";
+			if (!string.IsNullOrWhiteSpace(export.PublicPath))
+			{
+				message += $"\n\nPublic copy saved to:\n{export.PublicPath}";
+			}
+			await DisplayAlert("Exported", message, "OK");
 		}
 		catch (Exception ex)
 		{

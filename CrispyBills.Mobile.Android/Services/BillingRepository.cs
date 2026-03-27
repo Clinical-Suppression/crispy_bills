@@ -1,6 +1,7 @@
 using CrispyBills.Mobile.Android.Models;
 using CrispyBills.Core.Storage;
 using Microsoft.Data.Sqlite;
+using System.Runtime.ExceptionServices;
 
 namespace CrispyBills.Mobile.Android.Services;
 
@@ -282,12 +283,13 @@ WHERE Year = $year;";
             File.Copy(dbPath, backupPath, overwrite: true);
         }
 
-        await using var connection = new SqliteConnection(connectionString);
-        await connection.OpenAsync();
-        await using var tx = connection.BeginTransaction();
-
+        ExceptionDispatchInfo? saveFailure = null;
         try
         {
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync();
+            await using var tx = connection.BeginTransaction();
+
             await using (var deleteBills = connection.CreateCommand())
             {
                 deleteBills.CommandText = "DELETE FROM Bills WHERE Year = $year;";
@@ -359,24 +361,23 @@ VALUES ($month, $year, $amount);";
                 File.Delete(backupPath);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            try
-            {
-                await tx.RollbackAsync();
-            }
-            catch
-            {
-            }
-
-            if (File.Exists(backupPath))
-            {
-                File.Copy(backupPath, dbPath, overwrite: true);
-                File.Delete(backupPath);
-            }
-
-            throw;
+            saveFailure = ExceptionDispatchInfo.Capture(ex);
         }
+
+        if (saveFailure is null)
+        {
+            return;
+        }
+
+        if (File.Exists(backupPath))
+        {
+            File.Copy(backupPath, dbPath, overwrite: true);
+            File.Delete(backupPath);
+        }
+
+        saveFailure.Throw();
     }
 
     /// <summary>Load the free-form notes string from the notes database.</summary>
