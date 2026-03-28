@@ -1,5 +1,6 @@
 using Microsoft.Maui.ApplicationModel;
 using System.Runtime.Versioning;
+using System.Threading;
 
 #if ANDROID
 using Android.App;
@@ -77,6 +78,8 @@ public sealed class BiometricAuthService
     [SupportedOSPlatform("android28.0")]
     private sealed class PromptCallback(TaskCompletionSource<bool> tcs) : BiometricPrompt.AuthenticationCallback
     {
+        private int _loggedRecoverableFailure;
+
         public override void OnAuthenticationSucceeded(BiometricPrompt.AuthenticationResult? result)
         {
             base.OnAuthenticationSucceeded(result);
@@ -92,6 +95,15 @@ public sealed class BiometricAuthService
         public override void OnAuthenticationFailed()
         {
             base.OnAuthenticationFailed();
+            // Recoverable failure (e.g. wrong fingerprint): Android keeps the prompt open for retry.
+            // Do not complete the TaskCompletionSource here — completion happens on success, error, or negative button.
+            if (Interlocked.Exchange(ref _loggedRecoverableFailure, 1) == 0)
+            {
+                DiagnosticsLog.WriteSync(
+                    "BiometricAuth.OnAuthenticationFailed",
+                    "Recoverable biometric failure (user can retry or tap Use PIN).",
+                    severity: "Info");
+            }
         }
     }
 

@@ -3,10 +3,10 @@
     x:Class="CrispyBills.Mobile.Android.AppShell"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    Title="Crispy Bills"
+    Title=""
     FlyoutBehavior="Disabled"
-    Shell.NavBarIsVisible="False"
-    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource OffBlack}}"
+    Shell.NavBarIsVisible="True"
+    BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource ShellBackgroundDark}}"
     ForegroundColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark={StaticResource White}}">
 
 	<!-- MainPage attached in code-behind from DI -->

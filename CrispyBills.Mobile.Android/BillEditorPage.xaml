@@ -3,32 +3,33 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:CrispyBills.Mobile.Android"
              x:Class="CrispyBills.Mobile.Android.BillEditorPage"
-             Title="Bill Details">
+             Title="Bill Details"
+             Background="{AppThemeBinding Light={StaticResource PageBackgroundBrush}, Dark={StaticResource PageBackgroundBrushDark}}">
 
     <ScrollView>
         <VerticalStackLayout Padding="18" Spacing="14">
-            <Label Text="Bill name" FontAttributes="Bold" FontSize="15" />
+            <Label Text="Bill name" FontAttributes="Bold" FontSize="15" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
             <Entry x:Name="NameEntry" Placeholder="e.g. Rent, Electric" ReturnType="Next" TextChanged="OnInputChanged" HeightRequest="48">
                 <Entry.Behaviors>
                     <local:SelectAllEntryBehavior />
                 </Entry.Behaviors>
             </Entry>
 
-            <Label Text="Amount" FontAttributes="Bold" FontSize="15" />
+            <Label Text="Amount" FontAttributes="Bold" FontSize="15" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
             <Entry x:Name="AmountEntry" Placeholder="0.00" Keyboard="Numeric" ReturnType="Next" TextChanged="OnInputChanged" HeightRequest="48">
                 <Entry.Behaviors>
                     <local:SelectAllEntryBehavior />
                 </Entry.Behaviors>
             </Entry>
 
-            <Label Text="Category" FontAttributes="Bold" FontSize="15" />
+            <Label Text="Category" FontAttributes="Bold" FontSize="15" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
             <Picker x:Name="CategoryPicker" Title="Choose category" SelectedIndexChanged="OnInputChanged" HeightRequest="48" />
 
-            <Label Text="Due date" FontAttributes="Bold" FontSize="15" />
-            <DatePicker x:Name="DueDatePicker" HeightRequest="48" />
+            <Label Text="Due date" FontAttributes="Bold" FontSize="15" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+            <DatePicker x:Name="DueDatePicker" DateSelected="OnDateSelected" HeightRequest="48" />
 
             <HorizontalStackLayout Spacing="12">
-                <Switch x:Name="PaidSwitch" VerticalOptions="Center" />
+                <Switch x:Name="PaidSwitch" VerticalOptions="Center" Toggled="OnPaidSwitchToggled" />
                 <Label Text="Paid" VerticalOptions="Center" FontSize="16">
                     <Label.GestureRecognizers>
                         <TapGestureRecognizer Tapped="OnPaidRowTapped" />
@@ -82,7 +83,7 @@
                     </Picker>
                 </Grid>
 
-                <DatePicker Grid.Row="3" x:Name="RecurrenceEndDatePicker" IsVisible="False" HeightRequest="48" />
+                <DatePicker Grid.Row="3" x:Name="RecurrenceEndDatePicker" IsVisible="False" DateSelected="OnDateSelected" HeightRequest="48" />
                 <Entry Grid.Row="3" x:Name="RecurrenceCountEntry" IsVisible="False" Keyboard="Numeric" Placeholder="Occurrences (e.g. 6)" HeightRequest="48" TextChanged="OnInputChanged">
                     <Entry.Behaviors>
                         <local:SelectAllEntryBehavior />
@@ -90,10 +91,10 @@
                 </Entry>
             </Grid>
 
-            <Label x:Name="ValidationLabel" TextColor="{StaticResource ValidationDanger}" IsVisible="False" />
+            <Label x:Name="ValidationLabel" TextColor="{AppThemeBinding Light={StaticResource ValidationDanger}, Dark={StaticResource ValidationDangerDark}}" IsVisible="False" />
 
             <Grid ColumnDefinitions="*,*" ColumnSpacing="12" Margin="0,8,0,0">
-                <Button Grid.Column="0" Text="Cancel" Clicked="OnCancelClicked" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+                <Button Grid.Column="0" Text="Cancel" Clicked="OnCancelClicked" BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceLight}, Dark={StaticResource SecondaryButtonBgDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark={StaticResource MutedTextOnDark}}" />
                 <Button Grid.Column="1" Text="Save" Clicked="OnSaveClicked" />
             </Grid>
         </VerticalStackLayout>

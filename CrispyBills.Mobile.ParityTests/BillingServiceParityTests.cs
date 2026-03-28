@@ -134,9 +134,9 @@ public sealed class BillingServiceParityTests
 
         var jan = service.GetBills(1);
         Assert.Contains(jan, b => b.Name == "Gym" && b.IsRecurring && !b.IsPaid);
-        Assert.Contains(jan, b => b.Name == "Gym" && !b.IsRecurring && !b.IsPaid);
+        Assert.Contains(jan, b => b.Name == "Gym - December" && !b.IsRecurring && !b.IsPaid);
         Assert.Contains(jan, b => b.Name == "Insurance" && b.IsRecurring && !b.IsPaid);
-        Assert.Contains(jan, b => b.Name == "Laptop" && !b.IsRecurring && !b.IsPaid);
+        Assert.Contains(jan, b => b.Name == "Laptop - December" && !b.IsRecurring && !b.IsPaid);
 
         var feb = service.GetBills(2);
         Assert.Equal(2, feb.Count);

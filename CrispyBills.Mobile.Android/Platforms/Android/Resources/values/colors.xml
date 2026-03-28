@@ -4,4 +4,7 @@
     <color name="colorPrimary">#1F4B99</color>
     <color name="colorPrimaryDark">#163762</color>
     <color name="colorAccent">#0BA5A5</color>
+    <!-- System bars — match PrimaryDarkHeaderBrush / OffBlack (see MainActivity) -->
+    <color name="crispy_status_bar">#204C8C</color>
+    <color name="crispy_navigation_bar">#353A45</color>
 </resources>

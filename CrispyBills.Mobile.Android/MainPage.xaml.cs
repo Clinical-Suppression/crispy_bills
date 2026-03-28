@@ -1,9 +1,11 @@
 using CrispyBills.Mobile.Android.Models;
 using CrispyBills.Mobile.Android.Services;
 using CrispyBills.Core.Security;
+using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Graphics;
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Windows.Input;
 
 namespace CrispyBills.Mobile.Android;
 
@@ -12,15 +14,14 @@ public partial class MainPage : ContentPage
 	private readonly BillingService _service;
 	private readonly LocalizationService _localization;
 	private readonly AppLockService _appLockService;
-	private bool _loaded;
+	/// <summary>First-appear initialization (localization + year load). Navigation should await this before relying on billing state.</summary>
+	private Task? _firstAppearLoadTask;
 	private bool _startupDiagnosticsShown;
+	private bool _startupDiagnosticsEvaluated;
 	private string? _lastDuplicateWarningKey;
 	private decimal _incomeAmount;
 	private string _incomePayPeriod = BillingService.IncomePayPeriodMonthly;
 	private bool _incomeCardEditable;
-	private readonly Dictionary<Guid, CancellationTokenSource> _billHoldTokens = new();
-	private CancellationTokenSource? _incomeHoldToken;
-	private const int HoldToEditMs = 1000;
 	private int _soonThresholdValue = 7;
 	private string _soonThresholdUnit = BillingService.SoonThresholdUnitDays;
 	private bool _appLockFlowActive;
@@ -43,6 +44,12 @@ public partial class MainPage : ContentPage
 		Category
 	}
 
+	/// <summary>Long-press on bill row (TouchBehavior); bound from item template.</summary>
+	public ICommand EditBillLongPressCommand { get; }
+
+	/// <summary>Long-press on income card when income exists (TouchBehavior).</summary>
+	public ICommand EditIncomeLongPressCommand { get; }
+
 	public MainPage(BillingService service, LocalizationService localization, AppLockService appLockService)
 	{
 		InitializeComponent();
@@ -50,25 +57,34 @@ public partial class MainPage : ContentPage
 		_localization = localization;
 		_appLockService = appLockService;
 
+		EditBillLongPressCommand = new Command<object>(async p => await OnEditBillLongPressAsync(p));
+		EditIncomeLongPressCommand = new Command(async () => await OnEditIncomeLongPressAsync());
+
 		CategoryPicker.ItemsSource = new List<string> { "All categories" };
 		CategoryPicker.SelectedIndex = 0;
 		SortPicker.ItemsSource = new List<string> { "Due Date", "Alphabetical", "Amount", "Status", "Category" };
 		SortPicker.SelectedIndex = 0;
 
 		BillsCollection.ItemsSource = _visibleBills;
+		UpdateRolloverButtonVisibility();
 	}
 
 	protected override async void OnAppearing()
 	{
 		base.OnAppearing();
+		Shell.SetNavBarIsVisible(this, false);
 		try
 		{
-			if (!_loaded)
+			if (_firstAppearLoadTask == null)
 			{
-				_loaded = true;
-				await _localization.InitializeAsync();
-				await LoadYearAsync(_currentYear);
+				_firstAppearLoadTask = FirstAppearLoadAsync();
+			}
 
+			await _firstAppearLoadTask;
+
+			if (!_startupDiagnosticsEvaluated)
+			{
+				_startupDiagnosticsEvaluated = true;
 				if (StartupDiagnostics.HasIssues && !_startupDiagnosticsShown)
 				{
 					_startupDiagnosticsShown = true;
@@ -80,11 +96,25 @@ public partial class MainPage : ContentPage
 				}
 			}
 
-			_ = EnsureAppLockFlowSafeAsync();
+			await EnsureAppLockFlowSafeAsync();
 		}
 		catch (Exception ex)
 		{
 			await DisplayAlert("Error", $"An error occurred during startup: {ex.Message}", "OK");
+		}
+	}
+
+	private async Task FirstAppearLoadAsync()
+	{
+		await _localization.InitializeAsync();
+		await LoadYearAsync(_currentYear);
+	}
+
+	private async Task EnsureInitialLoadCompleteAsync()
+	{
+		if (_firstAppearLoadTask != null)
+		{
+			await _firstAppearLoadTask;
 		}
 	}
 
@@ -146,7 +176,11 @@ public partial class MainPage : ContentPage
 
 			if (!enablePin)
 			{
-				await _appLockService.MarkPinSetupPromptHandledAsync();
+				if (!await _appLockService.MarkPinSetupPromptHandledAsync())
+				{
+					DiagnosticsLog.WriteSync("EnsureAppLockFlow", "MarkPinSetupPromptHandledAsync failed after user declined PIN setup.");
+				}
+
 				return;
 			}
 
@@ -165,7 +199,10 @@ public partial class MainPage : ContentPage
 					try { await Navigation.PopModalAsync(); } catch { }
 				}
 			}
-			await _appLockService.MarkPinSetupPromptHandledAsync();
+			if (!await _appLockService.MarkPinSetupPromptHandledAsync())
+			{
+				DiagnosticsLog.WriteSync("EnsureAppLockFlow", "MarkPinSetupPromptHandledAsync failed after PIN setup flow.");
+			}
 		}
 		finally
 		{
@@ -242,95 +279,14 @@ public partial class MainPage : ContentPage
 		await DeleteBillByIdAsync(item.Id);
 	}
 
-	private void OnBillPointerPressed(object? sender, PointerEventArgs e)
+	private async Task OnEditBillLongPressAsync(object? param)
 	{
-		if (sender is not BindableObject b || b.BindingContext is not BillListItem item)
-		{
-			return;
-		}
-		StartBillHold(item.Id);
-	}
-
-	private void OnBillPointerReleased(object? sender, PointerEventArgs e)
-	{
-		if (sender is not BindableObject b || b.BindingContext is not BillListItem item)
-		{
-			return;
-		}
-		StopBillHold(item.Id);
-	}
-
-	private void StartBillHold(Guid billId)
-	{
-		if (_billHoldTokens.TryGetValue(billId, out var existing))
-		{
-			existing.Cancel();
-			existing.Dispose();
-		}
-
-		var cts = new CancellationTokenSource();
-		_billHoldTokens[billId] = cts;
-		_ = BeginBillHoldEditAsync(billId, cts.Token);
-	}
-
-	private void StopBillHold(Guid billId)
-	{
-		if (_billHoldTokens.TryGetValue(billId, out var cts))
-		{
-			cts.Cancel();
-			cts.Dispose();
-			_billHoldTokens.Remove(billId);
-		}
-	}
-
-	private async Task BeginBillHoldEditAsync(Guid billId, CancellationToken token)
-	{
-		try
-		{
-			await Task.Delay(HoldToEditMs, token);
-			if (token.IsCancellationRequested)
-			{
-				return;
-			}
-
-			await MainThread.InvokeOnMainThreadAsync(async () =>
-			{
-				await EditBillByIdAsync(billId);
-			});
-		}
-		catch (OperationCanceledException)
-		{
-			// Ignore canceled hold.
-		}
-	}
-
-	private void OnBillPanUpdated(object? sender, PanUpdatedEventArgs e)
-	{
-		if (sender is not BindableObject b || b.BindingContext is not BillListItem item)
+		if (param is not Guid billId)
 		{
 			return;
 		}
 
-		switch (e.StatusType)
-		{
-			case GestureStatus.Started:
-				StartBillHold(item.Id);
-				break;
-			case GestureStatus.Canceled:
-			case GestureStatus.Completed:
-				StopBillHold(item.Id);
-				break;
-		}
-	}
-
-	private void OnBillSwipeStarted(object? sender, SwipeStartedEventArgs e)
-	{
-		foreach (var kv in _billHoldTokens.ToList())
-		{
-			kv.Value.Cancel();
-			kv.Value.Dispose();
-			_billHoldTokens.Remove(kv.Key);
-		}
+		await EditBillByIdAsync(billId);
 	}
 
 	private async Task EditBillByIdAsync(Guid id)
@@ -437,6 +393,15 @@ public partial class MainPage : ContentPage
 		UpdateSummaryCards();
 		UpdateAddButtonText();
 		WarnDuplicateRecurringRules();
+		UpdateRolloverButtonVisibility();
+	}
+
+	private void UpdateRolloverButtonVisibility()
+	{
+		if (RolloverUnpaidButton != null)
+		{
+			RolloverUnpaidButton.IsVisible = _service.IsDebugDestructiveDeletesEnabled();
+		}
 	}
 
 	private async Task RefreshAvailableYearsAsync()
@@ -502,6 +467,30 @@ public partial class MainPage : ContentPage
 				_localization.FormatCurrency(bill.Amount),
 				BillingService.IsBillSoon(bill, _soonThresholdValue, _soonThresholdUnit)));
 		}
+
+		UpdateMainEmptyStateVisuals();
+	}
+
+	private void UpdateMainEmptyStateVisuals()
+	{
+		if (_visibleBills.Count > 0)
+		{
+			return;
+		}
+
+		var monthEmpty = _monthBills.Count == 0;
+		if (monthEmpty)
+		{
+			EmptyStateTitleLabel.Text = "No bills yet";
+			EmptyStateSubtitleLabel.Text = "Swipe left to delete. Swipe right to toggle paid/unpaid. Tap and hold for 1 second to edit.";
+			EmptyAddBillsButton.IsVisible = true;
+		}
+		else
+		{
+			EmptyStateTitleLabel.Text = "No matching bills";
+			EmptyStateSubtitleLabel.Text = "Try clearing search, choosing All categories, or changing the sort order.";
+			EmptyAddBillsButton.IsVisible = false;
+		}
 	}
 
 	private int GetStatusSortKey(BillItem bill)
@@ -525,7 +514,7 @@ public partial class MainPage : ContentPage
 		UnpaidLabel.Text = _localization.FormatCurrency(summary.unpaid);
 		RemainingLabel.Text = _localization.FormatCurrency(summary.remaining);
 		BillCountLabel.Text = summary.billCount.ToString();
-		RemainingLabel.TextColor = summary.remaining >= 0 ? GetResourceColor("Success", "#16A34A") : GetResourceColor("Danger", "#991B1B");
+		RemainingLabel.TextColor = summary.remaining >= 0 ? GetResourceColor("Success", "#16A34A") : GetResourceColor("Danger", "#F87171");
 
 		var income = _service.GetIncome(_currentMonth);
 		var categoryTotals = _service.GetCategoryTotals(_currentMonth).Where(x => x.total > 0m).OrderByDescending(x => x.total).ToList();
@@ -616,7 +605,27 @@ public partial class MainPage : ContentPage
 
 	private static Color GetResourceColor(string key, string fallback)
 	{
-		if (Application.Current?.Resources.TryGetValue(key, out var v) == true && v is Color c)
+		var resources = Application.Current?.Resources;
+		if (resources is null)
+		{
+			return Color.FromArgb(fallback);
+		}
+
+		if (Application.Current!.RequestedTheme == AppTheme.Dark)
+		{
+			var darkKey = key switch
+			{
+				"Danger" => "DangerDark",
+				"ValidationDanger" => "ValidationDangerDark",
+				_ => null
+			};
+			if (darkKey != null && resources.TryGetValue(darkKey, out var dv) && dv is Color dc)
+			{
+				return dc;
+			}
+		}
+
+		if (resources.TryGetValue(key, out var v) && v is Color c)
 		{
 			return c;
 		}
@@ -794,12 +803,26 @@ public partial class MainPage : ContentPage
 
 	private void OnSearchChanged(object? sender, TextChangedEventArgs e)
 	{
-		try { ApplyFilters(); } catch { }
+		try
+		{
+			ApplyFilters();
+		}
+		catch (Exception ex)
+		{
+			DiagnosticsLog.WriteSync("MainPage.OnSearchChanged", ex);
+		}
 	}
 
 	private void OnCategoryChanged(object? sender, EventArgs e)
 	{
-		try { ApplyFilters(); } catch { }
+		try
+		{
+			ApplyFilters();
+		}
+		catch (Exception ex)
+		{
+			DiagnosticsLog.WriteSync("MainPage.OnCategoryChanged", ex);
+		}
 	}
 
 	private void OnSortChanged(object? sender, EventArgs e)
@@ -812,12 +835,28 @@ public partial class MainPage : ContentPage
 			"Category" => BillSortMode.Category,
 			_ => BillSortMode.DueDate
 		};
-		try { ApplyFilters(); } catch { }
+		try
+		{
+			ApplyFilters();
+		}
+		catch (Exception ex)
+		{
+			DiagnosticsLog.WriteSync("MainPage.OnSortChanged", ex);
+		}
 	}
 
 	private async void OnIncomeExpenseBarTapped(object? sender, TappedEventArgs e)
 	{
-		await Navigation.PushAsync(new SummaryPage(_currentYear, _currentMonth, _service, _localization));
+		try
+		{
+			await EnsureInitialLoadCompleteAsync();
+			await Navigation.PushAsync(new SummaryPage(_currentYear, _currentMonth, _service, _localization));
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnIncomeExpenseBarTapped", ex);
+			await DisplayAlert("Could not open summary", ex.Message, "OK");
+		}
 	}
 
 	private async void OnIncomeCardTapped(object? sender, TappedEventArgs e)
@@ -838,63 +877,21 @@ public partial class MainPage : ContentPage
 		}
 	}
 
-	private void OnIncomeCardPointerPressed(object? sender, PointerEventArgs e)
+	private async Task OnEditIncomeLongPressAsync()
 	{
 		if (!_incomeCardEditable)
 		{
 			return;
 		}
-		StartIncomeHold();
-	}
 
-	private void OnIncomeCardPointerReleased(object? sender, PointerEventArgs e)
-	{
-		StopIncomeHold();
-	}
-
-	private void StartIncomeHold()
-	{
-		_incomeHoldToken?.Cancel();
-		_incomeHoldToken?.Dispose();
-		_incomeHoldToken = new CancellationTokenSource();
-		_ = BeginIncomeHoldEditAsync(_incomeHoldToken.Token);
-	}
-
-	private void StopIncomeHold()
-	{
-		_incomeHoldToken?.Cancel();
-		_incomeHoldToken?.Dispose();
-		_incomeHoldToken = null;
-	}
-
-	private void OnIncomeCardPanUpdated(object? sender, PanUpdatedEventArgs e)
-	{
-		switch (e.StatusType)
-		{
-			case GestureStatus.Started:
-				StartIncomeHold();
-				break;
-			case GestureStatus.Canceled:
-			case GestureStatus.Completed:
-				StopIncomeHold();
-				break;
-		}
-	}
-
-	private async Task BeginIncomeHoldEditAsync(CancellationToken token)
-	{
 		try
 		{
-			await Task.Delay(HoldToEditMs, token);
-			if (token.IsCancellationRequested)
-			{
-				return;
-			}
-			await MainThread.InvokeOnMainThreadAsync(async () => await PromptAndSaveIncomeAsync());
+			await PromptAndSaveIncomeAsync();
 		}
-		catch (OperationCanceledException)
+		catch (Exception ex)
 		{
-			// Ignore canceled hold.
+			await DiagnosticsLog.WriteAsync("OnEditIncomeLongPress", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
 		}
 	}
 
@@ -902,6 +899,7 @@ public partial class MainPage : ContentPage
 	{
 		try
 		{
+			await EnsureInitialLoadCompleteAsync();
 			await Navigation.PushAsync(new BulkBillsPage(_service, _currentYear, _currentMonth, _service.Categories().ToList(), ReloadMonthAsync));
 		}
 		catch (Exception ex)
@@ -919,8 +917,8 @@ public partial class MainPage : ContentPage
 			return;
 		}
 
-		var confirm = await DisplayAlert("Rollover Unpaid",
-			$"Copy unpaid bills from {MonthNames.Name(_currentMonth)} to {MonthNames.Name(_currentMonth + 1)}?",
+		var confirm = await DisplayAlert("Rollover Unpaid (debug)",
+			$"Debug/maintenance only: carry unpaid bills from {MonthNames.Name(_currentMonth)} into {MonthNames.Name(_currentMonth + 1)}. This is not the normal month workflow.",
 			"Rollover",
 			"Cancel");
 
@@ -1185,6 +1183,7 @@ public partial class MainPage : ContentPage
 	{
 		try
 		{
+			await EnsureInitialLoadCompleteAsync();
 			await Navigation.PushAsync(new SummaryPage(_currentYear, _currentMonth, _service, _localization));
 		}
 		catch (Exception ex)
@@ -1198,6 +1197,7 @@ public partial class MainPage : ContentPage
 	{
 		try
 		{
+			await EnsureInitialLoadCompleteAsync();
 			await Navigation.PushAsync(new NotesPage(_service));
 		}
 		catch (Exception ex)
@@ -1211,6 +1211,7 @@ public partial class MainPage : ContentPage
 	{
 		try
 		{
+			await EnsureInitialLoadCompleteAsync();
 			await Navigation.PushAsync(new SettingsPage(_service, _currentYear, _currentMonth, ReloadMonthAsync, _localization, _appLockService));
 		}
 		catch (Exception ex)

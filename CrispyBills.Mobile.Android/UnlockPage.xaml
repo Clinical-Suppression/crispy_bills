@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:local="clr-namespace:CrispyBills.Mobile.Android"
     NavigationPage.HasNavigationBar="False"
-    BackgroundColor="{AppThemeBinding Light=#FFF7E6, Dark=#1F1F1F}">
+    Background="{AppThemeBinding Light={StaticResource PageBackgroundBrush}, Dark={StaticResource PageBackgroundBrushDark}}">
 
     <ScrollView>
         <VerticalStackLayout Padding="24,48" Spacing="18">
@@ -14,19 +14,20 @@
                 FontSize="26"
                 HorizontalOptions="Center"
                 Text="Unlock Crispy Bills"
-                TextColor="{AppThemeBinding Light=#3A2400, Dark=White}" />
+                TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
 
             <Label
                 HorizontalTextAlignment="Center"
                 Text="Enter your 4-digit PIN to view your bills."
-                TextColor="{AppThemeBinding Light=#5C4A2D, Dark=#DDDDDD}" />
+                TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}"
+                LineBreakMode="WordWrap" />
 
-            <Frame
+            <Border
                 Padding="18"
-                BackgroundColor="{AppThemeBinding Light=White, Dark=#2A2A2A}"
-                BorderColor="{AppThemeBinding Light=#F1D5A0, Dark=#4A4A4A}"
-                CornerRadius="16"
-                HasShadow="False">
+                Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}"
+                Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}"
+                StrokeThickness="1"
+                StrokeShape="RoundRectangle 16">
                 <VerticalStackLayout Spacing="12">
                     <Entry
                         x:Name="PinEntry"
@@ -38,7 +39,9 @@
                         IsPassword="True"
                         Keyboard="Numeric"
                         MaxLength="4"
-                        Placeholder="••••">
+                        Placeholder="••••"
+                        TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}"
+                        PlaceholderColor="{AppThemeBinding Light={StaticResource PlaceholderTextLight}, Dark={StaticResource MutedSubtleOnDark}}">
                         <Entry.Behaviors>
                             <local:SelectAllEntryBehavior />
                         </Entry.Behaviors>
@@ -49,23 +52,23 @@
                         FontSize="13"
                         HorizontalTextAlignment="Center"
                         IsVisible="False"
-                        TextColor="#B42318" />
+                        TextColor="{AppThemeBinding Light={StaticResource ValidationDanger}, Dark={StaticResource ValidationDangerDark}}" />
 
                     <Button
                         x:Name="BiometricButton"
                         Clicked="OnBiometricClicked"
                         IsVisible="False"
                         Text="Use fingerprint or face"
-                        BackgroundColor="#E8F0FE"
-                        TextColor="#163A6B" />
+                        BackgroundColor="{AppThemeBinding Light={StaticResource PinBiometricButtonBgLight}, Dark={StaticResource PinBiometricButtonBgDark}}"
+                        TextColor="{AppThemeBinding Light={StaticResource PinBiometricButtonTextLight}, Dark={StaticResource PinBiometricButtonTextDark}}" />
 
                     <Button
                         Clicked="OnUnlockClicked"
                         Text="Unlock"
-                        BackgroundColor="#D97706"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource PinAction}, Dark={StaticResource PinActionDark}}"
                         TextColor="White" />
                 </VerticalStackLayout>
-            </Frame>
+            </Border>
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

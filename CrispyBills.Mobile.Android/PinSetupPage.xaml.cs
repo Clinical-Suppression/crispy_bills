@@ -7,6 +7,7 @@ public partial class PinSetupPage : ContentPage
     private readonly AppLockService _appLockService;
     private readonly bool _allowSkip;
     private readonly TaskCompletionSource<bool> _resultTcs = new();
+    private bool _allowClose;
 
     public PinSetupPage(AppLockService appLockService, bool allowSkip)
     {
@@ -28,7 +29,10 @@ public partial class PinSetupPage : ContentPage
     protected override void OnDisappearing()
     {
         base.OnDisappearing();
-        _resultTcs.TrySetResult(false);
+        if (!_allowClose)
+        {
+            _resultTcs.TrySetResult(false);
+        }
     }
 
     private async void OnSaveClicked(object? sender, EventArgs e)
@@ -77,7 +81,13 @@ public partial class PinSetupPage : ContentPage
             return;
         }
 
-        await _appLockService.SetPinAsync(pin, BiometricRow.IsVisible && BiometricSwitch.IsToggled);
+        var saved = await _appLockService.SetPinAsync(pin, BiometricRow.IsVisible && BiometricSwitch.IsToggled);
+        if (!saved)
+        {
+            SetStatus("Could not save your PIN to secure storage. Check device security settings and try again.");
+            return;
+        }
+
         await CloseAsync(true);
     }
 
@@ -94,6 +104,7 @@ public partial class PinSetupPage : ContentPage
             return;
         }
 
+        _allowClose = true;
         _resultTcs.TrySetResult(result);
         await Navigation.PopModalAsync();
     }

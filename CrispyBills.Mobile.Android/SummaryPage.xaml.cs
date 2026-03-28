@@ -24,23 +24,14 @@ public partial class SummaryPage : ContentPage
 
 		var resources = Application.Current?.Resources;
 		var palette = new List<Color>();
-		void addResource(string key, string fallback)
-		{
-			if (resources != null && resources.TryGetValue(key, out var val) && val is Color c)
-			{
-				palette.Add(c);
-			}
-			else
-			{
-				palette.Add(Color.FromArgb(fallback));
-			}
-		}
+		void addResource(string key, string fallback) =>
+			palette.Add(GetResourceColor(key, fallback));
 
 		addResource("Magenta", "#2563EB");
 		addResource("Success", "#16A34A");
 		addResource("Info", "#0EA5E9");
 		addResource("Tertiary", "#0BA5A5");
-		addResource("Danger", "#DC2626");
+		addResource("Danger", "#F87171");
 		addResource("Primary", "#1F4B99");
 		addResource("SecondaryDarkText", "#9DB4E9");
 		addResource("PrimaryDark", "#163762");
@@ -56,20 +47,26 @@ public partial class SummaryPage : ContentPage
 		YearIncomeLabel.Text = _localization.FormatCurrency(yearSummary.income);
 		YearExpensesLabel.Text = _localization.FormatCurrency(yearSummary.expenses);
 		YearRemainingLabel.Text = _localization.FormatCurrency(yearSummary.remaining);
-		YearRemainingLabel.TextColor = yearSummary.remaining >= 0 ? GetResourceColor("Success", "#16A34A") : GetResourceColor("Danger", "#DC2626");
+		YearRemainingLabel.TextColor = yearSummary.remaining >= 0 ? GetResourceColor("Success", "#16A34A") : GetResourceColor("Danger", "#F87171");
 		MonthBillCountLabel.Text = monthSummary.billCount.ToString();
 
 		_chartItems = categoryRows.Select((row, index) =>
 			new PieLegendItem(
 				row.category,
 				row.total,
-				$"${row.total:F2}",
+				_localization.FormatCurrency(row.total),
 				paletteArr[index % paletteArr.Length]))
 			.ToList();
 
 		CategoryCollection.ItemsSource = _chartItems;
 		_pieDrawable = new PieChartDrawable(_chartItems);
 		PieChartView.Drawable = _pieDrawable;
+	}
+
+	protected override void OnAppearing()
+	{
+		base.OnAppearing();
+		Shell.SetNavBarIsVisible(this, true);
 	}
 
 	private async void OnPieChartTapped(object? sender, TappedEventArgs e)
@@ -144,7 +141,27 @@ public partial class SummaryPage : ContentPage
 
 	private static Color GetResourceColor(string key, string fallback)
 	{
-		if (Application.Current?.Resources.TryGetValue(key, out var v) == true && v is Color c)
+		var resources = Application.Current?.Resources;
+		if (resources is null)
+		{
+			return Color.FromArgb(fallback);
+		}
+
+		if (Application.Current!.RequestedTheme == AppTheme.Dark)
+		{
+			var darkKey = key switch
+			{
+				"Danger" => "DangerDark",
+				"ValidationDanger" => "ValidationDangerDark",
+				_ => null
+			};
+			if (darkKey != null && resources.TryGetValue(darkKey, out var dv) && dv is Color dc)
+			{
+				return dc;
+			}
+		}
+
+		if (resources.TryGetValue(key, out var v) && v is Color c)
 		{
 			return c;
 		}
@@ -168,7 +185,7 @@ public partial class SummaryPage : ContentPage
 			canvas.Antialias = true;
 			if (_items.Count == 0)
 			{
-				canvas.FontColor = ResourcesColor("EmptyText", "#64748B");
+				canvas.FontColor = EmptyChartMessageColor();
 				canvas.FontSize = 14;
 				canvas.DrawString("No category totals to chart.", dirtyRect, HorizontalAlignment.Center, VerticalAlignment.Center);
 				return;
@@ -177,7 +194,7 @@ public partial class SummaryPage : ContentPage
 			var total = _items.Sum(x => (float)x.Amount);
 			if (total <= 0)
 			{
-				canvas.FontColor = ResourcesColor("EmptyText", "#64748B");
+				canvas.FontColor = EmptyChartMessageColor();
 				canvas.FontSize = 14;
 				canvas.DrawString("No category totals to chart.", dirtyRect, HorizontalAlignment.Center, VerticalAlignment.Center);
 				return;
@@ -267,6 +284,14 @@ public partial class SummaryPage : ContentPage
 			}
 
 			return Color.FromArgb(fallback);
+		}
+
+		private static Color EmptyChartMessageColor()
+		{
+			var dark = Application.Current?.RequestedTheme == AppTheme.Dark;
+			return dark
+				? ResourcesColor("MutedTextOnDark", "#E2E8F0")
+				: ResourcesColor("EmptyText", "#64748B");
 		}
 
 		private static void FillPieSlice(ICanvas canvas, RectF rect, float startAngle, float sweepAngle)

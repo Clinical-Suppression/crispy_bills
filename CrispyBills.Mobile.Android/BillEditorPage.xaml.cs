@@ -1,4 +1,5 @@
 using CrispyBills.Mobile.Android.Models;
+using Microsoft.Maui.ApplicationModel;
 
 namespace CrispyBills.Mobile.Android;
 
@@ -8,6 +9,8 @@ public partial class BillEditorPage : ContentPage
 	private readonly int _year;
 	private readonly int _month;
 	private readonly Guid _preservedId;
+	private bool _dirty;
+	private bool _suppressDirty = true;
 
 	public BillEditorPage(BillItem seed, int year, int month, IReadOnlyList<string> categories)
 	{
@@ -70,9 +73,55 @@ public partial class BillEditorPage : ContentPage
 		DueDatePicker.MaximumDate = new DateTime(year, month, DateTime.DaysInMonth(year, month));
 
 		ValidateInputs(showValidation: false);
+		_suppressDirty = false;
 	}
 
 	public Task<BillItem?> WaitForResultAsync() => _tcs.Task;
+
+	protected override void OnAppearing()
+	{
+		base.OnAppearing();
+		Shell.SetNavBarIsVisible(this, true);
+	}
+
+	protected override bool OnBackButtonPressed()
+	{
+		if (_tcs.Task.IsCompleted)
+		{
+			return base.OnBackButtonPressed();
+		}
+
+		MainThread.BeginInvokeOnMainThread(async () => await HandleSystemBackAsync());
+		return true;
+	}
+
+	private async Task HandleSystemBackAsync()
+	{
+		if (_tcs.Task.IsCompleted)
+		{
+			return;
+		}
+
+		if (!_dirty)
+		{
+			_tcs.TrySetResult(null);
+			await Navigation.PopAsync();
+			return;
+		}
+
+		var discard = await DisplayAlert(
+			"Discard changes?",
+			"Your edits on this bill will be lost.",
+			"Discard",
+			"Keep editing");
+		if (!discard)
+		{
+			return;
+		}
+
+		_tcs.TrySetResult(null);
+		await Navigation.PopAsync();
+	}
 
 	protected override void OnDisappearing()
 	{
@@ -86,6 +135,19 @@ public partial class BillEditorPage : ContentPage
 
 	private async void OnCancelClicked(object? sender, EventArgs e)
 	{
+		if (_dirty)
+		{
+			var discard = await DisplayAlert(
+				"Discard changes?",
+				"Your edits on this bill will be lost.",
+				"Discard",
+				"Keep editing");
+			if (!discard)
+			{
+				return;
+			}
+		}
+
 		_tcs.TrySetResult(null);
 		await Navigation.PopAsync();
 	}
@@ -181,19 +243,42 @@ public partial class BillEditorPage : ContentPage
 
 	private void OnRecurrenceFrequencyChanged(object? sender, EventArgs e)
 	{
+		MarkDirty();
 		RecurrenceEveryMonthsGrid.IsVisible = RecurrenceFrequencyPicker.SelectedIndex == 0;
 		ValidateInputs(showValidation: false);
 	}
 
 	private void OnEndModeChanged(object? sender, EventArgs e)
 	{
+		MarkDirty();
 		UpdateEndModeVisibility();
 		ValidateInputs(showValidation: false);
 	}
 
 	private void OnInputChanged(object? sender, EventArgs e)
 	{
+		MarkDirty();
 		ValidateInputs(showValidation: false);
+	}
+
+	private void OnDateSelected(object? sender, DateChangedEventArgs e)
+	{
+		MarkDirty();
+	}
+
+	private void OnPaidSwitchToggled(object? sender, ToggledEventArgs e)
+	{
+		MarkDirty();
+	}
+
+	private void MarkDirty()
+	{
+		if (_suppressDirty)
+		{
+			return;
+		}
+
+		_dirty = true;
 	}
 
 	private void UpdateEndModeVisibility()
@@ -253,11 +338,13 @@ public partial class BillEditorPage : ContentPage
 
 	private void OnPaidRowTapped(object? sender, TappedEventArgs e)
 	{
+		MarkDirty();
 		PaidSwitch.IsToggled = !PaidSwitch.IsToggled;
 	}
 
 	private void OnRecurringRowTapped(object? sender, TappedEventArgs e)
 	{
+		MarkDirty();
 		RecurringSwitch.IsToggled = !RecurringSwitch.IsToggled;
 	}
 }

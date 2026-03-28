@@ -119,6 +119,12 @@ public sealed class BulkBillsPage : ContentPage
         Content = layout;
     }
 
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+        Shell.SetNavBarIsVisible(this, true);
+    }
+
     private IView BuildRowTemplate()
     {
         var nameEntry = new Entry { Placeholder = "Name", HeightRequest = 44 };

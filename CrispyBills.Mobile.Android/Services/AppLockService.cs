@@ -34,7 +34,7 @@ public sealed class AppLockService(BiometricAuthService biometricAuthService)
         return await ReadBoolAsync(BiometricEnabledKey);
     }
 
-    public async Task SetBiometricEnabledAsync(bool enabled)
+    public async Task<bool> SetBiometricEnabledAsync(bool enabled)
     {
         if (!await HasPinAsync())
         {
@@ -46,7 +46,7 @@ public sealed class AppLockService(BiometricAuthService biometricAuthService)
             enabled = false;
         }
 
-        await SafeSetAsync(BiometricEnabledKey, enabled.ToString());
+        return await SafeSetAsync(BiometricEnabledKey, enabled.ToString());
     }
 
     public async Task<bool> ShouldOfferPinSetupPromptAsync()
@@ -59,32 +59,52 @@ public sealed class AppLockService(BiometricAuthService biometricAuthService)
         return !await ReadBoolAsync(PromptHandledKey);
     }
 
-    public Task MarkPinSetupPromptHandledAsync() => SafeSetAsync(PromptHandledKey, bool.TrueString);
+    public Task<bool> MarkPinSetupPromptHandledAsync() => SafeSetAsync(PromptHandledKey, bool.TrueString);
 
-    public async Task SetPinAsync(string pin, bool enableBiometrics)
+    public async Task<bool> SetPinAsync(string pin, bool enableBiometrics)
     {
         ValidatePin(pin);
 
         var salt = RandomNumberGenerator.GetBytes(16);
         var hash = HashPin(pin, salt);
 
-        await SafeSetAsync(PinSaltKey, Convert.ToBase64String(salt));
-        await SafeSetAsync(PinHashKey, hash);
-        await SafeSetAsync(PromptHandledKey, bool.TrueString);
-        await SetBiometricEnabledAsync(enableBiometrics);
+        if (!await SafeSetAsync(PinSaltKey, Convert.ToBase64String(salt)))
+        {
+            return false;
+        }
+
+        if (!await SafeSetAsync(PinHashKey, hash))
+        {
+            return false;
+        }
+
+        if (!await SafeSetAsync(PromptHandledKey, bool.TrueString))
+        {
+            return false;
+        }
+
+        if (!await SetBiometricEnabledAsync(enableBiometrics))
+        {
+            return false;
+        }
 
         NoteSuccessfulUnlock();
+        return true;
     }
 
-    public async Task DisablePinAsync()
+    public async Task<bool> DisablePinAsync()
     {
         SafeRemove(PinSaltKey);
         SafeRemove(PinHashKey);
         SafeRemove(BiometricEnabledKey);
-        await SafeSetAsync(PromptHandledKey, bool.TrueString);
+        if (!await SafeSetAsync(PromptHandledKey, bool.TrueString))
+        {
+            return false;
+        }
 
         _sessionUnlocked = true;
         _lastBackgroundUtc = null;
+        return true;
     }
 
     public async Task<bool> VerifyPinAsync(string pin)
@@ -211,15 +231,26 @@ public sealed class AppLockService(BiometricAuthService biometricAuthService)
         }
     }
 
-    private static async Task SafeSetAsync(string key, string value)
+    private static async Task<bool> SafeSetAsync(string key, string value)
     {
         try
         {
             await SecureStorage.Default.SetAsync(key, value);
+            return true;
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore secure storage write failures to avoid app startup deadlocks.
+            try
+            {
+                await DiagnosticsLog.WriteAsync($"AppLockService.SecureStorage.Set:{key}", ex);
+            }
+            catch
+            {
+                // ignore
+            }
+
+            DiagnosticsLog.WriteSync($"AppLockService.SecureStorage.Set:{key}", ex.ToString());
+            return false;
         }
     }
 

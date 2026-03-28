@@ -67,6 +67,7 @@ public partial class SettingsPage : ContentPage
 	protected override async void OnAppearing()
 	{
 		base.OnAppearing();
+		Shell.SetNavBarIsVisible(this, true);
 		await InitSoonThresholdAsync();
 		await RefreshSecurityAsync();
 	}
@@ -316,7 +317,11 @@ public partial class SettingsPage : ContentPage
 			return;
 		}
 
-		await _appLockService.DisablePinAsync();
+		if (!await _appLockService.DisablePinAsync())
+		{
+			await DisplayAlert("Could not update security", "Secure storage did not accept the change. Check device security settings and try again.", "OK");
+		}
+
 		await RefreshSecurityAsync();
 	}
 
@@ -334,13 +339,22 @@ public partial class SettingsPage : ContentPage
 
 		try
 		{
-			await _appLockService.SetBiometricEnabledAsync(e.Value);
+			_securityInit = true;
+			if (!await _appLockService.SetBiometricEnabledAsync(e.Value))
+			{
+				BiometricSwitch.IsToggled = !e.Value;
+				await DisplayAlert("Could not save", "Secure storage did not accept the biometric preference. Check device security settings and try again.", "OK");
+			}
 		}
 		catch (Exception ex)
 		{
 			await DiagnosticsLog.WriteAsync("SettingsBiometricToggle", ex);
 			await DisplayAlert("Error", ex.Message, "OK");
 			await RefreshSecurityAsync();
+		}
+		finally
+		{
+			_securityInit = false;
 		}
 	}
 }

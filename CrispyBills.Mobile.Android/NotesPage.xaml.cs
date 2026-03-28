@@ -17,6 +17,7 @@ public partial class NotesPage : ContentPage
 	protected override async void OnAppearing()
 	{
 		base.OnAppearing();
+		Shell.SetNavBarIsVisible(this, true);
 		if (_unsubscribed)
 		{
 			NotesEditor.TextChanged += OnNotesChanged;

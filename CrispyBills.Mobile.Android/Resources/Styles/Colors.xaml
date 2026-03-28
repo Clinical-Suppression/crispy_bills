@@ -7,42 +7,57 @@
     <!-- Note: For Android please see also Platforms\Android\Resources\values\colors.xml -->
 
     <!-- Professional navy/teal palette -->
-    <Color x:Key="Primary">#1F4B99</Color>
-    <Color x:Key="PrimaryDark">#163762</Color>
+    <Color x:Key="Primary">#2A5FB3</Color>
+    <Color x:Key="PrimaryDark">#1E4A88</Color>
     <Color x:Key="PrimaryDarkText">#EAF2FF</Color>
     <Color x:Key="Secondary">#F3F6FA</Color>
-    <Color x:Key="SecondaryDarkText">#9DB4E9</Color>
+    <Color x:Key="SecondaryDarkText">#C5D5F5</Color>
     <Color x:Key="Tertiary">#0BA5A5</Color>
 
     <Color x:Key="White">White</Color>
     <Color x:Key="Black">Black</Color>
     <Color x:Key="Magenta">#2563EB</Color>
     <Color x:Key="MidnightBlue">#0F2A44</Color>
-    <Color x:Key="OffBlack">#1f1f1f</Color>
+    <Color x:Key="OffBlack">#353A45</Color>
+    <!-- Solid fill behind Shell / pages when gradient isn't used; mid-tone of PageBackgroundBrushDark -->
+    <Color x:Key="ShellBackgroundDark">#4A4B72</Color>
 
     <Color x:Key="Gray100">#E1E1E1</Color>
     <Color x:Key="Gray200">#C8C8C8</Color>
     <Color x:Key="Gray300">#ACACAC</Color>
     <Color x:Key="Gray400">#919191</Color>
     <Color x:Key="Gray500">#6E6E6E</Color>
-    <Color x:Key="Gray600">#404040</Color>
-    <Color x:Key="Gray900">#212121</Color>
-    <Color x:Key="Gray950">#141414</Color>
+    <Color x:Key="Gray600">#7A8291</Color>
+    <Color x:Key="Gray900">#4B5361</Color>
+    <Color x:Key="Gray950">#424A58</Color>
 
     <!-- Semantic tokens -->
     <Color x:Key="CardBackground">#F8FAFC</Color>
     <Color x:Key="SurfaceLight">#E2E8F0</Color>
-    <Color x:Key="MutedText">#475569</Color>
-    <Color x:Key="MutedLight">#94A3B8</Color>
-    <Color x:Key="EmptyText">#64748B</Color>
+    <Color x:Key="MutedText">#334155</Color>
+    <Color x:Key="MutedLight">#64748B</Color>
+    <Color x:Key="EmptyText">#475569</Color>
+    <!-- Danger: use AppThemeBinding Light={Danger} Dark={DangerDark} in XAML; GetResourceColor resolves by theme -->
     <Color x:Key="Danger">#991B1B</Color>
+    <Color x:Key="DangerDark">#F87171</Color>
     <Color x:Key="DangerLight">#FEE2E2</Color>
+    <!-- Destructive buttons in dark mode: dark burgundy fill + light red text (see Settings) -->
+    <Color x:Key="DangerOnDarkSurface">#4C1414</Color>
     <Color x:Key="TagBackground">#DBEAFE</Color>
     <Color x:Key="TagText">#1E3A8A</Color>
     <Color x:Key="Success">#16A34A</Color>
     <Color x:Key="Info">#0EA5E9</Color>
     <Color x:Key="NeutralText">#111827</Color>
     <Color x:Key="ValidationDanger">#B42318</Color>
+    <Color x:Key="ValidationDangerDark">#FCA5A5</Color>
+    <Color x:Key="PlaceholderTextLight">#526277</Color>
+
+    <!-- Dark-theme body text: use with AppThemeBinding for secondary labels, placeholders, etc. -->
+    <Color x:Key="MutedTextOnDark">#E2E8F0</Color>
+    <Color x:Key="MutedSubtleOnDark">#D7E0EC</Color>
+    <Color x:Key="AccentLabelOnDark">#BFDBFE</Color>
+    <Color x:Key="DividerOnDark">#64748B</Color>
+    <Color x:Key="SecondaryButtonBgDark">#4B5568</Color>
 
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource Primary}"/>
     <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource Secondary}"/>
@@ -61,13 +76,14 @@
 
     <!-- Frosted / depth: soft gradients (no platform blur) -->
     <LinearGradientBrush x:Key="PageBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#F0F4F8" Offset="0" />
-        <GradientStop Color="#E8EDF5" Offset="0.5" />
-        <GradientStop Color="#F5F7FA" Offset="1" />
+        <GradientStop Color="#EAC2E4" Offset="0" />
+        <GradientStop Color="#D8D8EA" Offset="0.5" />
+        <GradientStop Color="#B0E7E0" Offset="1" />
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="PageBackgroundBrushDark" StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#1F1F1F" Offset="0" />
-        <GradientStop Color="#2A2A2A" Offset="1" />
+        <GradientStop Color="#5A3E64" Offset="0" />
+        <GradientStop Color="#4A4B72" Offset="0.5" />
+        <GradientStop Color="#2A6B6D" Offset="1" />
     </LinearGradientBrush>
 
     <LinearGradientBrush x:Key="SurfaceGlassBrushLight" StartPoint="0,0" EndPoint="0,1">
@@ -75,15 +91,23 @@
         <GradientStop Color="#DDE3EE" Offset="1" />
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="SurfaceGlassBrushDark" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#2E2E2E" Offset="0" />
-        <GradientStop Color="#252525" Offset="1" />
+        <GradientStop Color="#5E6878" Offset="0" />
+        <GradientStop Color="#505968" Offset="1" />
     </LinearGradientBrush>
 
     <SolidColorBrush x:Key="SurfaceStrokeLightBrush" Color="#18000000" />
     <SolidColorBrush x:Key="SurfaceStrokeDarkBrush" Color="#1AFFFFFF" />
 
     <LinearGradientBrush x:Key="PrimaryDarkHeaderBrush" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#173762" Offset="0" />
-        <GradientStop Color="#152A4F" Offset="1" />
+        <GradientStop Color="#265CA8" Offset="0" />
+        <GradientStop Color="#204C8C" Offset="1" />
     </LinearGradientBrush>
+
+    <!-- PIN / unlock accent (warm CTA, readable on light + dark surfaces) -->
+    <Color x:Key="PinAction">#D97706</Color>
+    <Color x:Key="PinActionDark">#F59E0B</Color>
+    <Color x:Key="PinBiometricButtonBgLight">#E8F0FE</Color>
+    <Color x:Key="PinBiometricButtonBgDark">#2A3F5C</Color>
+    <Color x:Key="PinBiometricButtonTextLight">#163A6B</Color>
+    <Color x:Key="PinBiometricButtonTextDark">#BFDBFE</Color>
 </ResourceDictionary>

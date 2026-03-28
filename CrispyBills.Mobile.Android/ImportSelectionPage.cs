@@ -143,7 +143,12 @@ public sealed class ImportSelectionPage : ContentPage
         root.Add(scroll);
 
         var buttons = new Grid { ColumnDefinitions = new ColumnDefinitionCollection(new ColumnDefinition(), new ColumnDefinition()), ColumnSpacing = 12 };
-        var cancel = new Button { Text = "Cancel", BackgroundColor = Color.FromArgb("#E2E8F0") };
+        var cancel = new Button
+        {
+            Text = "Cancel",
+            BackgroundColor = Color.FromArgb("#E2E8F0"),
+            TextColor = Color.FromArgb("#0F172A")
+        };
         var ok = new Button { Text = "Import" };
         cancel.Clicked += async (_, _) =>
         {

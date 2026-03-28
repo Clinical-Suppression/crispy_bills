@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="CrispyMainTheme" parent="@style/Maui.MainTheme.NoActionBar">
+        <!-- Hide native Android action/title bar (black strip + app title under status bar). Shell draws its own chrome when needed. -->
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:statusBarColor">@color/crispy_status_bar</item>
+        <item name="android:navigationBarColor">@color/crispy_navigation_bar</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <style name="CrispySplashTheme" parent="@style/Maui.SplashTheme">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowSplashScreenBackground">@drawable/splash_gradient</item>
+        <item name="android:windowBackground">@drawable/splash_gradient</item>
+    </style>
+</resources>

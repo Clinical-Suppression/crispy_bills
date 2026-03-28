@@ -3,42 +3,43 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:models="clr-namespace:CrispyBills.Mobile.Android.Models"
              x:Class="CrispyBills.Mobile.Android.SummaryPage"
-             Title="Summary">
+             Title="Summary"
+             Background="{AppThemeBinding Light={StaticResource PageBackgroundBrush}, Dark={StaticResource PageBackgroundBrushDark}}">
 
     <ScrollView>
         <VerticalStackLayout Padding="14" Spacing="14">
-            <Label x:Name="HeaderLabel" FontSize="22" FontAttributes="Bold" />
+            <Label x:Name="HeaderLabel" FontSize="22" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
 
             <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="10" ColumnSpacing="10">
                 <Border Grid.Row="0" Grid.Column="0" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
-                        <Label Text="Year income" FontSize="12" TextColor="{StaticResource MutedText}" />
-                        <Label x:Name="YearIncomeLabel" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
+                        <Label Text="Year income" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+                        <Label x:Name="YearIncomeLabel" FontSize="18" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark={StaticResource AccentLabelOnDark}}" />
                     </VerticalStackLayout>
                 </Border>
                 <Border Grid.Row="0" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
-                        <Label Text="Year expenses" FontSize="12" TextColor="{StaticResource MutedText}" />
-                        <Label x:Name="YearExpensesLabel" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource Danger}" />
+                        <Label Text="Year expenses" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+                        <Label x:Name="YearExpensesLabel" FontSize="18" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource Danger}, Dark={StaticResource DangerDark}}" />
                     </VerticalStackLayout>
                 </Border>
                 <Border Grid.Row="1" Grid.Column="0" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
-                        <Label Text="Year remaining" FontSize="12" TextColor="{StaticResource MutedText}" />
+                        <Label Text="Year remaining" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
                         <Label x:Name="YearRemainingLabel" FontSize="18" FontAttributes="Bold" />
                     </VerticalStackLayout>
                 </Border>
                 <Border Grid.Row="1" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
                     <VerticalStackLayout Spacing="4">
-                        <Label Text="Bills this month" FontSize="12" TextColor="{StaticResource MutedText}" />
-                        <Label x:Name="MonthBillCountLabel" FontSize="18" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
+                        <Label Text="Bills this month" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+                        <Label x:Name="MonthBillCountLabel" FontSize="18" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark={StaticResource AccentLabelOnDark}}" />
                     </VerticalStackLayout>
                 </Border>
             </Grid>
 
             <Border StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="14" StrokeShape="RoundRectangle 14">
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="Category breakdown" FontSize="17" FontAttributes="Bold" />
+                    <Label Text="Category breakdown" FontSize="17" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
                     <GraphicsView x:Name="PieChartView" HeightRequest="280">
                         <GraphicsView.GestureRecognizers>
                             <TapGestureRecognizer Tapped="OnPieChartTapped" />
@@ -49,18 +50,18 @@
 
             <Label Text="Tap a category below to see bills for this month."
                    FontSize="12"
-                   TextColor="{StaticResource MutedText}"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}"
                    Margin="0,-4,0,0" />
 
-            <Button Text="Open year summary (HTML)" Clicked="OnOpenHtmlSummaryClicked" HeightRequest="48" BackgroundColor="{StaticResource SurfaceLight}" TextColor="{StaticResource NeutralText}" />
+            <Button Text="Open year summary (HTML)" Clicked="OnOpenHtmlSummaryClicked" HeightRequest="48" BackgroundColor="{AppThemeBinding Light={StaticResource SurfaceLight}, Dark={StaticResource SecondaryButtonBgDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark={StaticResource MutedTextOnDark}}" />
 
             <CollectionView x:Name="CategoryCollection" SelectionMode="Single" SelectionChanged="OnCategorySelectionChanged">
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="models:PieLegendItem">
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" Padding="8,6">
                             <BoxView Color="{Binding Color}" WidthRequest="16" HeightRequest="16" VerticalOptions="Center" />
-                            <Label Grid.Column="1" Text="{Binding Category}" TextColor="{StaticResource MutedText}" FontSize="15" VerticalOptions="Center" />
-                            <Label Grid.Column="2" Text="{Binding AmountText}" FontAttributes="Bold" FontSize="15" TextColor="{StaticResource MidnightBlue}" VerticalOptions="Center" />
+                            <Label Grid.Column="1" Text="{Binding Category}" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" FontSize="15" VerticalOptions="Center" />
+                            <Label Grid.Column="2" Text="{Binding AmountText}" FontAttributes="Bold" FontSize="15" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark={StaticResource AccentLabelOnDark}}" VerticalOptions="Center" />
                         </Grid>
                     </DataTemplate>
                 </CollectionView.ItemTemplate>

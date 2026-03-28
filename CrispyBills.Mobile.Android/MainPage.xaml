@@ -3,200 +3,223 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:models="clr-namespace:CrispyBills.Mobile.Android.Models"
              xmlns:local="clr-namespace:CrispyBills.Mobile.Android"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:Class="CrispyBills.Mobile.Android.MainPage"
+             x:Name="ThisPage"
              Shell.NavBarIsVisible="False"
-             Title="Crispy Bills"
+             Title=""
              Background="{AppThemeBinding Light={StaticResource PageBackgroundBrush}, Dark={StaticResource PageBackgroundBrushDark}}">
 
-    <Grid RowDefinitions="Auto,*" RowSpacing="0">
+    <!-- Single vertical scroll: header + filters + bills. Bottom nav stays pinned. -->
+    <Grid RowDefinitions="*,Auto" RowSpacing="0">
 
-        <!-- Header -->
-        <Border Grid.Row="0"
-                StrokeThickness="0"
-                Background="{StaticResource PrimaryDarkHeaderBrush}"
-                Padding="14,16,14,14">
-            <VerticalStackLayout Spacing="14">
-                <Label Text="Crispy Bills"
-                       TextColor="{StaticResource White}"
-                       FontSize="22"
-                       FontAttributes="Bold" />
+        <RefreshView x:Name="BillsRefreshView" Grid.Row="0" Refreshing="OnBillsRefreshing">
+            <CollectionView x:Name="BillsCollection" SelectionMode="None">
+                <CollectionView.Header>
+                    <VerticalStackLayout Spacing="0">
+                        <!-- Year / month -->
+                        <Border StrokeThickness="0"
+                                Background="{StaticResource PrimaryDarkHeaderBrush}"
+                                Padding="14,10,14,8">
+                            <VerticalStackLayout Spacing="10">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                    <Button Grid.Column="0" x:Name="PrevYearButton" Text="&#x25C0;" Clicked="OnPrevYearClicked"
+                                            WidthRequest="48" HeightRequest="48" Padding="0"
+                                            BackgroundColor="Transparent" BorderColor="Transparent"
+                                            TextColor="{StaticResource PrimaryDarkText}" />
+                                    <Button Grid.Column="1" x:Name="YearButton" Clicked="OnYearSelectClicked"
+                                            TextColor="{StaticResource PrimaryDarkText}" BackgroundColor="Transparent" BorderColor="Transparent"
+                                            FontAttributes="Bold" FontSize="18" MinimumHeightRequest="48" />
+                                    <Button Grid.Column="2" x:Name="NextYearButton" Text="&#x25B6;" Clicked="OnNextYearClicked"
+                                            WidthRequest="48" HeightRequest="48" Padding="0"
+                                            BackgroundColor="Transparent" BorderColor="Transparent"
+                                            TextColor="{StaticResource PrimaryDarkText}" />
+                                </Grid>
 
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                    <Button Grid.Column="0" x:Name="PrevYearButton" Text="&#x25C0;" Clicked="OnPrevYearClicked"
-                            WidthRequest="48" HeightRequest="48" Padding="0" />
-                    <Button Grid.Column="1" x:Name="YearButton" Clicked="OnYearSelectClicked"
-                            TextColor="White" BackgroundColor="Transparent" BorderColor="Transparent"
-                            FontAttributes="Bold" FontSize="18" MinimumHeightRequest="48" />
-                    <Button Grid.Column="2" x:Name="NextYearButton" Text="&#x25B6;" Clicked="OnNextYearClicked"
-                            WidthRequest="48" HeightRequest="48" Padding="0" />
-                </Grid>
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                    <Button Grid.Column="0" Text="&#x25C0;" Clicked="OnPrevMonthClicked" WidthRequest="48" HeightRequest="48" Padding="0"
+                                            BackgroundColor="Transparent" BorderColor="Transparent"
+                                            TextColor="{StaticResource PrimaryDarkText}" />
+                                    <Button Grid.Column="1" x:Name="MonthButton" Clicked="OnMonthSelectClicked"
+                                            TextColor="{StaticResource PrimaryDarkText}" BackgroundColor="Transparent" BorderColor="Transparent"
+                                            FontAttributes="Bold" FontSize="18" MinimumHeightRequest="48" />
+                                    <Button Grid.Column="2" Text="&#x25B6;" Clicked="OnNextMonthClicked" WidthRequest="48" HeightRequest="48" Padding="0"
+                                            BackgroundColor="Transparent" BorderColor="Transparent"
+                                            TextColor="{StaticResource PrimaryDarkText}" />
+                                </Grid>
+                            </VerticalStackLayout>
+                        </Border>
 
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                    <Button Grid.Column="0" Text="&#x25C0;" Clicked="OnPrevMonthClicked" WidthRequest="48" HeightRequest="48" Padding="0" />
-                    <Button Grid.Column="1" x:Name="MonthButton" Clicked="OnMonthSelectClicked"
-                            TextColor="White" BackgroundColor="Transparent" BorderColor="Transparent"
-                            FontAttributes="Bold" FontSize="18" MinimumHeightRequest="48" />
-                    <Button Grid.Column="2" Text="&#x25B6;" Clicked="OnNextMonthClicked" WidthRequest="48" HeightRequest="48" Padding="0" />
-                </Grid>
-            </VerticalStackLayout>
-        </Border>
+                        <VerticalStackLayout Padding="14,12,14,10" Spacing="10">
 
-        <!-- Body + bottom bar -->
-        <Grid Grid.Row="1" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="10" Padding="14,12,14,10">
+                            <!-- Summary cards -->
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+                                <Border Grid.Row="0" Grid.Column="0" x:Name="IncomeCardBorder" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
+                                    <Border.Behaviors>
+                                        <toolkit:TouchBehavior LongPressDuration="1000">
+                                            <toolkit:TouchBehavior.LongPressCommand>
+                                                <Binding Path="EditIncomeLongPressCommand"
+                                                         Source="{x:Reference ThisPage}"
+                                                         x:DataType="local:MainPage" />
+                                            </toolkit:TouchBehavior.LongPressCommand>
+                                        </toolkit:TouchBehavior>
+                                    </Border.Behaviors>
+                                    <VerticalStackLayout Spacing="6">
+                                        <VerticalStackLayout.GestureRecognizers>
+                                            <TapGestureRecognizer Tapped="OnIncomeCardTapped" />
+                                        </VerticalStackLayout.GestureRecognizers>
+                                        <Label Text="Income" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+                                        <Label x:Name="IncomeValueLabel" FontSize="20" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
+                                    <VerticalStackLayout Spacing="4">
+                                        <Label Text="Unpaid" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+                                        <Label x:Name="UnpaidLabel" FontSize="20" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource Danger}, Dark={StaticResource DangerDark}}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
+                                    <VerticalStackLayout Spacing="4">
+                                        <Label Text="Remaining" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+                                        <Label x:Name="RemainingLabel" FontSize="20" FontAttributes="Bold" />
+                                    </VerticalStackLayout>
+                                </Border>
+                                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
+                                    <VerticalStackLayout Spacing="4">
+                                        <Label Text="Bills" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+                                        <Label x:Name="BillCountLabel" FontSize="20" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+                                    </VerticalStackLayout>
+                                </Border>
+                            </Grid>
 
-            <!-- Summary cards -->
-            <Grid Grid.Row="0" ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
-                <Border Grid.Row="0" Grid.Column="0" x:Name="IncomeCardBorder" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
-                    <Border.GestureRecognizers>
-                        <TapGestureRecognizer Tapped="OnIncomeCardTapped" />
-                        <PointerGestureRecognizer PointerPressed="OnIncomeCardPointerPressed" PointerReleased="OnIncomeCardPointerReleased" />
-                        <PanGestureRecognizer PanUpdated="OnIncomeCardPanUpdated" />
-                    </Border.GestureRecognizers>
-                    <VerticalStackLayout Spacing="6">
-                        <Label Text="Income" FontSize="12" TextColor="{StaticResource MutedText}" />
-                        <Label x:Name="IncomeValueLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource NeutralText}" />
-                    </VerticalStackLayout>
-                </Border>
-                <Border Grid.Row="0" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
-                    <VerticalStackLayout Spacing="4">
-                        <Label Text="Unpaid" FontSize="12" TextColor="{StaticResource MutedText}" />
-                        <Label x:Name="UnpaidLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource Danger}" />
-                    </VerticalStackLayout>
-                </Border>
-                <Border Grid.Row="1" Grid.Column="0" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
-                    <VerticalStackLayout Spacing="4">
-                        <Label Text="Remaining" FontSize="12" TextColor="{StaticResource MutedText}" />
-                        <Label x:Name="RemainingLabel" FontSize="20" FontAttributes="Bold" />
-                    </VerticalStackLayout>
-                </Border>
-                <Border Grid.Row="1" Grid.Column="1" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
-                    <VerticalStackLayout Spacing="4">
-                        <Label Text="Bills" FontSize="12" TextColor="{StaticResource MutedText}" />
-                        <Label x:Name="BillCountLabel" FontSize="20" FontAttributes="Bold" TextColor="{StaticResource MidnightBlue}" />
-                    </VerticalStackLayout>
-                </Border>
-            </Grid>
+                            <GraphicsView x:Name="IncomeExpenseBarView" HeightRequest="28">
+                                <GraphicsView.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnIncomeExpenseBarTapped" />
+                                </GraphicsView.GestureRecognizers>
+                            </GraphicsView>
 
-            <!-- Month income vs bill totals -->
-            <GraphicsView Grid.Row="1" x:Name="IncomeExpenseBarView" HeightRequest="28">
-                <GraphicsView.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="OnIncomeExpenseBarTapped" />
-                </GraphicsView.GestureRecognizers>
-            </GraphicsView>
+                            <!-- Swipe hint + action pills -->
+                            <VerticalStackLayout Spacing="6">
+                                <!-- MAUI SwipeView: swipe content left reveals RightItems (Delete); swipe right reveals LeftItems (Paid/Unpaid). -->
+                                <Label Text="Tip: Swipe left to delete. Swipe right to mark as paid/unpaid."
+                                       FontSize="12"
+                                       TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}"
+                                       LineBreakMode="WordWrap"
+                                       Margin="0,0,0,2" />
+                                <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+                                    <HorizontalStackLayout Spacing="10" Padding="0,4">
+                                        <Button x:Name="RolloverUnpaidButton" Text="Rollover Unpaid (debug)" Clicked="OnRolloverClicked" Padding="16,12" CornerRadius="20" FontSize="13" IsVisible="False" />
+                                        <Button Text="New Year" Clicked="OnNewYearClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
+                                        <Button Text="Archive" Clicked="OnArchiveYearClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
+                                        <Button Text="Import" Clicked="OnImportClicked" Padding="16,12" CornerRadius="20" FontSize="13" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
+                                        <Button Text="Export" Clicked="OnExportClicked" Padding="16,12" CornerRadius="20" FontSize="13" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
+                                    </HorizontalStackLayout>
+                                </ScrollView>
+                            </VerticalStackLayout>
 
-            <!-- Swipe hint + action pills -->
-            <VerticalStackLayout Grid.Row="2" Spacing="6">
-                <Label Text="Tip: Swipe left to delete. Swipe right to mark as paid/unpaid."
-                       FontSize="12"
-                       TextColor="{StaticResource MutedText}"
-                       LineBreakMode="WordWrap"
-                       Margin="0,0,0,2" />
-            <ScrollView Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
-                <HorizontalStackLayout Spacing="10" Padding="0,4">
-                    <Button Text="Add Bills" Clicked="OnAddClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
-                    <Button Text="Rollover Past Due" Clicked="OnRolloverClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
-                    <Button Text="New Year" Clicked="OnNewYearClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
-                    <Button Text="Archive" Clicked="OnArchiveYearClicked" Padding="16,12" CornerRadius="20" FontSize="13" />
-                    <Button Text="Import" Clicked="OnImportClicked" Padding="16,12" CornerRadius="20" FontSize="13" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
-                    <Button Text="Export" Clicked="OnExportClicked" Padding="16,12" CornerRadius="20" FontSize="13" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
-                </HorizontalStackLayout>
-            </ScrollView>
-            </VerticalStackLayout>
+                            <!-- Search + category -->
+                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10">
+                                <Entry x:Name="SearchEntry" Placeholder="Search bills..." TextChanged="OnSearchChanged" HeightRequest="48">
+                                    <Entry.Behaviors>
+                                        <local:SelectAllEntryBehavior />
+                                    </Entry.Behaviors>
+                                </Entry>
+                                <Picker x:Name="CategoryPicker" Grid.Column="1" Title="Category" SelectedIndexChanged="OnCategoryChanged" HeightRequest="48" />
+                                <Picker x:Name="SortPicker" Grid.Column="2" Title="Sort" SelectedIndexChanged="OnSortChanged" HeightRequest="48" />
+                            </Grid>
 
-            <!-- Search + category -->
-            <Grid Grid.Row="3" ColumnDefinitions="*,*,*" ColumnSpacing="10">
-                <Entry x:Name="SearchEntry" Placeholder="Search bills..." TextChanged="OnSearchChanged" HeightRequest="48">
-                    <Entry.Behaviors>
-                        <local:SelectAllEntryBehavior />
-                    </Entry.Behaviors>
-                </Entry>
-                <Picker x:Name="CategoryPicker" Grid.Column="1" Title="Category" SelectedIndexChanged="OnCategoryChanged" HeightRequest="48" />
-                <Picker x:Name="SortPicker" Grid.Column="2" Title="Sort" SelectedIndexChanged="OnSortChanged" HeightRequest="48" />
-            </Grid>
-
-            <!-- Bill list: add button only when month has bills (see UpdateAddButtonText) -->
-            <Grid Grid.Row="4" RowDefinitions="Auto,*" RowSpacing="8">
-                <Button Grid.Row="0"
-                        x:Name="BillsListAddButton"
-                        Text="Add bill(s)"
-                        Clicked="OnAddClicked"
-                        Padding="16,12"
-                        CornerRadius="20"
-                        FontSize="13"
-                        HorizontalOptions="Start"
-                        IsVisible="False" />
-                <RefreshView x:Name="BillsRefreshView" Grid.Row="1" Refreshing="OnBillsRefreshing">
-                <CollectionView x:Name="BillsCollection" SelectionMode="None" Margin="0,4,0,0">
-                    <CollectionView.EmptyView>
-                        <VerticalStackLayout Padding="24,32" Spacing="16" HorizontalOptions="Center">
-                            <Label Text="No bills yet" HorizontalOptions="Center" FontSize="18" TextColor="{StaticResource EmptyText}" />
-                            <Label Text="Swipe left to delete. Swipe right to toggle paid/unpaid. Tap and hold for 1 second to edit." HorizontalOptions="Center" FontSize="13" TextColor="{StaticResource MutedLight}" HorizontalTextAlignment="Center" />
-                            <Button x:Name="EmptyAddBillsButton" Text="Add your first bill(s)" Clicked="OnAddClicked" HorizontalOptions="Center" Padding="24,14" />
+                            <Button x:Name="BillsListAddButton"
+                                    Text="Add bill(s)"
+                                    Clicked="OnAddClicked"
+                                    Padding="16,12"
+                                    CornerRadius="20"
+                                    FontSize="13"
+                                    HorizontalOptions="Start"
+                                    IsVisible="False" />
                         </VerticalStackLayout>
-                    </CollectionView.EmptyView>
+                    </VerticalStackLayout>
+                </CollectionView.Header>
 
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="models:BillListItem">
-                            <Border StrokeThickness="0"
-                                    BackgroundColor="{Binding CardRowBackground}"
-                                    StrokeShape="RoundRectangle 14"
-                                    Padding="0"
-                                    Margin="0,0,0,10">
-                                <SwipeView SwipeStarted="OnBillSwipeStarted">
-                                    <SwipeView.LeftItems>
-                                        <SwipeItems Mode="Execute">
-                                            <SwipeItem Text="Paid / Unpaid"
-                                                       BackgroundColor="{StaticResource Success}"
-                                                       Invoked="OnSwipeTogglePaid" />
-                                        </SwipeItems>
-                                    </SwipeView.LeftItems>
-                                    <SwipeView.RightItems>
-                                        <SwipeItems Mode="Execute">
-                                            <SwipeItem Text="Delete"
-                                                       BackgroundColor="{StaticResource Danger}"
-                                                       Invoked="OnSwipeDelete" />
-                                        </SwipeItems>
-                                    </SwipeView.RightItems>
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout Padding="24,32" Spacing="16" HorizontalOptions="Center">
+                        <Label x:Name="EmptyStateTitleLabel" Text="No bills yet" HorizontalOptions="Center" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource EmptyText}, Dark={StaticResource Gray100}}" />
+                        <Label x:Name="EmptyStateSubtitleLabel" Text="Swipe left to delete. Swipe right to toggle paid/unpaid. Tap and hold for 1 second to edit." HorizontalOptions="Center" FontSize="13" TextColor="{AppThemeBinding Light={StaticResource MutedLight}, Dark={StaticResource MutedTextOnDark}}" HorizontalTextAlignment="Center" LineBreakMode="WordWrap" />
+                        <Button x:Name="EmptyAddBillsButton" Text="Add your first bill(s)" Clicked="OnAddClicked" HorizontalOptions="Center" Padding="24,14" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
 
-                                    <Border StrokeThickness="0" Padding="14" BackgroundColor="Transparent">
-                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                                            <VerticalStackLayout Grid.Column="0" Spacing="6">
-                                                <VerticalStackLayout.GestureRecognizers>
-                                                    <PointerGestureRecognizer PointerPressed="OnBillPointerPressed" PointerReleased="OnBillPointerReleased" />
-                                                    <PanGestureRecognizer PanUpdated="OnBillPanUpdated" />
-                                                </VerticalStackLayout.GestureRecognizers>
-                                                <HorizontalStackLayout Spacing="10">
-                                                    <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="17" LineBreakMode="TailTruncation" HorizontalOptions="FillAndExpand" TextColor="{StaticResource NeutralText}" />
-                                                    <Label Text="{Binding AmountDisplay}" FontAttributes="Bold" FontSize="17" TextColor="{StaticResource NeutralText}" />
-                                                </HorizontalStackLayout>
-                                                <Label Text="{Binding Category}" TextColor="{StaticResource MutedText}" FontSize="13" />
-                                                <Label Text="{Binding DueDate, StringFormat='Due {0:MMM d}'}" TextColor="{StaticResource MutedText}" FontSize="13" />
-                                            </VerticalStackLayout>
-                                            <Border Grid.Column="1"
-                                                    StrokeThickness="0"
-                                                    Padding="12,8"
-                                                    MinimumHeightRequest="36"
-                                                    BackgroundColor="Transparent"
-                                                    StrokeShape="RoundRectangle 999"
-                                                    VerticalOptions="Center">
-                                                <Label Text="{Binding StatusText}" FontSize="12" TextColor="{Binding StatusBadgeTextColor}" VerticalOptions="Center" />
-                                            </Border>
-                                        </Grid>
-                                    </Border>
-                                </SwipeView>
-                            </Border>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
-            </RefreshView>
-            </Grid>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="models:BillListItem">
+                        <!-- Long-press on outer row so SwipeView does not steal the hold gesture; swipe still uses inner SwipeView. -->
+                        <Border StrokeThickness="0"
+                                BackgroundColor="{Binding CardRowBackground}"
+                                StrokeShape="RoundRectangle 14"
+                                Padding="0"
+                                Margin="14,0,14,10">
+                            <Border.Behaviors>
+                                <toolkit:TouchBehavior LongPressDuration="1000">
+                                    <toolkit:TouchBehavior.LongPressCommand>
+                                        <Binding Path="EditBillLongPressCommand"
+                                                 Source="{x:Reference ThisPage}"
+                                                 x:DataType="local:MainPage" />
+                                    </toolkit:TouchBehavior.LongPressCommand>
+                                    <toolkit:TouchBehavior.LongPressCommandParameter>
+                                        <Binding Path="Id" />
+                                    </toolkit:TouchBehavior.LongPressCommandParameter>
+                                </toolkit:TouchBehavior>
+                            </Border.Behaviors>
+                            <!-- ~56dp: distance before swipe actions fully engage (tune on device). -->
+                            <SwipeView Threshold="56">
+                                <!-- Revealed when user swipes content to the right (finger moves right). -->
+                                <SwipeView.LeftItems>
+                                    <SwipeItems Mode="Execute">
+                                        <SwipeItem Text="Paid / Unpaid"
+                                                   BackgroundColor="{StaticResource Success}"
+                                                   Invoked="OnSwipeTogglePaid" />
+                                    </SwipeItems>
+                                </SwipeView.LeftItems>
+                                <!-- Revealed when user swipes content to the left (finger moves left). -->
+                                <SwipeView.RightItems>
+                                    <SwipeItems Mode="Execute">
+                                        <SwipeItem Text="Delete"
+                                                   BackgroundColor="{AppThemeBinding Light={StaticResource Danger}, Dark={StaticResource DangerDark}}"
+                                                   Invoked="OnSwipeDelete" />
+                                    </SwipeItems>
+                                </SwipeView.RightItems>
 
-            <!-- Bottom nav -->
-            <Grid Grid.Row="5" ColumnDefinitions="*,*,*" ColumnSpacing="8" Padding="0,8,0,0">
-                <Button Grid.Column="0" Text="Summary" Clicked="OnSummaryClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
-                <Button Grid.Column="1" Text="Notes" Clicked="OnNotesClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
-                <Button Grid.Column="2" Text="Settings" Clicked="OnSettingsClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{StaticResource NeutralText}" />
-            </Grid>
+                                <Border StrokeThickness="0" Padding="14" BackgroundColor="Transparent">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                        <VerticalStackLayout Grid.Column="0" Spacing="6">
+                                            <HorizontalStackLayout Spacing="10">
+                                                <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="17" LineBreakMode="TailTruncation" HorizontalOptions="FillAndExpand" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
+                                                <Label Text="{Binding AmountDisplay}" FontAttributes="Bold" FontSize="17" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
+                                            </HorizontalStackLayout>
+                                            <Label Text="{Binding Category}" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" FontSize="13" />
+                                            <Label Text="{Binding DueDate, StringFormat='Due {0:MMM d}'}" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" FontSize="13" />
+                                        </VerticalStackLayout>
+                                        <Border Grid.Column="1"
+                                                StrokeThickness="0"
+                                                Padding="12,8"
+                                                MinimumHeightRequest="36"
+                                                BackgroundColor="Transparent"
+                                                StrokeShape="RoundRectangle 999"
+                                                VerticalOptions="Center">
+                                            <Label Text="{Binding StatusText}" FontSize="12" TextColor="{Binding StatusBadgeTextColor}" VerticalOptions="Center" />
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </SwipeView>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <!-- Bottom nav -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="8" Padding="14,8,14,10">
+            <Button Grid.Column="0" Text="Summary" Clicked="OnSummaryClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
+            <Button Grid.Column="1" Text="Notes" Clicked="OnNotesClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
+            <Button Grid.Column="2" Text="Settings" Clicked="OnSettingsClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
         </Grid>
     </Grid>
 </ContentPage>
