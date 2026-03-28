@@ -56,6 +56,13 @@ public partial class MainPage : ContentPage
 
 		BillsCollection.ItemsSource = _visibleBills;
 		UpdateRolloverButtonVisibility();
+
+		if (Application.Current != null)
+		{
+			Application.Current.RequestedThemeChanged += OnAppRequestedThemeChanged;
+		}
+
+		Unloaded += OnMainPageUnloaded;
 	}
 
 	protected override async void OnAppearing()
@@ -273,10 +280,18 @@ public partial class MainPage : ContentPage
 		try
 		{
 			await EnsureInitialLoadCompleteAsync();
-			if (sender is BindableObject b && b.BindingContext is BillListItem item)
+			var item = BillFromElement(sender);
+			if (item is null && sender is BindableObject b && b.BindingContext is BillListItem ctx)
 			{
-				await EditBillByIdAsync(item.Id);
+				item = ctx;
 			}
+
+			if (item is null)
+			{
+				return;
+			}
+
+			await EditBillByIdAsync(item.Id);
 		}
 		catch (Exception ex)
 		{
@@ -607,7 +622,7 @@ public partial class MainPage : ContentPage
 			return Color.FromArgb(fallback);
 		}
 
-		if (Application.Current!.RequestedTheme == AppTheme.Dark)
+		if (AppThemeHelper.IsEffectiveDarkTheme())
 		{
 			var darkKey = key switch
 			{
@@ -838,6 +853,26 @@ public partial class MainPage : ContentPage
 		catch (Exception ex)
 		{
 			DiagnosticsLog.WriteSync("MainPage.OnSortChanged", ex);
+		}
+	}
+
+	private void OnAppRequestedThemeChanged(object? sender, AppThemeChangedEventArgs e)
+	{
+		try
+		{
+			ApplyFilters();
+		}
+		catch (Exception ex)
+		{
+			DiagnosticsLog.WriteSync("MainPage.OnAppRequestedThemeChanged", ex);
+		}
+	}
+
+	private void OnMainPageUnloaded(object? sender, EventArgs e)
+	{
+		if (Application.Current != null)
+		{
+			Application.Current.RequestedThemeChanged -= OnAppRequestedThemeChanged;
 		}
 	}
 

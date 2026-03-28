@@ -4,10 +4,10 @@ This document captures the expected Android behavior for Crispy Bills mobile. Tr
 
 ## Main (home)
 
-- Single vertical scroll: header, filters, bill list; bottom Summary / Notes / Settings stays pinned.
-- **Swipe gestures (MAUI `SwipeView`):** finger moves **left** → `RightItems` (Delete); finger moves **right** → `LeftItems` (Paid / Unpaid). Copy and layout must stay aligned with this.
-- Long-press ~1s on a bill row opens edit; long-press on income card edits income when set.
-- Light and dark themes: readable text, no black system bars, sufficient contrast on cards and semantic colors (including danger/success).
+- Single vertical scroll: header, filters, bill list; bottom Summary / Notes / Settings / Help stays pinned.
+- **Swipe gestures (MAUI `SwipeView`):** finger moves **left** → `RightItems` (Delete); finger moves **right** → `LeftItems` (Paid / Unpaid). Copy and layout must stay aligned with this. A **higher `SwipeView.Threshold`** (minimum swipe distance before actions engage) reduces accidental triggers while scrolling vertically.
+- **Double-tap** a bill row (on the swipe content) to open the bill editor. **Double-tap** the income card to edit income when set; **single-tap** when income is empty opens the income entry flow.
+- Light and dark themes: readable text, no black system bars, sufficient contrast on cards and semantic colors (including danger/success). Bill row status tints use `AppThemeHelper.IsEffectiveDarkTheme()` so **Unspecified** (follow system) matches the visible UI after cold start and theme changes.
 - **Empty states:** distinguish “no bills this month” from “bills exist but filters/search hide them.”
 
 ## Navigation

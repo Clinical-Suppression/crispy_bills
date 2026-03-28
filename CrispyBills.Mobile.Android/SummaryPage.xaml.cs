@@ -147,7 +147,7 @@ public partial class SummaryPage : ContentPage
 			return Color.FromArgb(fallback);
 		}
 
-		if (Application.Current!.RequestedTheme == AppTheme.Dark)
+		if (AppThemeHelper.IsEffectiveDarkTheme())
 		{
 			var darkKey = key switch
 			{
@@ -288,7 +288,7 @@ public partial class SummaryPage : ContentPage
 
 		private static Color EmptyChartMessageColor()
 		{
-			var dark = Application.Current?.RequestedTheme == AppTheme.Dark;
+			var dark = AppThemeHelper.IsEffectiveDarkTheme();
 			return dark
 				? ResourcesColor("MutedTextOnDark", "#E2E8F0")
 				: ResourcesColor("EmptyText", "#64748B");

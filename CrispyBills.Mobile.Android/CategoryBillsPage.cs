@@ -14,7 +14,7 @@ public sealed class CategoryBillsPage : ContentPage
         Title = category;
         Background = ResolvePageBackgroundBrush();
 
-        var isDark = Application.Current?.RequestedTheme == AppTheme.Dark;
+        var isDark = AppThemeHelper.IsEffectiveDarkTheme();
         var muted = isDark ? Color.FromArgb("#D7E0EC") : Color.FromArgb("#64748B");
         var nameColor = isDark ? Colors.White : Color.FromArgb("#111827");
         var rowBg = isDark ? Color.FromArgb("#505968") : Color.FromArgb("#F8FAFC");
@@ -90,7 +90,7 @@ public sealed class CategoryBillsPage : ContentPage
             return new SolidColorBrush(Colors.White);
         }
 
-        var key = app.RequestedTheme == AppTheme.Dark ? "PageBackgroundBrushDark" : "PageBackgroundBrush";
+        var key = AppThemeHelper.IsEffectiveDarkTheme() ? "PageBackgroundBrushDark" : "PageBackgroundBrush";
         if (app.Resources.ContainsKey(key) && app.Resources[key] is Brush b)
         {
             return b;

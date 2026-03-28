@@ -146,11 +146,8 @@
                                 StrokeShape="RoundRectangle 14"
                                 Padding="0"
                                 Margin="14,0,14,10">
-                            <Border.GestureRecognizers>
-                                <TapGestureRecognizer Tapped="OnBillRowDoubleTapped" NumberOfTapsRequired="2" />
-                            </Border.GestureRecognizers>
-                            <!-- ~96dp: distance before swipe actions engage (deadzone vs accidental drift). -->
-                            <SwipeView Threshold="96">
+                            <!-- ~160dp: minimum swipe distance before paid/delete actions engage (reduces accidental triggers vs vertical scroll). -->
+                            <SwipeView Threshold="160">
                                 <!-- Revealed when user swipes content to the right (finger moves right). -->
                                 <SwipeView.LeftItems>
                                     <SwipeItems Mode="Execute">
@@ -168,7 +165,10 @@
                                     </SwipeItems>
                                 </SwipeView.RightItems>
 
-                                <Border StrokeThickness="0" Padding="14" BackgroundColor="Transparent">
+                                <Border StrokeThickness="0" Padding="14" BackgroundColor="Transparent" VerticalOptions="Fill">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Tapped="OnBillRowDoubleTapped" NumberOfTapsRequired="2" />
+                                    </Border.GestureRecognizers>
                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                                         <VerticalStackLayout Grid.Column="0" Spacing="6">
                                             <HorizontalStackLayout Spacing="10">
