@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="CrispyBills.Mobile.Android.HelpPage"
+             Title="Help"
+             Background="{AppThemeBinding Light={StaticResource PageBackgroundBrush}, Dark={StaticResource PageBackgroundBrushDark}}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="18" Spacing="12">
+
+            <Label Text="Crispy Bills — mobile guide"
+                   FontAttributes="Bold"
+                   FontSize="20"
+                   TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+
+            <Label Text="This app helps you track monthly income, bills, and what is still due. Use the sections below to learn each screen and action."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+
+            <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
+
+            <Label Text="Home (bills list)" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+            <Label Text="Year and month: Use the arrows or tap the year/month labels to change what period you are viewing. This only changes the view; it does not create bills in other months by itself."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+            <Label Text="Search filters the list by name or category. Category and Sort narrow or reorder rows. The income card shows this month’s income; the Unpaid, Remaining, and Bills cards summarize totals. Tap the bar chart area to open Summary."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+            <Label Text="Single-tap the income card when you have not entered income yet to add it. Double-tap the income card anytime to add or change income for this month."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+            <Label Text="Bill rows: swipe left on a row to delete (after a short drag). Swipe right to toggle paid or unpaid. Double-tap a row to edit that bill."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+            <Label Text="Status colors: paid (green tint), past due (red), soon (yellow per your threshold in Settings), open (blue). Pull down on the list to refresh."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+
+            <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
+
+            <Label Text="Adding and editing bills" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+            <Label Text="Tap Add bill(s) to enter one or more bills. The editor lets you set name, amount, category, due date, and whether the bill repeats (recurring). Save applies changes; back or cancel discards unsaved edits depending on the editor."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+
+            <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
+
+            <Label Text="Summary" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+            <Label Text="Open from the bottom bar or by tapping the income/expense bar on Home. Review totals, charts, and category breakdowns for the selected month. Some areas may open category drill-downs where implemented."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+
+            <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
+
+            <Label Text="Notes" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+            <Label Text="Global notes are stored separately from monthly bills. Open Notes from the bottom bar, edit text, and save when your app provides a save action."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+
+            <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
+
+            <Label Text="Import and export" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+            <Label Text="Import brings structured data (desktop-style CSV) into selected years and months; you can choose scope before applying. Export writes your data out for backup or sharing. Follow on-screen confirmations."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+
+            <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
+
+            <Label Text="New Year, Archive, and rollover" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+            <Label Text="New Year creates the next year from December’s recurring templates and copies appropriate January items when the app allows. Archive moves a year into an archived state for organization."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+            <Label Text="Rollover Unpaid (debug) is a maintenance tool, not part of normal month changes. It is hidden until you enable destructive debug options in Settings. Use it only if you understand it may duplicate or move unpaid rows for testing or repair."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+
+            <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
+
+            <Label Text="Settings" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+            <Label Text="Theme and language affect colors and formats. Bill status “Soon” uses the threshold you pick. Security options include PIN, biometric unlock where supported, and app lock after idle time. Destructive actions (delete month/year data) require the debug toggle when shown. Diagnostics may be available for troubleshooting."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+
+            <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
+
+            <Label Text="Navigation" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
+            <Label Text="Use the system back gesture or button to return from Help, Settings, Summary, and other pushed pages. The bottom bar on Home jumps to Summary, Notes, Settings, or this Help page."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

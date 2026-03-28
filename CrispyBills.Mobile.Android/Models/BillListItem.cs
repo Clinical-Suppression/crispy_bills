@@ -33,6 +33,12 @@ public sealed class BillListItem
     /// <summary>Foreground for the status pill.</summary>
     public Color StatusBadgeTextColor { get; }
 
+    /// <summary>Name and amount on the row; chosen for contrast against <see cref="CardRowBackground"/>.</summary>
+    public Color PrimaryRowTextColor { get; }
+
+    /// <summary>Category and due line; chosen for contrast against <see cref="CardRowBackground"/>.</summary>
+    public Color SecondaryRowTextColor { get; }
+
     /// <summary>Constructs a projection from a <see cref="BillItem"/> instance.</summary>
     /// <param name="bill">Source bill to project.</param>
     /// <param name="amountDisplay">Optional formatted currency string; defaults to invariant F2.</param>
@@ -51,28 +57,35 @@ public sealed class BillListItem
         var dark = Application.Current?.RequestedTheme == AppTheme.Dark;
         if (bill.IsPaid)
         {
-            StatusBadgeBackground = dark ? Color.FromArgb("#143D2C") : Color.FromArgb("#DCFCE7");
-            StatusBadgeTextColor = dark ? Color.FromArgb("#86EFAC") : Color.FromArgb("#16A34A");
-            // Full row: lighter wash than the pill so lists feel less heavy.
-            CardRowBackground = dark ? Color.FromArgb("#0F241C") : Color.FromArgb("#F0FDF4");
+            StatusBadgeBackground = dark ? Color.FromArgb("#2A3D34") : Color.FromArgb("#E8F5EE");
+            StatusBadgeTextColor = dark ? Color.FromArgb("#86EFAC") : Color.FromArgb("#15803D");
+            CardRowBackground = dark ? Color.FromArgb("#4A524E") : Color.FromArgb("#FDFEFC");
+            PrimaryRowTextColor = dark ? Color.FromArgb("#F8FAFC") : Color.FromArgb("#0A0F1A");
+            SecondaryRowTextColor = dark ? Color.FromArgb("#E2E8F0") : Color.FromArgb("#334155");
         }
         else if (bill.IsPastDue)
         {
-            StatusBadgeBackground = dark ? Color.FromArgb("#3F1D1D") : Color.FromArgb("#FEE2E2");
-            StatusBadgeTextColor = dark ? Color.FromArgb("#FCA5A5") : Color.FromArgb("#DC2626");
-            CardRowBackground = dark ? Color.FromArgb("#2A1818") : Color.FromArgb("#FFF5F5");
+            StatusBadgeBackground = dark ? Color.FromArgb("#4A3E3E") : Color.FromArgb("#FEECEC");
+            StatusBadgeTextColor = dark ? Color.FromArgb("#FCA5A5") : Color.FromArgb("#B91C1C");
+            CardRowBackground = dark ? Color.FromArgb("#504648") : Color.FromArgb("#FFFDFD");
+            PrimaryRowTextColor = dark ? Color.FromArgb("#F8FAFC") : Color.FromArgb("#0A0F1A");
+            SecondaryRowTextColor = dark ? Color.FromArgb("#E2E8F0") : Color.FromArgb("#334155");
         }
         else if (IsSoon)
         {
-            StatusBadgeBackground = dark ? Color.FromArgb("#3D3420") : Color.FromArgb("#FEF3C7");
-            StatusBadgeTextColor = dark ? Color.FromArgb("#FCD34D") : Color.FromArgb("#92400E");
-            CardRowBackground = dark ? Color.FromArgb("#241F14") : Color.FromArgb("#FFFBEB");
+            StatusBadgeBackground = dark ? Color.FromArgb("#4A4438") : Color.FromArgb("#FEF8E8");
+            StatusBadgeTextColor = dark ? Color.FromArgb("#FCD34D") : Color.FromArgb("#A16207");
+            CardRowBackground = dark ? Color.FromArgb("#4E4A42") : Color.FromArgb("#FFFEF8");
+            PrimaryRowTextColor = dark ? Color.FromArgb("#F8FAFC") : Color.FromArgb("#0A0F1A");
+            SecondaryRowTextColor = dark ? Color.FromArgb("#E2E8F0") : Color.FromArgb("#334155");
         }
         else
         {
-            StatusBadgeBackground = dark ? Color.FromArgb("#1E2A3D") : Color.FromArgb("#DBEAFE");
-            StatusBadgeTextColor = dark ? Color.FromArgb("#93C5FD") : Color.FromArgb("#1E3A8A");
-            CardRowBackground = dark ? Color.FromArgb("#141C28") : Color.FromArgb("#F0F9FF");
+            StatusBadgeBackground = dark ? Color.FromArgb("#384458") : Color.FromArgb("#E8EEF8");
+            StatusBadgeTextColor = dark ? Color.FromArgb("#93C5FD") : Color.FromArgb("#1D4ED8");
+            CardRowBackground = dark ? Color.FromArgb("#454A58") : Color.FromArgb("#FAFCFF");
+            PrimaryRowTextColor = dark ? Color.FromArgb("#F8FAFC") : Color.FromArgb("#0A0F1A");
+            SecondaryRowTextColor = dark ? Color.FromArgb("#E2E8F0") : Color.FromArgb("#334155");
         }
     }
 }

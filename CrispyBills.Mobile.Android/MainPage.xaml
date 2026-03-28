@@ -3,9 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:models="clr-namespace:CrispyBills.Mobile.Android.Models"
              xmlns:local="clr-namespace:CrispyBills.Mobile.Android"
-             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:Class="CrispyBills.Mobile.Android.MainPage"
-             x:Name="ThisPage"
              Shell.NavBarIsVisible="False"
              Title=""
              Background="{AppThemeBinding Light={StaticResource PageBackgroundBrush}, Dark={StaticResource PageBackgroundBrushDark}}">
@@ -55,18 +53,10 @@
                             <!-- Summary cards -->
                             <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
                                 <Border Grid.Row="0" Grid.Column="0" x:Name="IncomeCardBorder" StrokeThickness="1" Stroke="{AppThemeBinding Light={StaticResource SurfaceStrokeLightBrush}, Dark={StaticResource SurfaceStrokeDarkBrush}}" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" Padding="12" StrokeShape="RoundRectangle 12">
-                                    <Border.Behaviors>
-                                        <toolkit:TouchBehavior LongPressDuration="1000">
-                                            <toolkit:TouchBehavior.LongPressCommand>
-                                                <Binding Path="EditIncomeLongPressCommand"
-                                                         Source="{x:Reference ThisPage}"
-                                                         x:DataType="local:MainPage" />
-                                            </toolkit:TouchBehavior.LongPressCommand>
-                                        </toolkit:TouchBehavior>
-                                    </Border.Behaviors>
                                     <VerticalStackLayout Spacing="6">
                                         <VerticalStackLayout.GestureRecognizers>
-                                            <TapGestureRecognizer Tapped="OnIncomeCardTapped" />
+                                            <TapGestureRecognizer Tapped="OnIncomeCardTapped" NumberOfTapsRequired="1" />
+                                            <TapGestureRecognizer Tapped="OnIncomeCardDoubleTapped" NumberOfTapsRequired="2" />
                                         </VerticalStackLayout.GestureRecognizers>
                                         <Label Text="Income" FontSize="12" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
                                         <Label x:Name="IncomeValueLabel" FontSize="20" FontAttributes="Bold" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
@@ -101,7 +91,7 @@
                             <!-- Swipe hint + action pills -->
                             <VerticalStackLayout Spacing="6">
                                 <!-- MAUI SwipeView: swipe content left reveals RightItems (Delete); swipe right reveals LeftItems (Paid/Unpaid). -->
-                                <Label Text="Tip: Swipe left to delete. Swipe right to mark as paid/unpaid."
+                                <Label Text="Tip: Swipe left to delete. Swipe right to mark as paid/unpaid. Double-tap a bill or the income card to edit."
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}"
                                        LineBreakMode="WordWrap"
@@ -143,33 +133,24 @@
                 <CollectionView.EmptyView>
                     <VerticalStackLayout Padding="24,32" Spacing="16" HorizontalOptions="Center">
                         <Label x:Name="EmptyStateTitleLabel" Text="No bills yet" HorizontalOptions="Center" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource EmptyText}, Dark={StaticResource Gray100}}" />
-                        <Label x:Name="EmptyStateSubtitleLabel" Text="Swipe left to delete. Swipe right to toggle paid/unpaid. Tap and hold for 1 second to edit." HorizontalOptions="Center" FontSize="13" TextColor="{AppThemeBinding Light={StaticResource MutedLight}, Dark={StaticResource MutedTextOnDark}}" HorizontalTextAlignment="Center" LineBreakMode="WordWrap" />
+                        <Label x:Name="EmptyStateSubtitleLabel" Text="Swipe left to delete. Swipe right to toggle paid/unpaid. Double-tap a bill to edit." HorizontalOptions="Center" FontSize="13" TextColor="{AppThemeBinding Light={StaticResource MutedLight}, Dark={StaticResource MutedTextOnDark}}" HorizontalTextAlignment="Center" LineBreakMode="WordWrap" />
                         <Button x:Name="EmptyAddBillsButton" Text="Add your first bill(s)" Clicked="OnAddClicked" HorizontalOptions="Center" Padding="24,14" />
                     </VerticalStackLayout>
                 </CollectionView.EmptyView>
 
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="models:BillListItem">
-                        <!-- Long-press on outer row so SwipeView does not steal the hold gesture; swipe still uses inner SwipeView. -->
+                        <!-- Double-tap row to edit; SwipeView inside for swipe actions. -->
                         <Border StrokeThickness="0"
                                 BackgroundColor="{Binding CardRowBackground}"
                                 StrokeShape="RoundRectangle 14"
                                 Padding="0"
                                 Margin="14,0,14,10">
-                            <Border.Behaviors>
-                                <toolkit:TouchBehavior LongPressDuration="1000">
-                                    <toolkit:TouchBehavior.LongPressCommand>
-                                        <Binding Path="EditBillLongPressCommand"
-                                                 Source="{x:Reference ThisPage}"
-                                                 x:DataType="local:MainPage" />
-                                    </toolkit:TouchBehavior.LongPressCommand>
-                                    <toolkit:TouchBehavior.LongPressCommandParameter>
-                                        <Binding Path="Id" />
-                                    </toolkit:TouchBehavior.LongPressCommandParameter>
-                                </toolkit:TouchBehavior>
-                            </Border.Behaviors>
-                            <!-- ~56dp: distance before swipe actions fully engage (tune on device). -->
-                            <SwipeView Threshold="56">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnBillRowDoubleTapped" NumberOfTapsRequired="2" />
+                            </Border.GestureRecognizers>
+                            <!-- ~96dp: distance before swipe actions engage (deadzone vs accidental drift). -->
+                            <SwipeView Threshold="96">
                                 <!-- Revealed when user swipes content to the right (finger moves right). -->
                                 <SwipeView.LeftItems>
                                     <SwipeItems Mode="Execute">
@@ -191,11 +172,11 @@
                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                                         <VerticalStackLayout Grid.Column="0" Spacing="6">
                                             <HorizontalStackLayout Spacing="10">
-                                                <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="17" LineBreakMode="TailTruncation" HorizontalOptions="FillAndExpand" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
-                                                <Label Text="{Binding AmountDisplay}" FontAttributes="Bold" FontSize="17" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
+                                                <Label Text="{Binding Name}" FontAttributes="Bold" FontSize="17" LineBreakMode="TailTruncation" HorizontalOptions="FillAndExpand" TextColor="{Binding PrimaryRowTextColor}" />
+                                                <Label Text="{Binding AmountDisplay}" FontAttributes="Bold" FontSize="17" TextColor="{Binding PrimaryRowTextColor}" />
                                             </HorizontalStackLayout>
-                                            <Label Text="{Binding Category}" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" FontSize="13" />
-                                            <Label Text="{Binding DueDate, StringFormat='Due {0:MMM d}'}" TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" FontSize="13" />
+                                            <Label Text="{Binding Category}" TextColor="{Binding SecondaryRowTextColor}" FontSize="13" />
+                                            <Label Text="{Binding DueDate, StringFormat='Due {0:MMM d}'}" TextColor="{Binding SecondaryRowTextColor}" FontSize="13" />
                                         </VerticalStackLayout>
                                         <Border Grid.Column="1"
                                                 StrokeThickness="0"
@@ -216,10 +197,11 @@
         </RefreshView>
 
         <!-- Bottom nav -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="8" Padding="14,8,14,10">
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="8" Padding="14,8,14,10">
             <Button Grid.Column="0" Text="Summary" Clicked="OnSummaryClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
             <Button Grid.Column="1" Text="Notes" Clicked="OnNotesClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
             <Button Grid.Column="2" Text="Settings" Clicked="OnSettingsClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
+            <Button Grid.Column="3" Text="Help" Clicked="OnHelpClicked" HeightRequest="52" Background="{AppThemeBinding Light={StaticResource SurfaceGlassBrushLight}, Dark={StaticResource SurfaceGlassBrushDark}}" TextColor="{AppThemeBinding Light={StaticResource NeutralText}, Dark=White}" />
         </Grid>
     </Grid>
 </ContentPage>

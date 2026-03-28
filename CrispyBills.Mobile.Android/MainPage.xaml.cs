@@ -5,8 +5,6 @@ using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Graphics;
 using System.Collections.ObjectModel;
 using System.Globalization;
-using System.Windows.Input;
-
 namespace CrispyBills.Mobile.Android;
 
 public partial class MainPage : ContentPage
@@ -44,21 +42,12 @@ public partial class MainPage : ContentPage
 		Category
 	}
 
-	/// <summary>Long-press on bill row (TouchBehavior); bound from item template.</summary>
-	public ICommand EditBillLongPressCommand { get; }
-
-	/// <summary>Long-press on income card when income exists (TouchBehavior).</summary>
-	public ICommand EditIncomeLongPressCommand { get; }
-
 	public MainPage(BillingService service, LocalizationService localization, AppLockService appLockService)
 	{
 		InitializeComponent();
 		_service = service;
 		_localization = localization;
 		_appLockService = appLockService;
-
-		EditBillLongPressCommand = new Command<object>(async p => await OnEditBillLongPressAsync(p));
-		EditIncomeLongPressCommand = new Command(async () => await OnEditIncomeLongPressAsync());
 
 		CategoryPicker.ItemsSource = new List<string> { "All categories" };
 		CategoryPicker.SelectedIndex = 0;
@@ -279,14 +268,21 @@ public partial class MainPage : ContentPage
 		await DeleteBillByIdAsync(item.Id);
 	}
 
-	private async Task OnEditBillLongPressAsync(object? param)
+	private async void OnBillRowDoubleTapped(object? sender, TappedEventArgs e)
 	{
-		if (param is not Guid billId)
+		try
 		{
-			return;
+			await EnsureInitialLoadCompleteAsync();
+			if (sender is BindableObject b && b.BindingContext is BillListItem item)
+			{
+				await EditBillByIdAsync(item.Id);
+			}
 		}
-
-		await EditBillByIdAsync(billId);
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnBillRowDoubleTapped", ex);
+			await DisplayAlert("Error", ex.Message, "OK");
+		}
 	}
 
 	private async Task EditBillByIdAsync(Guid id)
@@ -482,7 +478,7 @@ public partial class MainPage : ContentPage
 		if (monthEmpty)
 		{
 			EmptyStateTitleLabel.Text = "No bills yet";
-			EmptyStateSubtitleLabel.Text = "Swipe left to delete. Swipe right to toggle paid/unpaid. Tap and hold for 1 second to edit.";
+			EmptyStateSubtitleLabel.Text = "Swipe left to delete. Swipe right to toggle paid/unpaid. Double-tap a bill to edit.";
 			EmptyAddBillsButton.IsVisible = true;
 		}
 		else
@@ -863,11 +859,12 @@ public partial class MainPage : ContentPage
 	{
 		try
 		{
+			await EnsureInitialLoadCompleteAsync();
 			if (_incomeCardEditable)
 			{
-				// Existing income requires hold-to-edit.
 				return;
 			}
+
 			await PromptAndSaveIncomeAsync();
 		}
 		catch (Exception ex)
@@ -877,20 +874,16 @@ public partial class MainPage : ContentPage
 		}
 	}
 
-	private async Task OnEditIncomeLongPressAsync()
+	private async void OnIncomeCardDoubleTapped(object? sender, TappedEventArgs e)
 	{
-		if (!_incomeCardEditable)
-		{
-			return;
-		}
-
 		try
 		{
+			await EnsureInitialLoadCompleteAsync();
 			await PromptAndSaveIncomeAsync();
 		}
 		catch (Exception ex)
 		{
-			await DiagnosticsLog.WriteAsync("OnEditIncomeLongPress", ex);
+			await DiagnosticsLog.WriteAsync("OnIncomeCardDoubleTapped", ex);
 			await DisplayAlert("Error", ex.Message, "OK");
 		}
 	}
@@ -1218,6 +1211,20 @@ public partial class MainPage : ContentPage
 		{
 			await DiagnosticsLog.WriteAsync("OnSettingsClicked", ex);
 			await DisplayAlert("Could not open settings", ex.Message, "OK");
+		}
+	}
+
+	private async void OnHelpClicked(object? sender, EventArgs e)
+	{
+		try
+		{
+			await EnsureInitialLoadCompleteAsync();
+			await Navigation.PushAsync(new HelpPage());
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("OnHelpClicked", ex);
+			await DisplayAlert("Could not open help", ex.Message, "OK");
 		}
 	}
 
