@@ -1070,6 +1070,30 @@ public partial class MainPage : ContentPage
 					return;
 				}
 
+				var selectedByYear = new Dictionary<string, List<string>>(choice.SelectedMonthsByYear, StringComparer.OrdinalIgnoreCase);
+				var importNotes = choice.ImportNotes;
+
+				var emptyInFile = ListStructuredImportEmptySelections(package, selectedByYear);
+				if (emptyInFile.Count > 0)
+				{
+					var summary = string.Join(", ", emptyInFile.Select(x => $"{x.Month} {x.Year}"));
+					var skipEmpty = await DisplayAlert(
+						"Months with no file data",
+						$"These selected months have no bills or income rows in the file: {summary}.\n\n\"Skip empty months\" removes them from this import. \"Import as empty\" replaces those months with empty data (clears any existing bills and income there).",
+						"Skip empty months",
+						"Import as empty");
+					if (skipEmpty)
+					{
+						selectedByYear = RemoveStructuredImportEmptyMonths(package, selectedByYear);
+					}
+				}
+
+				if (selectedByYear.Count == 0 && !(importNotes && package.HasNotesSection))
+				{
+					await DisplayAlert("Import", "Nothing left to import.", "OK");
+					return;
+				}
+
 				var ok = await DisplayAlert(
 					"Confirm import",
 					"Selected months will replace existing data for those months. A database backup is created per affected year when possible. Continue?",
@@ -1082,8 +1106,8 @@ public partial class MainPage : ContentPage
 
 				var result = await _service.ApplyStructuredReportImportAsync(
 					package,
-					choice.SelectedMonthsByYear,
-					choice.ImportNotes);
+					selectedByYear,
+					importNotes);
 				await RefreshAvailableYearsAsync();
 				await LoadYearAsync(_currentYear);
 				var notePart = result.NotesImported ? " Notes were updated." : string.Empty;
@@ -1292,5 +1316,62 @@ public partial class MainPage : ContentPage
 		{
 			await DiagnosticsLog.WriteAsync("WarnDuplicateRecurringRules", ex);
 		}
+	}
+
+	private static bool StructuredImportMonthIsEmptyInFile(MobileStructuredImportPackage package, string yearKey, string monthName)
+	{
+		if (!package.Years.TryGetValue(yearKey, out var yd))
+		{
+			return true;
+		}
+
+		if (!yd.BillsByMonth.TryGetValue(monthName, out var bills))
+		{
+			return true;
+		}
+
+		if (bills.Count > 0)
+		{
+			return false;
+		}
+
+		yd.IncomeByMonth.TryGetValue(monthName, out var inc);
+		return inc <= 0m;
+	}
+
+	private static List<(string Year, string Month)> ListStructuredImportEmptySelections(
+		MobileStructuredImportPackage package,
+		IReadOnlyDictionary<string, List<string>> selectedMonthsByYear)
+	{
+		var list = new List<(string Year, string Month)>();
+		foreach (var kv in selectedMonthsByYear)
+		{
+			foreach (var monthName in kv.Value)
+			{
+				if (StructuredImportMonthIsEmptyInFile(package, kv.Key, monthName))
+				{
+					list.Add((kv.Key, monthName));
+				}
+			}
+		}
+
+		return list;
+	}
+
+	private static Dictionary<string, List<string>> RemoveStructuredImportEmptyMonths(
+		MobileStructuredImportPackage package,
+		Dictionary<string, List<string>> selected)
+	{
+		var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+		foreach (var kv in selected)
+		{
+			var kept = kv.Value.Where(m => !StructuredImportMonthIsEmptyInFile(package, kv.Key, m)).ToList();
+			if (kept.Count > 0)
+			{
+				result[kv.Key] = kept;
+			}
+		}
+
+		return result;
 	}
 }

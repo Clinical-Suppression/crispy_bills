@@ -593,6 +593,11 @@ public sealed partial class BillingService(IBillingRepository repository)
             current.RecurrenceFrequency = RecurrenceFrequency.MonthlyInterval;
             for (var target = month + 1; target <= 12; target++)
             {
+                if (!CalendarMonthHasBegunLocally(CurrentYear, target))
+                {
+                    continue;
+                }
+
                 if (!ShouldCreateRecurringOccurrence(current, month, target, CurrentYear))
                 {
                     continue;
@@ -735,6 +740,11 @@ public sealed partial class BillingService(IBillingRepository repository)
                 {
                     for (var futureMonth = month + 1; futureMonth <= 12; futureMonth++)
                     {
+                        if (!CalendarMonthHasBegunLocally(CurrentYear, futureMonth))
+                        {
+                            continue;
+                        }
+
                         if (!ShouldCreateRecurringOccurrence(anchor, month, futureMonth, CurrentYear))
                         {
                             continue;
@@ -780,6 +790,11 @@ public sealed partial class BillingService(IBillingRepository repository)
                     var existing = futureList.FirstOrDefault(x => x.Id == id);
                     if (existing is null)
                     {
+                        if (!CalendarMonthHasBegunLocally(CurrentYear, futureMonth))
+                        {
+                            continue;
+                        }
+
                         existing = target.Clone();
                         existing.Month = futureMonth;
                         existing.Year = CurrentYear;
@@ -1965,6 +1980,11 @@ public sealed partial class BillingService(IBillingRepository repository)
                 var dueDay = recurring.DueDate.Day;
                 for (var targetMonth = month + 1; targetMonth <= 12; targetMonth++)
                 {
+                    if (!CalendarMonthHasBegunLocally(CurrentYear, targetMonth))
+                    {
+                        continue;
+                    }
+
                     if (!ShouldCreateRecurringOccurrence(recurring, month, targetMonth, CurrentYear))
                     {
                         continue;
@@ -2211,6 +2231,15 @@ public sealed partial class BillingService(IBillingRepository repository)
         return new DateTime(year, month, day);
     }
 
+    /// <summary>
+    /// True when the local calendar date is on or after the first day of <paramref name="month"/> in <paramref name="year"/>.
+    /// Used to avoid materializing recurring bill rows for months that have not started yet (import/load catch-up).
+    /// </summary>
+    private static bool CalendarMonthHasBegunLocally(int year, int month)
+    {
+        return DateTime.Today >= new DateTime(year, month, 1);
+    }
+
     private static void Apply(BillItem target, BillItem source, int month, int baseDay)
     {
         target.Name = source.Name.Trim();
@@ -2334,6 +2363,11 @@ public sealed partial class BillingService(IBillingRepository repository)
             }
 
             var m = d.Month;
+            if (!CalendarMonthHasBegunLocally(year, m))
+            {
+                continue;
+            }
+
             if (HasSeriesOccurrenceOnDate(m, groupId, d, data))
             {
                 continue;

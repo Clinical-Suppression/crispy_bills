@@ -38,7 +38,7 @@ public sealed class ImportSelectionPage : ContentPage
 
         var instructions = new Label
         {
-            Text = "Choose years and months to import. Each selected month replaces bills and income for that month.",
+            Text = "Choose years and months to import. Each selected month replaces bills and income for that month. Months with no rows in the file are skipped unless you confirm importing them as empty on the next step.",
             FontSize = 14,
             LineBreakMode = LineBreakMode.WordWrap
         };
