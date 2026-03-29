@@ -23,6 +23,7 @@ public partial class MainPage : ContentPage
 	private int _soonThresholdValue = 7;
 	private string _soonThresholdUnit = BillingService.SoonThresholdUnitDays;
 	private bool _appLockFlowActive;
+	private bool _calendarYearFallbackPromptShown;
 
 	private int _currentYear = DateTime.Today.Year;
 	private int _currentMonth = DateTime.Today.Month;
@@ -369,6 +370,8 @@ public partial class MainPage : ContentPage
 	private async Task LoadYearAsync(int year)
 	{
 		await RefreshAvailableYearsAsync();
+		var requestedYear = year;
+
 		if (_availableYears.Count == 0)
 		{
 			_currentYear = year;
@@ -385,6 +388,18 @@ public partial class MainPage : ContentPage
 		_currentYear = year;
 		await _service.LoadYearAsync(year);
 		await ReloadMonthAsync();
+
+		// Jan 1+ with only prior-year DB: we tried to open today's calendar year but fell back to the latest file on disk.
+		if (!_calendarYearFallbackPromptShown
+		    && requestedYear != _currentYear
+		    && requestedYear == DateTime.Today.Year)
+		{
+			_calendarYearFallbackPromptShown = true;
+			await DisplayAlert(
+				"Year data",
+				$"There is no saved data for {requestedYear} yet. Showing {_currentYear} instead. Open December in {_currentYear} and use New Year to create {requestedYear} from those templates, or import a file.",
+				"OK");
+		}
 	}
 
 	private async Task ReloadMonthAsync()

@@ -180,6 +180,35 @@ public sealed class BillingServiceParityTests
         Assert.Equal("Existing", service.GetBills(1).Single().Name);
     }
 
+    /// <summary>
+    /// New year copies monthly templates with <c>ShouldCreateRecurringOccurrence(template, 1, month, newYear)</c>—January-anchored phase, not strict continuation from December (Feb would be next if continuing from a Dec occurrence).
+    /// </summary>
+    [Fact]
+    public async Task CreateNewYearFromDecemberAsync_BiMonthlyRecurring_UsesJanuaryAnchoredPhase()
+    {
+        var repo = new InMemoryBillingRepository();
+        var service = new BillingService(repo, TestTodayJan2026);
+        await service.LoadYearAsync(2026);
+
+        await service.AddBillAsync(12, new BillItem
+        {
+            Name = "BiMonth",
+            Amount = 40m,
+            Category = "General",
+            DueDate = new DateTime(2026, 12, 15),
+            IsRecurring = true,
+            RecurrenceEveryMonths = 2,
+            IsPaid = true
+        });
+
+        Assert.True(await service.CreateNewYearFromDecemberAsync());
+
+        await service.LoadYearAsync(2027);
+        Assert.Contains(service.GetBills(1), b => b.Name == "BiMonth" && b.IsRecurring);
+        Assert.DoesNotContain(service.GetBills(2), b => b.Name == "BiMonth");
+        Assert.Contains(service.GetBills(3), b => b.Name == "BiMonth" && b.IsRecurring);
+    }
+
     [Fact]
     public async Task ImportStructuredCsvForYearAsync_TargetYearDifferentFromCurrentYear_SavesToTargetAndKeepsCurrentContext()
     {

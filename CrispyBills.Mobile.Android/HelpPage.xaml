@@ -81,11 +81,11 @@
             <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
 
             <Label Text="New Year, Archive, and rollover" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
-            <Label Text="New Year creates the next year from December’s recurring templates and copies appropriate January items when the app allows. Archive moves a year into an archived state for organization."
+            <Label Text="New Year does not run by itself on January 1. While viewing the previous year, open December, then tap New Year to create the next calendar year from December’s recurring templates and January carryovers (unpaid items, “Name - December” rows, and income copy rules). The app may show a one-time notice if your device’s year has no data file yet but an older year exists."
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
-            <Label Text="Automatic carryover when you load the current year mirrors that rollover logic for normal use. Rollover Unpaid (debug) is an extra maintenance action for testing or repair; it is hidden until you enable destructive debug options in Settings. Use the debug tool only if you understand it may duplicate or move unpaid rows."
+            <Label Text="Automatic carryover when you load the current calendar year only moves unpaid rows from earlier months into later months of that same year—it does not move December into next year’s January. Rollover Unpaid (debug) is an extra maintenance action for testing or repair; it is hidden until you enable destructive debug options in Settings. Use the debug tool only if you understand it may duplicate or move unpaid rows."
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />

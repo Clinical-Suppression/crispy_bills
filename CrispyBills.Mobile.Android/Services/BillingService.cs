@@ -1199,6 +1199,8 @@ public sealed partial class BillingService(IBillingRepository repository, Func<D
             }
 
             var familyId = Guid.NewGuid();
+            // January-anchored phase (startMonth=1): "every N months" is evaluated as if the series starts in January
+            // of the new year, not as a strict continuation from December. Changing this requires product sign-off and tests.
             for (var month = 1; month <= 12; month++)
             {
                 if (!ShouldCreateRecurringOccurrence(recurringTemplate, 1, month, newYear))
