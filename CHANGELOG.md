@@ -138,3 +138,16 @@ All notable changes to this project will be documented in this file.
 ### Fixes
 - fix: various UX/Ui improvements and bugfixes (b40ea46)
 
+## 1.8.0 - 2026-03-29
+
+### Features
+- feat: implement new behavior and improvements (27cb518)
+
+### Documentation
+- docs: update documentation based on recent changes (5fb8f3d)
+- docs: update documentation based on recent changes (c10e9bd)
+- docs: update documentation based on recent changes (c50a269)
+
+### Tests
+- test: add/update tests for changed behavior (0dc409c)
+
