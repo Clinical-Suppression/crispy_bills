@@ -475,7 +475,9 @@ function Get-RecommendedCommitType {
     }
 
     if ($lower -match '\.xaml$' -or $lower -match '\.cs$' -or $lower -match '\.java$') {
-        $diff = Get-GitOutput -Args @('diff', '--', $files) -WorkingDirectory (Get-WorkspaceRoot)
+        # Flatten paths into one string[]; nesting @('diff','--', $files) breaks [string[]] binding when $files is empty.
+        $gitArgs = @('diff', '--') + @($files)
+        $diff = Get-GitOutput -Args $gitArgs -WorkingDirectory (Get-WorkspaceRoot)
         if ($diff -match '(?im)\bfix\b|\bbug\b|\bissue\b') {
             return 'fix'
         }
@@ -492,7 +494,13 @@ function Get-RecommendedCommitMessage {
     param([string]$type, [string[]]$files)
 
     $root = Get-WorkspaceRoot
-    $diffSummary = Get-GitOutput -Args @('diff', '--stat', '--', $files) -WorkingDirectory $root
+    $files = @($files | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string]$_) })
+    # With a clean tree, $files is empty; @('diff','--stat','--', $files) nests an empty array and breaks Get-GitOutput -Args [string[]] binding.
+    $diffSummary = ''
+    if ($files.Count -gt 0) {
+        $gitArgs = @('diff', '--stat', '--') + @($files)
+        $diffSummary = Get-GitOutput -Args $gitArgs -WorkingDirectory $root
+    }
 
     # Description only — conventional-commit.ps1 prepends type(scope): itself.
     if ($type -eq 'docs') {

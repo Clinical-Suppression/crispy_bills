@@ -296,6 +296,34 @@ function Get-JavaAndAndroidSdk {
     }
 }
 
+<# .SYNOPSIS Run git with stderr merged into the output stream.
+
+PowerShell 7.4+ sets $PSNativeCommandUseErrorActionPreference such that native
+commands writing to stderr can throw when $ErrorActionPreference is Stop. Git
+emits LF/CRLF normalization warnings to stderr even on success; suppressing
+that behavior avoids spurious failures (see Invoke-GitMergedOutput).
+#>
+function Invoke-GitMergedOutput {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    $prevNative = $null
+    if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+        $prevNative = $PSNativeCommandUseErrorActionPreference
+        $PSNativeCommandUseErrorActionPreference = $false
+    }
+
+    try {
+        return & git @Arguments 2>&1
+    }
+    finally {
+        if ($null -ne $prevNative) {
+            $PSNativeCommandUseErrorActionPreference = $prevNative
+        }
+    }
+}
+
 <# .SYNOPSIS Run git @Args in a working directory; return trimmed output or throw. #>
 function Get-GitOutput {
     param(
@@ -309,7 +337,7 @@ function Get-GitOutput {
 
     Push-Location $WorkingDirectory
     try {
-        $output = & git @Args 2>&1
+        $output = Invoke-GitMergedOutput -Arguments $Args
         if ($LASTEXITCODE -ne 0) {
             throw "git $($Args -join ' ') failed: $($output | Out-String)"
         }

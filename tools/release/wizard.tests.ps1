@@ -125,6 +125,12 @@ Describe 'Crispy_Bills Release Wizard' {
         (Get-RecommendedCommitType -files 'README.md') | Should -Be 'docs'
     }
 
+    It 'Get-RecommendedCommitMessage does not call git when there are no changed files' {
+        Mock -CommandName Get-GitOutput -MockWith { throw 'Get-GitOutput should not run when file list is empty' }
+        { Get-RecommendedCommitMessage -type 'chore' -files @() } | Should -Not -Throw
+        (Get-RecommendedCommitMessage -type 'chore' -files @()) | Should -Match 'implement'
+    }
+
     It 'Check-VersionAgreements warns when remote tag is ahead of local next version' {
         $script:hostMessages = @()
 

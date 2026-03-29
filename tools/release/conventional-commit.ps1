@@ -13,7 +13,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
- 
+
+. (Join-Path $PSScriptRoot 'common.ps1')
+
 $helpersPath = Join-Path $PSScriptRoot 'prompt-helpers.ps1'
 if (Test-Path $helpersPath) {
     . $helpersPath
@@ -24,7 +26,7 @@ if (Test-Path $helpersPath) {
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Push-Location $root
 try {
-    & git rev-parse --is-inside-work-tree *> $null
+    $null = Invoke-GitMergedOutput -Arguments @('rev-parse', '--is-inside-work-tree')
     if ($LASTEXITCODE -ne 0) {
 <#
 Helper to build a conventional commit message interactively.
@@ -186,11 +188,11 @@ recommended commit message.
     }
 
     if ($stageAll) {
-        & git add -A
+        $null = Invoke-GitMergedOutput -Arguments @('add', '-A')
         if ($LASTEXITCODE -ne 0) { throw 'git add -A failed.' }
     }
 
-    $staged = (& git diff --cached --name-only | Out-String).Trim()
+    $staged = (Invoke-GitMergedOutput -Arguments @('diff', '--cached', '--name-only') | Out-String).Trim()
     if ([string]::IsNullOrWhiteSpace($staged)) {
         throw 'No staged changes found. Stage files and re-run the script.'
     }
@@ -216,11 +218,11 @@ recommended commit message.
         exit 0
     }
 
-    $args = @('commit', '-m', $header)
-    if (-not [string]::IsNullOrWhiteSpace($Body)) { $args += @('-m', $Body) }
-    if ($isBreaking) { $args += @('-m', ("BREAKING CHANGE: {0}" -f $breakingNote)) }
+    $commitArgs = @('commit', '-m', $header)
+    if (-not [string]::IsNullOrWhiteSpace($Body)) { $commitArgs += @('-m', $Body) }
+    if ($isBreaking) { $commitArgs += @('-m', ("BREAKING CHANGE: {0}" -f $breakingNote)) }
 
-    & git @args
+    $null = Invoke-GitMergedOutput -Arguments $commitArgs
     if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
 
     Write-Host 'Conventional commit created successfully.' -ForegroundColor Green
