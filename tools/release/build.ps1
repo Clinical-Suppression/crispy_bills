@@ -105,13 +105,10 @@ function Invoke-BuildWithRetry {
 
 function Build-Windows {
     Write-Host '--- Build Phase: Windows ---' -ForegroundColor Cyan
-    $generatedDir = Join-Path $root (Join-Path 'obj' (Join-Path $Configuration 'net8.0-windows'))
-    if (Test-Path $generatedDir) {
-        # WPF generated files can occasionally become stale across incremental builds.
-        Remove-Item $generatedDir -Recurse -Force -ErrorAction SilentlyContinue
-    }
-
-    Invoke-BuildWithRetry -Project $windowsProject -BuildArgs @('build', $windowsProject, '-c', $Configuration) -CleanArgs @('clean', $windowsProject, '-c', $Configuration)
+    # Use Rebuild (not `dotnet build` after manual clean/delete) so WPF MarkupCompile runs
+    # before CoreCompile in the same MSBuild graph. Plain build after `dotnet clean` or
+    # deleting obj can yield CS2001 missing *.g.cs on the first attempt.
+    Invoke-BuildWithRetry -Project $windowsProject -BuildArgs @('msbuild', $windowsProject, '/t:Rebuild', "-p:Configuration=$Configuration") -CleanArgs @('clean', $windowsProject, '-c', $Configuration)
     Write-Host '--- Build Phase Completed: Windows ---' -ForegroundColor Green
 }
 

@@ -180,6 +180,22 @@ public sealed class BillingServiceParityTests
         Assert.Equal("Existing", service.GetBills(1).Single().Name);
     }
 
+    [Fact]
+    public async Task CreateNewYearFromDecemberAsync_ReturnsFalse_WhenTargetYearHasJanuaryIncomeOnly()
+    {
+        var repo = new InMemoryBillingRepository();
+
+        var seedService = new BillingService(repo, TestTodayJan2026);
+        await seedService.LoadYearAsync(2027);
+        await seedService.SetIncomeAsync(1, 5000m);
+
+        var service = new BillingService(repo, TestTodayJan2026);
+        await service.LoadYearAsync(2026);
+
+        var created = await service.CreateNewYearFromDecemberAsync();
+        Assert.False(created);
+    }
+
     /// <summary>
     /// New year copies monthly templates with <c>ShouldCreateRecurringOccurrence(template, 1, month, newYear)</c>—January-anchored phase, not strict continuation from December (Feb would be next if continuing from a Dec occurrence).
     /// </summary>

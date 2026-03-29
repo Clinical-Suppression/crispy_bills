@@ -24,7 +24,16 @@ public partial class NotesPage : ContentPage
 			_unsubscribed = false;
 		}
 
-		NotesEditor.Text = await _service.LoadNotesAsync();
+		try
+		{
+			NotesEditor.Text = await _service.LoadNotesAsync();
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("NotesPage.OnAppearing", ex);
+			await DisplayAlert("Load failed", "Could not load notes. Please try again.", "OK");
+		}
+
 		UpdateLineCount();
 	}
 
@@ -40,8 +49,16 @@ public partial class NotesPage : ContentPage
 
 	private async void OnSaveClicked(object? sender, EventArgs e)
 	{
-		await _service.SaveNotesAsync(NotesEditor.Text ?? string.Empty);
-		await DisplayAlert("Saved", "Notes updated.", "OK");
+		try
+		{
+			await _service.SaveNotesAsync(NotesEditor.Text ?? string.Empty);
+			await DisplayAlert("Saved", "Notes updated.", "OK");
+		}
+		catch (Exception ex)
+		{
+			await DiagnosticsLog.WriteAsync("NotesPage.OnSaveClicked", ex);
+			await DisplayAlert("Save failed", $"Could not save notes: {ex.Message}", "OK");
+		}
 	}
 
 	private void OnNotesChanged(object? sender, TextChangedEventArgs e)

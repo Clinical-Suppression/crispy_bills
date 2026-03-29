@@ -95,9 +95,17 @@ namespace CrispyBills
         private bool _allowImmediateClose;
         private bool _closingBackupInProgress;
         private bool _isFilteringActive = false;
+        private string? _lastBillCountWarningKey;
+        private bool _yearSizeWarningShown;
         // Session-only guards for destructive debug tools
         private bool _debugDestructiveDeletesEnabled = false;
         private bool _debugEnableWarningShown = false;
+        private readonly List<string> _startupIssues = new();
+        private string _themeMode = "system";
+        private int _soonThresholdValue = 3;
+        private string _soonThresholdUnit = "Days";
+        private HashSet<int> _archivedYears = new();
+        private bool _showArchivedYears;
         private static readonly Regex DueDatePattern = GeneratedDueDatePattern();
         private static readonly TimeSpan RoutineBackupInterval = TimeSpan.FromMinutes(15);
 
@@ -122,6 +130,10 @@ namespace CrispyBills
             EnsureDataRoot();
             InitializeAppDatabase();
             MigrateLegacyDatabases();
+            LoadThemePreference();
+            _soonThresholdValue = LoadAppMeta("soon_threshold_value", 3);
+            _soonThresholdUnit = LoadAppMeta("soon_threshold_unit", "Days");
+            LoadArchivedYears();
 
             foreach (var m in months)
             {
@@ -139,12 +151,36 @@ namespace CrispyBills
 
             LoadData();
             LoadGlobalNotes();
+
+            PayPeriodCombo.Items.Add("/ month");
+            PayPeriodCombo.Items.Add("/ week");
+            PayPeriodCombo.Items.Add("/ 2 weeks");
+            var savedPeriod = LoadAppMeta("income_pay_period", "/ month");
+            if (PayPeriodCombo.Items.Contains(savedPeriod))
+                PayPeriodCombo.SelectedItem = savedPeriod;
+            else
+                PayPeriodCombo.SelectedIndex = 0;
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             UpdateDashboard();
             StartRoutineBackups();
+            ApplyThemeFromMode();
+
+            if (_startupIssues.Count > 0)
+            {
+                var result = MessageBox.Show(
+                    $"The app encountered {_startupIssues.Count} issue(s) during startup:\n\n{string.Join("\n", _startupIssues.Take(5))}\n\nWould you like to view diagnostics?",
+                    "Startup Issues",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+                if (result == MessageBoxResult.Yes)
+                {
+                    OpenDiagnostics_Click(this, new RoutedEventArgs());
+                }
+            }
+
             // Run auto-test diagnostics only when explicitly opted in to avoid accidental startup side effects.
             try
             {
@@ -627,6 +663,8 @@ namespace CrispyBills
         private void UpdateYearSelector()
         {
             var years = GetAvailableYears();
+            if (!_showArchivedYears && _archivedYears.Count > 0)
+                years = years.Where(y => !int.TryParse(y, out var yi) || !_archivedYears.Contains(yi) || y == CurrentYear).ToList();
             YearSelector.ItemsSource = years;
             if (years.Contains(CurrentYear)) YearSelector.SelectedItem = CurrentYear;
         }
@@ -672,6 +710,7 @@ FROM Bills WHERE Year = $y";
                         if (!Guid.TryParse(guidStr, out var id))
                         {
                             LogNonFatal($"Skipping row with invalid GUID: {guidStr}");
+                            _startupIssues.Add($"Skipping row with invalid GUID: {guidStr}");
                             continue;
                         }
                         var bill = new Bill
@@ -717,6 +756,7 @@ FROM Bills WHERE Year = $y";
                     catch (Exception ex)
                     {
                         LogNonFatal($"LoadData: skipping malformed bill row in {mKey}", ex);
+                        _startupIssues.Add(ex.Message);
                     }
                 }
             }
@@ -745,6 +785,18 @@ FROM Bills WHERE Year = $y";
             {
                 AutoSave();
                 SetStatus($"{CurrentYear} loaded. Normalized {normalizedDueDates} due date(s) to their month.");
+            }
+
+            _yearSizeWarningShown = false;
+            var totalBills = AnnualData.Values.Sum(m => m.Count);
+            if (totalBills > 1500 && !_yearSizeWarningShown)
+            {
+                _yearSizeWarningShown = true;
+                MessageBox.Show(
+                    $"This year has {totalBills} bill rows across all months. This is typically caused by many weekly recurring bills. Performance is fine, but saves may take a moment.",
+                    "Large year",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
         }
 
@@ -1047,7 +1099,9 @@ FROM Bills WHERE Year = $y";
             catch (Exception ex)
             {
                 LogNonFatal("LoadGlobalNotes", ex);
+                _startupIssues.Add(ex.Message);
             }
+            UpdateNotesLineCount();
         }
 
         private void SaveGlobalNotes()
@@ -1129,6 +1183,8 @@ FROM Bills WHERE Year = $y";
 
             decimal inc = MonthlyIncome.TryGetValue(cur, out var incVal) ? incVal : 0;
             var bills = AnnualData[cur];
+            foreach (var b in bills)
+                b.IsSoon = IsBillSoon(b, _soonThresholdValue, _soonThresholdUnit);
             decimal exp = bills.Sum(b => b.Amount);
             decimal unpaid = bills.Where(b => !b.IsPaid).Sum(b => b.Amount);
             decimal paid = exp - unpaid;
@@ -1145,6 +1201,21 @@ FROM Bills WHERE Year = $y";
             ApplyFilters();
 
             BackButton.Visibility = !string.IsNullOrEmpty(_detailedCategory) ? Visibility.Visible : Visibility.Collapsed;
+
+            var monthIdx = MonthSelector?.SelectedIndex ?? -1;
+            if (monthIdx >= 0 && monthIdx < months.Length && AnnualData.TryGetValue(months[monthIdx], out var currentMonthBills) && currentMonthBills.Count > 100)
+            {
+                var key = $"{_currentYear}:{months[monthIdx]}:count:{currentMonthBills.Count}";
+                if (!string.Equals(_lastBillCountWarningKey, key, StringComparison.Ordinal))
+                {
+                    _lastBillCountWarningKey = key;
+                    MessageBox.Show(
+                        $"This month has {currentMonthBills.Count} bills. If this is unexpected, check for duplicate recurring rules or accidental imports.",
+                        "Large month",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+            }
         }
 
         private void UpdateCategoryFilter()
@@ -1797,43 +1868,182 @@ FROM Bills WHERE Year = $y";
             AutoSave();
         }
 
-        /// <summary>
-        /// Switches between light and dark dictionaries while preserving merged dictionary order,
-        /// ensuring font-size resources continue to override theme defaults.
-        /// </summary>
-        private void ToggleTheme_Click(object sender, RoutedEventArgs e)
+        private void ThemeFollowSystem_Click(object sender, RoutedEventArgs e)
         {
-            isDarkMode = !isDarkMode;
-            var dictUri = new Uri(isDarkMode ? "Dark.xaml" : "Light.xaml", UriKind.Relative);
-            var newTheme = new ResourceDictionary { Source = dictUri };
+            _themeMode = "system";
+            ApplyThemeFromMode();
+            SaveThemePreference();
+        }
 
-            // Replace only existing theme dictionaries (Light/Dark) so we don't clear unrelated merged dictionaries
-            var toRemove = Application.Current.Resources.MergedDictionaries
-                .Where(d => d.Source != null &&
-                            (d.Source.OriginalString.EndsWith("Light.xaml", StringComparison.OrdinalIgnoreCase) ||
-                             d.Source.OriginalString.EndsWith("Dark.xaml", StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-            foreach (var d in toRemove) Application.Current.Resources.MergedDictionaries.Remove(d);
+        private void ThemeLight_Click(object sender, RoutedEventArgs e)
+        {
+            _themeMode = "light";
+            ApplyThemeFromMode();
+            SaveThemePreference();
+        }
 
-            // Keep FontSizes.xaml and other shared dictionaries after the theme dictionary
-            // so shared font-size styles are not overridden when theme changes.
-            var dictionaries = Application.Current.Resources.MergedDictionaries;
-            int insertIndex = 0;
-            for (int i = 0; i < dictionaries.Count; i++)
+        private void ThemeDark_Click(object sender, RoutedEventArgs e)
+        {
+            _themeMode = "dark";
+            ApplyThemeFromMode();
+            SaveThemePreference();
+        }
+
+        private void ApplyThemeFromMode()
+        {
+            bool useDark;
+            if (_themeMode == "system")
             {
-                var src = dictionaries[i].Source?.OriginalString;
-                if (!string.IsNullOrEmpty(src) &&
-                    src.EndsWith("FontSizes.xaml", StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    insertIndex = i;
+                    using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+                    var val = key?.GetValue("AppsUseLightTheme");
+                    useDark = val is int i && i == 0;
+                }
+                catch
+                {
+                    useDark = false;
+                }
+            }
+            else
+            {
+                useDark = _themeMode == "dark";
+            }
+
+            var themeFile = useDark ? "Dark.xaml" : "Light.xaml";
+            var themeDict = new ResourceDictionary { Source = new Uri(themeFile, UriKind.Relative) };
+            var mergedDicts = Application.Current.Resources.MergedDictionaries;
+
+            for (int i = mergedDicts.Count - 1; i >= 0; i--)
+            {
+                var src = mergedDicts[i].Source?.OriginalString ?? string.Empty;
+                if (src.Contains("Light.xaml") || src.Contains("Dark.xaml"))
+                {
+                    mergedDicts.RemoveAt(i);
+                }
+            }
+
+            var fontSizesIndex = -1;
+            for (int i = 0; i < mergedDicts.Count; i++)
+            {
+                if ((mergedDicts[i].Source?.OriginalString ?? string.Empty).Contains("FontSizes"))
+                {
+                    fontSizesIndex = i;
                     break;
                 }
             }
 
-            dictionaries.Insert(insertIndex, newTheme);
+            if (fontSizesIndex >= 0)
+                mergedDicts.Insert(fontSizesIndex, themeDict);
+            else
+                mergedDicts.Add(themeDict);
 
+            isDarkMode = useDark;
+            UpdateThemeMenuChecks();
             UpdateDashboard();
-            SetStatus(isDarkMode ? "Dark theme activated" : "Light theme activated");
+            SetStatus(useDark ? "Switched to dark theme." : "Switched to light theme.");
+        }
+
+        private void UpdateThemeMenuChecks()
+        {
+            if (ThemeFollowSystemMenuItem != null) ThemeFollowSystemMenuItem.IsChecked = _themeMode == "system";
+            if (ThemeLightMenuItem != null) ThemeLightMenuItem.IsChecked = _themeMode == "light";
+            if (ThemeDarkMenuItem != null) ThemeDarkMenuItem.IsChecked = _themeMode == "dark";
+        }
+
+        private void SaveThemePreference()
+        {
+            try
+            {
+                using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={appDbPath}");
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "INSERT OR REPLACE INTO AppMeta (Key, Value) VALUES ('theme_mode', $value);";
+                cmd.Parameters.AddWithValue("$value", _themeMode);
+                cmd.ExecuteNonQuery();
+            }
+            catch { }
+        }
+
+        private void LoadThemePreference()
+        {
+            try
+            {
+                if (!System.IO.File.Exists(appDbPath)) return;
+                using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={appDbPath}");
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT Value FROM AppMeta WHERE Key = 'theme_mode';";
+                var val = cmd.ExecuteScalar() as string;
+                if (!string.IsNullOrWhiteSpace(val))
+                    _themeMode = val;
+            }
+            catch { }
+        }
+
+        private string LoadAppMeta(string key, string defaultValue)
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={appDbPath}");
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT Value FROM AppMeta WHERE Key = $key;";
+                cmd.Parameters.AddWithValue("$key", key);
+                return cmd.ExecuteScalar() as string ?? defaultValue;
+            }
+            catch { return defaultValue; }
+        }
+
+        private int LoadAppMeta(string key, int defaultValue)
+        {
+            var str = LoadAppMeta(key, defaultValue.ToString());
+            return int.TryParse(str, out var val) ? val : defaultValue;
+        }
+
+        private void SaveAppMeta(string key, string value)
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={appDbPath}");
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "INSERT OR REPLACE INTO AppMeta (Key, Value) VALUES ($key, $value);";
+                cmd.Parameters.AddWithValue("$key", key);
+                cmd.Parameters.AddWithValue("$value", value);
+                cmd.ExecuteNonQuery();
+            }
+            catch { }
+        }
+
+        private static bool IsBillSoon(Bill bill, int thresholdValue, string thresholdUnit)
+        {
+            if (bill.IsPaid || bill.IsPastDue) return false;
+            var today = DateTime.Today;
+            var due = bill.DueDate.Date;
+            if (due < today) return false;
+            var thresholdDate = thresholdUnit switch
+            {
+                "Weeks" => today.AddDays(thresholdValue * 7),
+                "Months" => today.AddMonths(thresholdValue),
+                _ => today.AddDays(thresholdValue)
+            };
+            return due <= thresholdDate;
+        }
+
+        private void LoadArchivedYears()
+        {
+            var packed = LoadAppMeta("archived_years", "");
+            _archivedYears = packed.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => int.TryParse(s.Trim(), out var y) ? y : -1)
+                .Where(y => y > 0)
+                .ToHashSet();
+        }
+
+        private void SaveArchivedYears()
+        {
+            var packed = string.Join(",", _archivedYears.OrderBy(y => y));
+            SaveAppMeta("archived_years", packed);
         }
 
         /// <summary>
@@ -2111,6 +2321,13 @@ VALUES ($id, $m, $y, $n, $a, $d, $p, $c, $r,
             ApplyFilters();
         }
 
+        private void UpdateNotesLineCount()
+        {
+            var text = (NotesBox.Text ?? string.Empty).Replace("\r\n", "\n").TrimEnd('\n');
+            var lines = string.IsNullOrEmpty(text) ? 0 : text.Split('\n').Length;
+            NotesLineCount.Text = $"{Math.Min(lines, MaxNoteLines)} / {MaxNoteLines} lines";
+        }
+
         private void NotesBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (_isUpdatingNotesText) return;
@@ -2138,6 +2355,7 @@ VALUES ($id, $m, $y, $n, $a, $d, $p, $c, $r,
             }
 
             SaveGlobalNotes();
+            UpdateNotesLineCount();
         }
 
         private void NotesBox_LostFocus(object sender, RoutedEventArgs e)
@@ -3774,6 +3992,46 @@ VALUES ($id, $m, $y, $n, $a, $d, $p, $c, $r,
             }
         }
 
+        private void ToggleYearArchive_Click(object sender, RoutedEventArgs e)
+        {
+            if (!int.TryParse(CurrentYear, out var year)) return;
+
+            if (_archivedYears.Contains(year))
+            {
+                _archivedYears.Remove(year);
+                SaveArchivedYears();
+                MessageBox.Show($"Year {year} has been unarchived.", "Year Archive", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                var result = MessageBox.Show(
+                    $"Archive year {year}? It will be hidden from the year list but data will be preserved.",
+                    "Archive Year",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (result == MessageBoxResult.Yes)
+                {
+                    _archivedYears.Add(year);
+                    SaveArchivedYears();
+                }
+            }
+
+            UpdateYearSelector();
+        }
+
+        private void ShowArchivedYears_Click(object sender, RoutedEventArgs e)
+        {
+            _showArchivedYears = ShowArchivedMenuItem.IsChecked;
+            UpdateYearSelector();
+        }
+
+        private void PayPeriodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded) return;
+            if (PayPeriodCombo.SelectedItem is string period)
+                SaveAppMeta("income_pay_period", period);
+        }
+
         private void ExportCsvToPath(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -4528,6 +4786,11 @@ FROM Bills WHERE Year = $y";
         {
             var w = new DiagnosticsWindow(dataRoot, backupsRoot) { Owner = this };
             w.ShowDialog();
+        }
+
+        private void OpenHelp_Click(object sender, RoutedEventArgs e)
+        {
+            new HelpWindow { Owner = this }.ShowDialog();
         }
 
         private void EnterMovesDown_Click(object sender, RoutedEventArgs e)

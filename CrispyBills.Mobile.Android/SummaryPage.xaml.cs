@@ -22,7 +22,6 @@ public partial class SummaryPage : ContentPage
 		_year = year;
 		_month = month;
 
-		var resources = Application.Current?.Resources;
 		var palette = new List<Color>();
 		void addResource(string key, string fallback) =>
 			palette.Add(GetResourceColor(key, fallback));

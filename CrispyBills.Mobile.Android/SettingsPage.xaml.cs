@@ -303,6 +303,17 @@ public partial class SettingsPage : ContentPage
 
 	private async void OnConfigurePinClicked(object? sender, EventArgs e)
 	{
+		if (await _appLockService.HasPinAsync())
+		{
+			var verifyPage = new UnlockPage(_appLockService);
+			await Navigation.PushModalAsync(verifyPage);
+			var verified = await verifyPage.WaitForResultAsync();
+			if (!verified)
+			{
+				return;
+			}
+		}
+
 		var page = new PinSetupPage(_appLockService, allowSkip: false);
 		await Navigation.PushModalAsync(page);
 		await page.WaitForResultAsync();
@@ -311,6 +322,14 @@ public partial class SettingsPage : ContentPage
 
 	private async void OnRemovePinClicked(object? sender, EventArgs e)
 	{
+		var verifyPage = new UnlockPage(_appLockService);
+		await Navigation.PushModalAsync(verifyPage);
+		var verified = await verifyPage.WaitForResultAsync();
+		if (!verified)
+		{
+			return;
+		}
+
 		var confirm = await DisplayAlert("Remove PIN", "Turn off the app PIN and biometric unlock?", "Remove", "Cancel");
 		if (!confirm)
 		{

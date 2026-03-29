@@ -6,12 +6,12 @@ using System.Windows;
 
 namespace CrispyBills
 {
-    /// <summary>Simple grid for entering up to 50 bills (buffer-style initial rows).</summary>
+    /// <summary>Simple grid for entering up to 75 bills (buffer-style initial rows).</summary>
     public partial class BulkBillsDialog : Window
     {
         private readonly DateTime _period;
         private const int InitialRows = 10;
-        private const int MaxRows = 50;
+        private const int MaxRows = 75;
 
         public ObservableCollection<BulkBillRowVm> Rows { get; } = new();
 
@@ -100,11 +100,12 @@ namespace CrispyBills
             Close();
         }
 
-        /// <summary>Called by host when the last row is considered complete; grows toward 50.</summary>
+        /// <summary>Called by host when the last row is considered complete; grows toward 75.</summary>
         public void TryAppendRowIfNeeded()
         {
             if (Rows.Count >= MaxRows)
             {
+                MessageBox.Show($"You can add up to {MaxRows} bills at once.", "Limit reached", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 

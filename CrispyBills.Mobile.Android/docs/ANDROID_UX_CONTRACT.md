@@ -16,8 +16,14 @@ This document captures the expected Android behavior for Crispy Bills mobile. Tr
 - Pushed pages (Summary, Notes, Settings, editors, drill-downs): **visible title and system/toolbar back** where applicable.
 - Modal flows (unlock, PIN setup, import picker): predictable completion; no hung awaits from biometrics or secure storage.
 
-## Security
+## Security / App Lock
 
+- **PIN storage:** 4-digit PIN is salted (16-byte random) and hashed with SHA-256. Only the salt and hash are stored in `SecureStorage`; the raw PIN is never persisted.
+- **Relock delay:** After the app goes to background, the lock screen reappears if the app is resumed after **5 minutes** of background time. There is no foreground idle timer.
+- **Lock enforcement:** Lock is enforced both from `MainPage.OnAppearing` and from `App.OnResume`, so it applies regardless of which page is active when the app goes to background.
+- **PIN change/remove:** Changing or removing the PIN requires entering the current PIN first via `UnlockPage`.
+- **Rate limiting:** After 3 failed PIN attempts, an escalating delay (2 seconds per attempt, up to 30 seconds) is imposed before the next attempt. The delay resets on successful unlock.
+- **Biometric unlock:** Optional fingerprint/face unlock is available when the device supports it and a PIN is configured. The "Use PIN" button on the biometric prompt falls back to PIN entry.
 - Biometric: failed attempts that keep the system prompt open must not strand the UI; terminal outcomes complete the auth task (`OnAuthenticationError`, negative button). Recoverable failures are logged, not forced-complete.
 - PIN / secure storage: failed writes are **logged**; user-visible feedback when a feature would otherwise appear to succeed.
 

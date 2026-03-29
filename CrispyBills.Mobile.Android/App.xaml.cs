@@ -50,6 +50,34 @@ public partial class App : Application
 		_ = RoutineBackupTickAsync();
 	}
 
+	protected override async void OnResume()
+	{
+		base.OnResume();
+		try
+		{
+			if (!await _appLockService.ShouldRequireUnlockAsync())
+			{
+				return;
+			}
+
+			if (Windows.Count > 0 && Windows[0].Page is AppShell shell)
+			{
+				var nav = shell.Navigation;
+				var unlockPage = new UnlockPage(_appLockService);
+				await nav.PushModalAsync(unlockPage);
+				var unlocked = await unlockPage.WaitForResultAsync();
+				if (!unlocked)
+				{
+					await nav.PushModalAsync(new UnlockPage(_appLockService));
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			try { DiagnosticsLog.WriteSync("App.OnResume.Lock", ex); } catch { }
+		}
+	}
+
 	private async Task RoutineBackupTickAsync()
 	{
 		try

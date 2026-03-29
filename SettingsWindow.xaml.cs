@@ -20,6 +20,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
+        VersionLabel.Text = $"Version {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown"}\nData: {System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "CrispyBills")}";
         foreach (var o in _options)
         {
             CultureCombo.Items.Add(o.Label);

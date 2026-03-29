@@ -190,6 +190,21 @@ namespace CrispyBills
         public bool IsPastDue => !IsPaid &&
             (DueDate.Date < DateTime.Today || DueDate.Date < ContextPeriodStart.Date);
 
+        private bool _isSoon;
+        /// <summary>True when the bill is unpaid, not past due, and within the "due soon" threshold.</summary>
+        public bool IsSoon
+        {
+            get => _isSoon;
+            set
+            {
+                if (_isSoon != value)
+                {
+                    _isSoon = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

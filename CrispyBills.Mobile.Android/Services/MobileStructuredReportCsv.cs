@@ -171,7 +171,7 @@ public static class MobileStructuredReportCsv
                 continue;
             }
 
-            if (Array.IndexOf(monthsArray, rowMonth) < 0)
+            if (Array.FindIndex(monthsArray, m => string.Equals(m, rowMonth, StringComparison.OrdinalIgnoreCase)) < 0)
             {
                 skippedRows++;
                 logNonFatal?.Invoke($"ParseStructuredReportCsv: skipping row with invalid month '{rowMonth}' at line {totalLines}.");
@@ -209,7 +209,7 @@ public static class MobileStructuredReportCsv
 
             if (int.TryParse(rowYear, out var yearValue))
             {
-                var monthIndex = Array.IndexOf(monthsArray, rowMonth);
+                var monthIndex = Array.FindIndex(monthsArray, m => string.Equals(m, rowMonth, StringComparison.OrdinalIgnoreCase));
                 if (monthIndex >= 0)
                 {
                     bill.ContextPeriodStart = new DateTime(yearValue, monthIndex + 1, 1);

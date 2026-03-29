@@ -10,7 +10,7 @@ namespace CrispyBills.Mobile.Android;
 
 public sealed class BulkBillsPage : ContentPage
 {
-    private const int MaxRows = 50;
+    private const int MaxRows = 75;
     private const string RecurrenceMonthly = "Monthly";
     private const string RecurrenceWeekly = "Weekly";
     private const string RecurrenceBiWeekly = "Bi-weekly";
@@ -55,12 +55,15 @@ public sealed class BulkBillsPage : ContentPage
             HorizontalOptions = LayoutOptions.Fill,
             HeightRequest = 48
         };
-        addRowButton.Clicked += (_, _) =>
+        addRowButton.Clicked += async (_, _) =>
         {
-            if (_rows.Count < MaxRows)
+            if (_rows.Count >= MaxRows)
             {
-                AddRow();
+                await DisplayAlert("Limit reached", $"You can add up to {MaxRows} bills at once.", "OK");
+                return;
             }
+
+            AddRow();
         };
         list.Footer = new VerticalStackLayout
         {

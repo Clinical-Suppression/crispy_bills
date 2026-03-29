@@ -11,6 +11,8 @@ public static class DiagnosticsLog
 {
     private const int LogRetentionDays = 30;
     private static string? _logDirectory;
+    // NOTE: _lastRetentionCleanupUtc is UTC while file date retention comparison uses DateTime.Now (local).
+    // This is a 1-day-at-most discrepancy. Retention is best-effort with a multi-day window, so this is acceptable.
     private static DateTime _lastRetentionCleanupUtc = DateTime.MinValue;
 
     /// <summary>

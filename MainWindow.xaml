@@ -251,7 +251,11 @@
                 <MenuItem Header="_Settings..." Click="OpenSettings_Click"/>
                 <MenuItem Header="_Diagnostics..." Click="OpenDiagnostics_Click"/>
                 <Separator/>
-                <MenuItem Header="Toggle _Theme" Click="ToggleTheme_Click"/>
+                <MenuItem Header="_Theme">
+                    <MenuItem Header="Follow system" x:Name="ThemeFollowSystemMenuItem" IsCheckable="True" Click="ThemeFollowSystem_Click"/>
+                    <MenuItem Header="Light" x:Name="ThemeLightMenuItem" IsCheckable="True" Click="ThemeLight_Click"/>
+                    <MenuItem Header="Dark" x:Name="ThemeDarkMenuItem" IsCheckable="True" Click="ThemeDark_Click"/>
+                </MenuItem>
                 <MenuItem Header="_Monthly Summary" Click="SendSummary_Click"/>
                 <MenuItem Header="_Enter Moves Down" IsCheckable="True" Click="EnterMovesDown_Click"/>
                 <Separator/>
@@ -268,7 +272,11 @@
                 <Separator />
                 <MenuItem x:Name="DebugDeleteMonthMenuItem" Header="Delete Selected Month" Click="DebugDeleteMonth_Click" IsEnabled="False" />
                 <MenuItem x:Name="DebugDeleteYearMenuItem" Header="Delete Selected Year (Database)" Click="DebugDeleteYear_Click" IsEnabled="False" />
+                <Separator/>
+                <MenuItem Header="Archive/Unarchive Current Year" Click="ToggleYearArchive_Click"/>
+                <MenuItem x:Name="ShowArchivedMenuItem" Header="Show Archived Years" IsCheckable="True" Click="ShowArchivedYears_Click"/>
             </MenuItem>
+            <MenuItem Header="Help" Click="OpenHelp_Click"/>
         </Menu>
 
         <!-- Top toolbar -->
@@ -393,6 +401,10 @@
                              Padding="6,2"
                              Background="{DynamicResource ControlBackgroundBrush}"
                              Foreground="{DynamicResource ControlForegroundBrush}"/>
+                    <ComboBox x:Name="PayPeriodCombo" Width="100" Margin="8,0,0,0" VerticalAlignment="Center"
+                              SelectionChanged="PayPeriodCombo_SelectionChanged"
+                              Background="{DynamicResource ControlBackgroundBrush}"
+                              Foreground="{DynamicResource ControlForegroundBrush}"/>
                     <Button Content="Rollover" Click="Rollover_Click" Margin="8,0,0,0" ToolTip="Roll unpaid bills forward" />
                     <Button Content="Add" Click="OpenAddDialog_Click" Margin="8,0,0,0" ToolTip="Add new bill" />
                     <Button Content="Edit" Click="EditBill_Click" Margin="8,0,0,0" ToolTip="Edit selected bill" />
@@ -420,10 +432,13 @@
                             <Style TargetType="DataGridRow">
                                 <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}"/>
                                 <Style.Triggers>
-                                    <Trigger Property="IsSelected" Value="True">
-                                        <Setter Property="Background" Value="#554C8DFF"/>
-                                    </Trigger>
-                                    <DataTrigger Binding="{Binding IsPaid}" Value="True">
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#554C8DFF"/>
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsSoon}" Value="True">
+                                <Setter Property="Background" Value="#55FFD700"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsPaid}" Value="True">
                                         <Setter Property="Background" Value="#5532CD32"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsPastDue}" Value="True">
@@ -437,13 +452,20 @@
                                         <Setter Property="Background" Value="#8832CD32"/>
                                     </MultiDataTrigger>
                                     <MultiDataTrigger>
-                                        <MultiDataTrigger.Conditions>
-                                            <Condition Binding="{Binding IsPastDue}" Value="True"/>
-                                            <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected}" Value="True"/>
-                                        </MultiDataTrigger.Conditions>
-                                        <Setter Property="Background" Value="#88FF6B6B"/>
-                                    </MultiDataTrigger>
-                                </Style.Triggers>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsPastDue}" Value="True"/>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Background" Value="#88FF6B6B"/>
+                                </MultiDataTrigger>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsSoon}" Value="True"/>
+                                        <Condition Binding="{Binding RelativeSource={RelativeSource Self}, Path=IsSelected}" Value="True"/>
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Background" Value="#88FFD700"/>
+                                </MultiDataTrigger>
+                            </Style.Triggers>
                             </Style>
                         </DataGrid.RowStyle>
                         <DataGrid.ContextMenu>
@@ -485,8 +507,13 @@
                                         <Border Background="Transparent" Cursor="Hand" MouseLeftButtonUp="StatusCell_MouseLeftButtonUp">
                                             <TextBlock x:Name="StatusTxt" Text="Due" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource HintForegroundBrush}"/>
                                         </Border>
-                                        <DataTemplate.Triggers>
-                                            <DataTrigger Binding="{Binding IsPastDue}" Value="True">
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsSoon}" Value="True">
+                                            <Setter TargetName="StatusTxt" Property="Text" Value="SOON"/>
+                                            <Setter TargetName="StatusTxt" Property="Foreground" Value="#CC8800"/>
+                                            <Setter TargetName="StatusTxt" Property="FontWeight" Value="Bold"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsPastDue}" Value="True">
                                                 <Setter TargetName="StatusTxt" Property="Text" Value="PAST DUE"/>
                                                 <Setter TargetName="StatusTxt" Property="Foreground" Value="#CC4444"/>
                                                 <Setter TargetName="StatusTxt" Property="FontWeight" Value="Bold"/>
@@ -520,6 +547,7 @@
                                  Padding="8,2,8,2"
                                  TextChanged="NotesBox_TextChanged"
                                  LostFocus="NotesBox_LostFocus"/>
+                        <TextBlock x:Name="NotesLineCount" Foreground="{DynamicResource HintForegroundBrush}" FontSize="11" Margin="0,4,0,0" HorizontalAlignment="Right"/>
                     </StackPanel>
                 </Border>
 

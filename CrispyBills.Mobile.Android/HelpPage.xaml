@@ -93,7 +93,7 @@
             <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
 
             <Label Text="Settings" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
-            <Label Text="Theme and language affect colors and formats. Bill status “Soon” uses the threshold you pick. Security options include PIN, biometric unlock where supported, and app lock after idle time. Destructive actions (delete month/year data) require the debug toggle when shown. Deleting the last year removes its database without recreating an empty file until you add data or use New Year. Diagnostics may be available for troubleshooting."
+            <Label Text="Theme and language affect colors and formats. Bill status “Soon” uses the threshold you pick. Security: you can set a 4-digit PIN to lock the app. After going to the background, the lock screen reappears if you return after 5 minutes. Biometric unlock (fingerprint or face) is available when your device supports it and a PIN is set. Changing or removing the PIN requires entering the current PIN first. After 3 failed PIN attempts, an escalating delay is imposed before the next try. Destructive actions (delete month/year data) require the debug toggle when shown. Deleting the last year removes its database without recreating an empty file until you add data or use New Year. Diagnostics may be available for troubleshooting."
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />

@@ -226,6 +226,7 @@ public partial class BillEditorPage : ContentPage
 
 	private void OnRecurringToggled(object? sender, ToggledEventArgs e)
 	{
+		MarkDirty();
 		RecurringOptionsGrid.IsVisible = e.Value;
 		RecurrenceEveryMonthsGrid.IsVisible = e.Value && RecurrenceFrequencyPicker.SelectedIndex == 0;
 		if (!e.Value)

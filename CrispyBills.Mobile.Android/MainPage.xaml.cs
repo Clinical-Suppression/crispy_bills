@@ -24,6 +24,8 @@ public partial class MainPage : ContentPage
 	private string _soonThresholdUnit = BillingService.SoonThresholdUnitDays;
 	private bool _appLockFlowActive;
 	private bool _calendarYearFallbackPromptShown;
+	private string? _lastBillCountWarningKey;
+	private bool _yearSizeWarningShown;
 
 	private int _currentYear = DateTime.Today.Year;
 	private int _currentMonth = DateTime.Today.Month;
@@ -111,7 +113,15 @@ public partial class MainPage : ContentPage
 	{
 		if (_firstAppearLoadTask != null)
 		{
-			await _firstAppearLoadTask;
+			try
+			{
+				await _firstAppearLoadTask;
+			}
+			catch
+			{
+				_firstAppearLoadTask = null;
+				throw;
+			}
 		}
 	}
 
@@ -153,7 +163,7 @@ public partial class MainPage : ContentPage
 					return;
 				}
 
-				var unlocked = unlockTask.Result;
+				var unlocked = await unlockTask;
 				if (!unlocked)
 				{
 					return;
@@ -187,7 +197,7 @@ public partial class MainPage : ContentPage
 			var setupCompleted = await Task.WhenAny(setupTask, Task.Delay(TimeSpan.FromSeconds(45)));
 			if (setupCompleted == setupTask)
 			{
-				_ = setupTask.Result;
+				_ = await setupTask;
 			}
 			else
 			{
@@ -306,6 +316,7 @@ public partial class MainPage : ContentPage
 		var draft = _service.GetEditableBillDraft(_currentMonth, id);
 		if (draft is null)
 		{
+			await DisplayAlert("Bill not found", "This bill may have been removed or changed. Pull down to refresh.", "OK");
 			return;
 		}
 
@@ -389,6 +400,24 @@ public partial class MainPage : ContentPage
 		await _service.LoadYearAsync(year);
 		await ReloadMonthAsync();
 
+		_yearSizeWarningShown = false;
+		if (!_yearSizeWarningShown)
+		{
+			var totalBills = 0;
+			for (var m = 1; m <= 12; m++)
+			{
+				totalBills += _service.GetBills(m).Count;
+			}
+
+			if (totalBills > 1500)
+			{
+				_yearSizeWarningShown = true;
+				await DisplayAlert("Large year",
+					$"This year has {totalBills} bill rows across all months. This is typically caused by many weekly recurring bills. Performance is fine, but saves may take a moment.",
+					"OK");
+			}
+		}
+
 		// Jan 1+ with only prior-year DB: we tried to open today's calendar year but fell back to the latest file on disk.
 		if (!_calendarYearFallbackPromptShown
 		    && requestedYear != _currentYear
@@ -429,6 +458,19 @@ public partial class MainPage : ContentPage
 		UpdateAddButtonText();
 		WarnDuplicateRecurringRules();
 		UpdateRolloverButtonVisibility();
+
+		var monthBillCount = _monthBills.Count;
+		if (monthBillCount > 100)
+		{
+			var key = $"{_currentYear}:{_currentMonth}:count:{monthBillCount}";
+			if (!string.Equals(_lastBillCountWarningKey, key, StringComparison.Ordinal))
+			{
+				_lastBillCountWarningKey = key;
+				await DisplayAlert("Large month",
+					$"This month has {monthBillCount} bills. The app handles this fine, but if this is unexpected, check for duplicate recurring rules or accidental imports.",
+					"OK");
+			}
+		}
 	}
 
 	private void UpdateRolloverButtonVisibility()

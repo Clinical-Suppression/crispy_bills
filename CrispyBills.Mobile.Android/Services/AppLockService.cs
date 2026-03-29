@@ -10,7 +10,7 @@ public sealed class AppLockService(BiometricAuthService biometricAuthService)
     private const string PinSaltKey = "app_lock.pin_salt";
     private const string PromptHandledKey = "app_lock.prompt_handled";
     private const string BiometricEnabledKey = "app_lock.biometric_enabled";
-    private static readonly TimeSpan RelockDelay = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan RelockDelay = TimeSpan.FromMinutes(5);
 
     private bool _sessionUnlocked;
     private DateTimeOffset? _lastBackgroundUtc;

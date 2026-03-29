@@ -163,6 +163,9 @@ public sealed partial class BillingService(IBillingRepository repository, Func<D
         }
     }
 
+    // NOTE: static helper uses DateTime.Today (not injected _today) because it is consumed
+    // directly by BillListItem and MainPage without a BillingService instance in scope.
+    // Refactoring to instance method is a future improvement.
     public static bool IsBillSoon(BillItem bill, int value, string unit)
     {
         if (bill.IsPaid || bill.IsPastDue)
@@ -217,18 +220,26 @@ public sealed partial class BillingService(IBillingRepository repository, Func<D
     /// <summary>Mark or unmark a year as archived in app metadata.</summary>
     public async Task SetYearArchivedAsync(int year, bool archived)
     {
-        var current = (await GetArchivedYearsAsync()).ToHashSet();
-        if (archived)
+        await _stateSemaphore.WaitAsync();
+        try
         {
-            current.Add(year);
-        }
-        else
-        {
-            current.Remove(year);
-        }
+            var current = (await GetArchivedYearsAsync()).ToHashSet();
+            if (archived)
+            {
+                current.Add(year);
+            }
+            else
+            {
+                current.Remove(year);
+            }
 
-        var packed = string.Join(',', current.OrderBy(x => x));
-        await _repository.SetAppMetaAsync(ArchivedYearsMetaKey, packed);
+            var packed = string.Join(',', current.OrderBy(x => x));
+            await _repository.SetAppMetaAsync(ArchivedYearsMetaKey, packed);
+        }
+        finally
+        {
+            _stateSemaphore.Release();
+        }
     }
 
     /// <summary>Find groups of recurring bills that appear duplicated for a month.</summary>
@@ -1763,7 +1774,11 @@ public sealed partial class BillingService(IBillingRepository repository, Func<D
             }
         }
 
-        await SaveAsync();
+        if (report.HasRepairs)
+        {
+            await SaveAsync();
+        }
+
         return report;
         }
         finally

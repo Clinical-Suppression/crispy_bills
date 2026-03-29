@@ -9,6 +9,7 @@ public partial class UnlockPage : ContentPage
     private bool _autoBiometricAttempted;
     private bool _pinUnlockInProgress;
     private bool _allowClose;
+    private int _failedAttempts;
 
     public UnlockPage(AppLockService appLockService)
     {
@@ -99,12 +100,24 @@ public partial class UnlockPage : ContentPage
             var unlocked = await _appLockService.VerifyPinAsync(pin);
             if (!unlocked)
             {
+                _failedAttempts++;
                 PinEntry.Text = string.Empty;
+
+                if (_failedAttempts >= 3)
+                {
+                    var delaySeconds = Math.Min(30, _failedAttempts * 2);
+                    PinEntry.IsEnabled = false;
+                    SetStatus($"Too many attempts. Wait {delaySeconds} seconds.");
+                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+                    PinEntry.IsEnabled = true;
+                }
+
                 SetStatus("That PIN did not match.");
                 PinEntry.Focus();
                 return;
             }
 
+            _failedAttempts = 0;
             await CloseAsync(true);
         }
         finally

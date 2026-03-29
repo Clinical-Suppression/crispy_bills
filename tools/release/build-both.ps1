@@ -14,9 +14,10 @@ if ($Configuration -is [System.Array]) {
     }
 }
 
-Write-Host 'Running clean before build to avoid stale generated files.' -ForegroundColor Yellow
-$windowsProj = Join-Path (Get-WorkspaceRoot) 'CrispyBills.csproj'
-Invoke-LoggedCommand -Command 'dotnet' -Arguments @('clean', $windowsProj, '-c', $Configuration) -WorkingDirectory (Get-WorkspaceRoot)
-Write-Host 'Clean completed. Starting combined Windows + Android build...' -ForegroundColor Cyan
+# Do not run `dotnet clean` here before the combined build. A standalone clean deletes WPF
+# XAML outputs (*.g.cs) under obj; the next plain `dotnet build` can hit CS2001 (MarkupCompile
+# not yet materializing those files). build.ps1 uses `msbuild /t:Rebuild` for Windows so
+# Clean + markup compile + compile run in one graph.
+Write-Host 'Starting combined Windows + Android build...' -ForegroundColor Cyan
 & (Join-Path $PSScriptRoot 'build.ps1') -Target both -Configuration $Configuration
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
