@@ -62,6 +62,30 @@ public sealed partial class BillingService(IBillingRepository repository)
         }
     }
 
+    /// <summary>
+    /// Sets in-memory state to an empty year without loading or creating a database file.
+    /// Use when no persisted years exist (e.g. after deleting the last year).
+    /// </summary>
+    public async Task LoadEmptyYearStateAsync(int year)
+    {
+        await _stateSemaphore.WaitAsync();
+        try
+        {
+            SetEmptyYearStateUnlocked(year);
+        }
+        finally
+        {
+            _stateSemaphore.Release();
+        }
+    }
+
+    private void SetEmptyYearStateUnlocked(int year)
+    {
+        CurrentYear = year;
+        _currentData = new YearData();
+        NormalizeForYear(CurrentYear);
+    }
+
     /// <summary>Return the list of bills for the specified month, ordered for display.</summary>
     /// <param name="month">Month number (1-12).</param>
     public IReadOnlyList<BillItem> GetBills(int month)
@@ -359,6 +383,8 @@ public sealed partial class BillingService(IBillingRepository repository)
                 ReportDiagnostic("DebugDeleteMonth backup", ex.ToString());
             }
 
+            RemoveForwardRecurringInstancesForDeletedMonth(month);
+
             _currentData.BillsByMonth[month].Clear();
             _currentData.IncomeByMonth[month] = 0m;
 
@@ -410,51 +436,20 @@ public sealed partial class BillingService(IBillingRepository repository)
                 ReportDiagnostic("DebugDeleteYear backup", ex.ToString());
             }
 
-            try
-            {
-                if (File.Exists(dbPath))
-                {
-                    File.Delete(dbPath);
-                    ReportDiagnostic("DebugDeleteYear delete", $"Deleted DB file: {dbPath}");
-                }
-                else
-                {
-                    ReportDiagnostic("DebugDeleteYear delete", $"DB file not found for deletion: {dbPath}");
-                }
-                var wal = dbPath + "-wal";
-                var shm = dbPath + "-shm";
-                if (File.Exists(wal))
-                {
-                    File.Delete(wal);
-                    ReportDiagnostic("DebugDeleteYear delete", $"Deleted WAL file: {wal}");
-                }
-                if (File.Exists(shm))
-                {
-                    File.Delete(shm);
-                    ReportDiagnostic("DebugDeleteYear delete", $"Deleted SHM file: {shm}");
-                }
-                var bak = dbPath + ".prewrite.bak";
-                if (File.Exists(bak))
-                {
-                    File.Delete(bak);
-                    ReportDiagnostic("DebugDeleteYear delete", $"Deleted BAK file: {bak}");
-                }
-            }
-            catch (Exception ex)
-            {
-                ReportDiagnostic($"DebugDeleteYear delete files ({year})", ex.ToString());
-            }
+            await _repository.DeletePersistedYearAsync(year);
 
             if (year == CurrentYear)
             {
-                var years = _repository.GetAvailableYears();
-                var fallback = years.FirstOrDefault(y => y != year);
-                if (fallback == 0)
+                var remaining = _repository.GetAvailableYears().OrderBy(y => y).ToList();
+                if (remaining.Count > 0)
                 {
-                    fallback = DateTime.Now.Year;
+                    await LoadYearCoreAsync(remaining[0]);
                 }
-
-                await LoadYearCoreAsync(fallback);
+                else
+                {
+                    // Avoid LoadYearCoreAsync: it would InitializeYearAsync and recreate an empty DB for the same calendar year.
+                    SetEmptyYearStateUnlocked(DateTime.Now.Year);
+                }
             }
 
             return true;
@@ -2331,6 +2326,46 @@ public sealed partial class BillingService(IBillingRepository repository)
         foreach (var m in Enumerable.Range(1, 12))
         {
             _currentData.BillsByMonth[m].RemoveAll(x => x.Id == rootId || x.RecurrenceGroupId == rootId);
+        }
+    }
+
+    /// <summary>Removes anchor and grouped weekly/bi-weekly rows from <paramref name="startMonthInclusive"/> through December.</summary>
+    private void RemoveBillsInGroupFromMonthForward(Guid rootId, int startMonthInclusive)
+    {
+        for (var m = startMonthInclusive; m <= 12; m++)
+        {
+            _currentData.BillsByMonth[m].RemoveAll(x => x.Id == rootId || x.RecurrenceGroupId == rootId);
+        }
+    }
+
+    /// <summary>
+    /// Before clearing a month in <see cref="DeleteMonthAsync"/>, strip forward-propagated recurring rows tied to bills in that month.
+    /// </summary>
+    private void RemoveForwardRecurringInstancesForDeletedMonth(int month)
+    {
+        var snapshot = _currentData.BillsByMonth[month].ToList();
+        var processedWeeklyRoots = new HashSet<Guid>();
+
+        foreach (var bill in snapshot)
+        {
+            if (bill.IsRecurring && IsWeekBased(bill.RecurrenceFrequency))
+            {
+                if (processedWeeklyRoots.Add(bill.Id))
+                {
+                    RemoveBillsInGroupFromMonthForward(bill.Id, month);
+                }
+            }
+            else if (bill.IsRecurring)
+            {
+                for (var m = month + 1; m <= 12; m++)
+                {
+                    _currentData.BillsByMonth[m].RemoveAll(x => x.Id == bill.Id);
+                }
+            }
+            else if (bill.RecurrenceGroupId is { } gid && processedWeeklyRoots.Add(gid))
+            {
+                RemoveBillsInGroupFromMonthForward(gid, month);
+            }
         }
     }
 

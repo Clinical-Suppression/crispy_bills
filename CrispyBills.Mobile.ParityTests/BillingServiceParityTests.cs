@@ -36,11 +36,30 @@ public sealed class BillingServiceParityTests
             IsRecurring = true
         });
 
-        var febBill = service.GetBills(2).Single();
-        var aprBill = service.GetBills(4).Single();
+        Assert.Single(service.GetBills(1));
 
-        Assert.Equal(new DateTime(2026, 2, 28), febBill.DueDate.Date);
-        Assert.Equal(new DateTime(2026, 4, 30), aprBill.DueDate.Date);
+        // Later months are only materialized once that calendar month has begun locally.
+        if (DateTime.Today >= new DateTime(2026, 2, 1))
+        {
+            var febBill = service.GetBills(2).Single();
+            Assert.Equal(new DateTime(2026, 2, 28), febBill.DueDate.Date);
+        }
+
+        if (DateTime.Today >= new DateTime(2026, 4, 1))
+        {
+            var aprBill = service.GetBills(4).Single();
+            Assert.Equal(new DateTime(2026, 4, 30), aprBill.DueDate.Date);
+        }
+
+        for (var m = 2; m <= 12; m++)
+        {
+            foreach (var b in service.GetBills(m))
+            {
+                Assert.Equal(2026, b.DueDate.Year);
+                Assert.Equal(m, b.DueDate.Month);
+                Assert.True(b.DueDate.Day <= DateTime.DaysInMonth(2026, m));
+            }
+        }
     }
 
     [Fact]
@@ -247,6 +266,71 @@ public sealed class BillingServiceParityTests
         Assert.Equal(1800m, verify2027.GetIncome(2));
     }
 
+    [Fact]
+    public async Task DeleteYearAsync_WhenOnlyYearOnDisk_LeavesNoPersistedYearAndEmptyInMemoryState()
+    {
+        var repo = new InMemoryBillingRepository();
+        var service = new BillingService(repo);
+        await service.LoadYearAsync(2026);
+        await service.AddBillAsync(1, new BillItem
+        {
+            Name = "Only",
+            Amount = 1m,
+            Category = "General",
+            DueDate = new DateTime(2026, 1, 1),
+            IsRecurring = false
+        });
+
+        service.SetDebugDestructiveDeletesEnabled(true);
+        var ok = await service.DeleteYearAsync(2026);
+        Assert.True(ok);
+        Assert.Empty(repo.GetAvailableYears());
+        Assert.Empty(service.GetBills(1));
+    }
+
+    [Fact]
+    public async Task DeleteMonthAsync_RemovesForwardMonthlyRecurringWithSameId()
+    {
+        var repo = new InMemoryBillingRepository();
+        var sharedId = Guid.NewGuid();
+        var yearData = new YearData();
+        yearData.BillsByMonth[3].Add(new BillItem
+        {
+            Id = sharedId,
+            Name = "Sub",
+            Amount = 10m,
+            Category = "General",
+            DueDate = new DateTime(2026, 3, 15),
+            IsRecurring = true,
+            RecurrenceFrequency = RecurrenceFrequency.MonthlyInterval,
+            Year = 2026,
+            Month = 3
+        });
+        yearData.BillsByMonth[4].Add(new BillItem
+        {
+            Id = sharedId,
+            Name = "Sub",
+            Amount = 10m,
+            Category = "General",
+            DueDate = new DateTime(2026, 4, 15),
+            IsRecurring = true,
+            RecurrenceFrequency = RecurrenceFrequency.MonthlyInterval,
+            Year = 2026,
+            Month = 4
+        });
+        repo.SetYearDataForTests(2026, yearData);
+
+        var service = new BillingService(repo);
+        await service.LoadYearAsync(2026);
+
+        service.SetDebugDestructiveDeletesEnabled(true);
+        var ok = await service.DeleteMonthAsync(3);
+        Assert.True(ok);
+
+        Assert.Empty(service.GetBills(3));
+        Assert.Empty(service.GetBills(4));
+    }
+
     private sealed class InMemoryBillingRepository : IBillingRepository
     {
         private readonly Dictionary<int, YearData> _store = new();
@@ -293,6 +377,14 @@ public sealed class BillingServiceParityTests
             _store[year] = Clone(data);
             return Task.CompletedTask;
         }
+
+        public Task DeletePersistedYearAsync(int year)
+        {
+            _store.Remove(year);
+            return Task.CompletedTask;
+        }
+
+        public void SetYearDataForTests(int year, YearData data) => _store[year] = data;
 
         public Task<string> LoadNotesAsync()
         {

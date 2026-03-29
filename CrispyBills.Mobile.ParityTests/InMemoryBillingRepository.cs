@@ -19,6 +19,12 @@ public class InMemoryBillingRepository : IBillingRepository
 
     public IReadOnlyList<int> GetAvailableYears() => _store.Keys.OrderBy(x => x).ToList();
 
+    /// <summary>Test helper: replace stored year data without going through the service.</summary>
+    public void SetYearDataForTests(int year, YearData data)
+    {
+        _store[year] = data;
+    }
+
     public Task InitializeYearAsync(int year)
     {
         _store.TryAdd(year, new YearData());
@@ -39,6 +45,12 @@ public class InMemoryBillingRepository : IBillingRepository
     public Task SaveYearAsync(int year, YearData data)
     {
         _store[year] = data;
+        return Task.CompletedTask;
+    }
+
+    public Task DeletePersistedYearAsync(int year)
+    {
+        _store.TryRemove(year, out _);
         return Task.CompletedTask;
     }
 

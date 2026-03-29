@@ -105,7 +105,7 @@ public partial class SettingsPage : ContentPage
 	private async void OnDeleteMonthClicked(object? sender, EventArgs e)
 	{
 		var confirm = await DisplayAlert("Confirm delete month",
-			$"Permanently delete all bills and income for month {_month} in {_year}?",
+			$"Permanently delete all bills and income for month {_month} in {_year}? Forward copies of monthly recurring bills and weekly or bi-weekly series tied to this month (from this month through year-end) are removed too.",
 			"Delete",
 			"Cancel");
 		if (!confirm)

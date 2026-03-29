@@ -369,7 +369,15 @@ public partial class MainPage : ContentPage
 	private async Task LoadYearAsync(int year)
 	{
 		await RefreshAvailableYearsAsync();
-		if (_availableYears.Count > 0 && !_availableYears.Contains(year))
+		if (_availableYears.Count == 0)
+		{
+			_currentYear = year;
+			await _service.LoadEmptyYearStateAsync(_currentYear);
+			await ReloadMonthAsync();
+			return;
+		}
+
+		if (!_availableYears.Contains(year))
 		{
 			year = _availableYears[^1];
 		}
@@ -381,6 +389,7 @@ public partial class MainPage : ContentPage
 
 	private async Task ReloadMonthAsync()
 	{
+		await RefreshAvailableYearsAsync();
 		YearButton.Text = _archivedYears.Contains(_currentYear)
 			? $"{_currentYear} (Archived)"
 			: _currentYear.ToString();
@@ -418,26 +427,21 @@ public partial class MainPage : ContentPage
 	private async Task RefreshAvailableYearsAsync()
 	{
 		_archivedYears = (await _service.GetArchivedYearsAsync()).ToHashSet();
-		_availableYears = _service.GetAvailableYears().OrderBy(x => x).ToList();
-		if (_availableYears.Count == 0)
-		{
-			_availableYears.Add(_currentYear);
-		}
-
-		if (!_availableYears.Contains(_currentYear))
-		{
-			_availableYears.Add(_currentYear);
-			_availableYears = _availableYears.OrderBy(x => x).ToList();
-		}
+		var raw = _service.GetAvailableYears().OrderBy(x => x).ToList();
+		_availableYears = raw;
 
 		if (!_archivedYears.Contains(_currentYear))
 		{
-			_availableYears = _availableYears.Where(y => !_archivedYears.Contains(y)).ToList();
-			if (_availableYears.Count == 0)
-			{
-				_availableYears.Add(_currentYear);
-			}
+			_availableYears = raw.Where(y => !_archivedYears.Contains(y)).ToList();
 		}
+
+		// If everything was filtered out as archived but years still exist on disk, show all for navigation.
+		if (_availableYears.Count == 0 && raw.Count > 0)
+		{
+			_availableYears = raw;
+		}
+
+		// Do not inject _currentYear when no database exists (avoids implying a persisted year that was deleted).
 	}
 
 	private void UpdateCategoryFilter()

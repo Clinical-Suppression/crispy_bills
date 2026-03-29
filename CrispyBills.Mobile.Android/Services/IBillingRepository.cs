@@ -27,6 +27,9 @@ public interface IBillingRepository
     /// <summary>Persist year data to storage.</summary>
     Task SaveYearAsync(int year, YearData data);
 
+    /// <summary>Remove persisted storage for the year (database file or in-memory entry). No-op if nothing exists.</summary>
+    Task DeletePersistedYearAsync(int year);
+
     /// <summary>Load free-form notes stored by the app.</summary>
     Task<string> LoadNotesAsync();
 

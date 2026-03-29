@@ -380,6 +380,34 @@ VALUES ($month, $year, $amount);";
         saveFailure.Throw();
     }
 
+    /// <inheritdoc />
+    public Task DeletePersistedYearAsync(int year)
+    {
+        var dbPath = GetYearDatabasePath(year);
+        try
+        {
+            if (File.Exists(dbPath))
+            {
+                File.Delete(dbPath);
+            }
+
+            foreach (var suffix in new[] { "-wal", "-shm", ".prewrite.bak" })
+            {
+                var p = dbPath + suffix;
+                if (File.Exists(p))
+                {
+                    File.Delete(p);
+                }
+            }
+        }
+        catch
+        {
+            // Caller logs via BillingService diagnostics when needed.
+        }
+
+        return Task.CompletedTask;
+    }
+
     /// <summary>Load the free-form notes string from the notes database.</summary>
     public async Task<string> LoadNotesAsync()
     {

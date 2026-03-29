@@ -49,6 +49,10 @@
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
+            <Label Text="Recurring rows for later months are created when each calendar month begins in your local time zone (the app does not pre-fill months that have not started yet). Opening the app or loading the year after a new month starts will add those line items."
+                   FontSize="14"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
 
             <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
 
@@ -89,7 +93,7 @@
             <BoxView HeightRequest="1" Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource DividerOnDark}}" Margin="0,8" />
 
             <Label Text="Settings" FontAttributes="Bold" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource MidnightBlue}, Dark=White}" />
-            <Label Text="Theme and language affect colors and formats. Bill status “Soon” uses the threshold you pick. Security options include PIN, biometric unlock where supported, and app lock after idle time. Destructive actions (delete month/year data) require the debug toggle when shown. Diagnostics may be available for troubleshooting."
+            <Label Text="Theme and language affect colors and formats. Bill status “Soon” uses the threshold you pick. Security options include PIN, biometric unlock where supported, and app lock after idle time. Destructive actions (delete month/year data) require the debug toggle when shown. Deleting the last year removes its database without recreating an empty file until you add data or use New Year. Diagnostics may be available for troubleshooting."
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
