@@ -27,10 +27,25 @@ Wizard parameters (non-exhaustive; see `wizard.ps1` for the full `param` block)
 Local artifact folders (repo root; gitignored)
 
 - **`artifacts/logs/`** — wizard progress JSON, publish summaries, release notes, manifests, `build.lock`, harness runs under `wizard-tests/`.
-- **`artifacts/releases/<version>/windows`** and **`.../mobile`** — outputs from `release.ps1` / publish flow (versioned exe + apk).
-- **`artifacts/ci/`** — GitHub Actions `release-build.yml` publishes desktop/Android builds here (separate from versioned releases).
+- **`artifacts/build/windows/<Configuration>/`** and **`artifacts/build/android/<Configuration>/`** — after `build.ps1` / wizard build tasks, a fresh mirror of each project’s `bin` output (runnable copy; same config as the build).
+- **`artifacts/releases/<version>/windows`** and **`.../mobile`** — shipping outputs from `release.ps1` / publish flow (versioned self-contained exe + apk).
+- **`artifacts/publish/ci/win-x64/`** and **`.../net9.0-android/`** — GitHub Actions `release-build.yml` `dotnet publish -o` targets (CI artifacts upload).
+- **`artifacts/local/from-publish-misc/`** — only used by `migrate-publish-to-artifacts.ps1` for odd leftover paths under legacy `publish/`.
 
 Older checkouts may still have a legacy **`publish/`** tree; current scripts write to **`artifacts/`** only. `recover-missing-release.ps1` still looks under **`publish/releases`** and **`publish/logs`** when recovering from an old layout.
+
+**Migrating old paths into the current layout**
+
+- **`migrate-publish-to-artifacts.ps1`** — repo-root **`publish/`** → **`artifacts/logs`**, **`artifacts/releases`**, **`artifacts/build/.../Debug`** (see script header).
+- **`migrate-artifacts-to-current-layout.ps1`** — moves stale trees already under **`artifacts/`**:
+  - **`artifacts/ci/*`** → **`artifacts/publish/ci/*`**
+  - **`artifacts/local/windows-debug`** → **`artifacts/build/windows/Debug`**
+  - **`artifacts/local/android-debug`** → **`artifacts/build/android/Debug`**
+  - **`artifacts/local/net9.0-android`** → **`artifacts/publish/ci/net9.0-android`**
+  - other **`artifacts/local/<name>`** → **`artifacts/local/legacy-unclassified/<name>`**
+  - unless **`-SkipPublishFolder`**, also runs **`migrate-publish-to-artifacts.ps1`** when repo-root **`publish/`** exists.
+
+Use **`-DryRun`** first on either script. Example: `pwsh -File tools/release/migrate-artifacts-to-current-layout.ps1 -DryRun`
 
 Progress and diagnostics
 

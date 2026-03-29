@@ -222,8 +222,14 @@ recommended commit message.
     if (-not [string]::IsNullOrWhiteSpace($Body)) { $commitArgs += @('-m', $Body) }
     if ($isBreaking) { $commitArgs += @('-m', ("BREAKING CHANGE: {0}" -f $breakingNote)) }
 
-    $null = Invoke-GitMergedOutput -Arguments $commitArgs
-    if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
+    $commitOutput = Invoke-GitMergedOutput -Arguments $commitArgs
+    if ($LASTEXITCODE -ne 0) {
+        $detail = ($commitOutput | Out-String).Trim()
+        if ([string]::IsNullOrWhiteSpace($detail)) {
+            throw "git commit failed (exit code $LASTEXITCODE)."
+        }
+        throw "git commit failed (exit code $LASTEXITCODE): $detail"
+    }
 
     Write-Host 'Conventional commit created successfully.' -ForegroundColor Green
     exit 0

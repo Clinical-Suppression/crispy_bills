@@ -67,7 +67,7 @@ dotnet build '.\CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj' -f
 ```powershell
 $jdkPath=(Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Programs\OpenJDK') -Directory | Sort-Object Name -Descending | Select-Object -First 1).FullName
 $sdkPath=Join-Path $env:LOCALAPPDATA 'Android\Sdk'
-dotnet publish '.\CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -o '.\artifacts\local\net9.0-android' -p:AndroidPackageFormats=apk -p:JavaSdkDirectory="$jdkPath" -p:AndroidSdkDirectory="$sdkPath"
+dotnet publish '.\CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -o '.\artifacts\publish\ci\net9.0-android' -p:AndroidPackageFormats=apk -p:JavaSdkDirectory="$jdkPath" -p:AndroidSdkDirectory="$sdkPath"
 ```
 
 Other target frameworks in the same project (for example `net9.0-ios` on a Mac) follow the usual `dotnet build` / `dotnet publish` `-f` workflow for that platform.

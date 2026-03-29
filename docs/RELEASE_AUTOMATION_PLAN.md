@@ -42,13 +42,22 @@ Scripts are under tools/release.
 7. publish.ps1
 8. wrappers for windows/mobile/both build/release/publish entrypoints
 
+### Artifact directory layout
+
+All under repo-root **`artifacts/`** (gitignored). Helpers live in `tools/release/common.ps1`.
+
+1. **`logs/`** — wizard progress JSON, release notes, publish summaries, artifact manifests, `build.lock`, harness output.
+2. **`build/windows/<Configuration>/`** and **`build/android/<Configuration>/`** — after `build.ps1`, a full mirror of each app’s `bin` output for that configuration (local compile artifacts).
+3. **`releases/<version>/windows/`** and **`releases/<version>/mobile/`** — versioned shipping outputs from `release.ps1` (self-contained desktop exe, renamed APK).
+4. **`publish/ci/win-x64/`** and **`publish/ci/net9.0-android/`** — `dotnet publish -o` targets used by GitHub Actions `release-build.yml` (CI-uploaded assets).
+
 ## Publish Flow
 
 1. Validate git and GitHub auth preconditions.
 2. Compute next semantic version from Conventional Commit history.
 3. Generate release notes and update CHANGELOG.md.
 4. If working tree is dirty on real publish, the wizard can gather pre-publish commit choices first and pass them into `publish.ps1`; if those choices were not supplied, `publish.ps1` prompts for commit type, optional scope, and description.
-5. Produce release artifacts.
+5. Produce release artifacts under `artifacts/releases/<version>/...`.
 6. Update VERSION file.
 7. Commit release metadata.
 8. Create tag.

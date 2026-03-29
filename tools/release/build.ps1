@@ -135,6 +135,7 @@ try {
         }
     }
 
+    Sync-BuildOutputsToArtifacts -Target $Target -Configuration $Configuration
     Write-Host "Build completed. target=$Target configuration=$Configuration"
 }
 finally {

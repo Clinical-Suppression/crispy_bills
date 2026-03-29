@@ -34,7 +34,7 @@ jobs:
       - name: Publish desktop EXE (Release)
         shell: pwsh
         run: |
-          dotnet publish './CrispyBills.csproj' -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:EnableCompressionInSingleFile=true /p:PublishReadyToRun=true -o './artifacts/ci/win-x64'
+          dotnet publish './CrispyBills.csproj' -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:EnableCompressionInSingleFile=true /p:PublishReadyToRun=true -o './artifacts/publish/ci/win-x64'
 
       - name: Prepare Android signing keystore (optional)
         id: android_signing
@@ -56,7 +56,7 @@ jobs:
         if: steps.android_signing.outputs.enabled != 'true'
         shell: pwsh
         run: |
-          dotnet publish './CrispyBills.Mobile.Android/CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -o './artifacts/ci/net9.0-android' -p:AndroidPackageFormats=apk
+          dotnet publish './CrispyBills.Mobile.Android/CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -o './artifacts/publish/ci/net9.0-android' -p:AndroidPackageFormats=apk
 
       - name: Publish Android APK + AAB (signed)
         if: steps.android_signing.outputs.enabled == 'true'
@@ -66,15 +66,15 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          dotnet publish './CrispyBills.Mobile.Android/CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -o './artifacts/ci/net9.0-android' -p:AndroidPackageFormats="apk;aab" -p:AndroidKeyStore=true -p:AndroidSigningKeyStore='./signing/release.keystore' -p:AndroidSigningStorePass="$env:ANDROID_KEYSTORE_PASSWORD" -p:AndroidSigningKeyAlias="$env:ANDROID_KEY_ALIAS" -p:AndroidSigningKeyPass="$env:ANDROID_KEY_PASSWORD"
+          dotnet publish './CrispyBills.Mobile.Android/CrispyBills.Mobile.Android.csproj' -f net9.0-android -c Release -o './artifacts/publish/ci/net9.0-android' -p:AndroidPackageFormats="apk;aab" -p:AndroidKeyStore=true -p:AndroidSigningKeyStore='./signing/release.keystore' -p:AndroidSigningStorePass="$env:ANDROID_KEYSTORE_PASSWORD" -p:AndroidSigningKeyAlias="$env:ANDROID_KEY_ALIAS" -p:AndroidSigningKeyPass="$env:ANDROID_KEY_PASSWORD"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: crispybills-release-artifacts
           path: |
-            artifacts/ci/win-x64/**
-            artifacts/ci/net9.0-android/**
+            artifacts/publish/ci/win-x64/**
+            artifacts/publish/ci/net9.0-android/**
           if-no-files-found: error
 
       - name: Publish GitHub Release (disabled; local publish is source of truth)

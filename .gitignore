@@ -1,7 +1,7 @@
 # Build outputs
 bin/
 obj/
-# Local release wizard output (logs, versioned exe/apk drops). CI workflow uses artifacts/ci/...
+# Local release wizard output: logs, build mirrors, CI publish staging, versioned releases (see tools/release/common.ps1).
 artifacts/
 # Legacy wizard output location (pre-artifacts/); kept ignored so old folders are not committed
 publish/

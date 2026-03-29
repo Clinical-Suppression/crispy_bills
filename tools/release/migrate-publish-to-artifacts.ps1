@@ -6,8 +6,8 @@ One-time (or safe repeat) migration: merge legacy repo-root publish/ into artifa
 Maps:
   publish/logs/          -> artifacts/logs/
   publish/releases/      -> artifacts/releases/
-  publish/debug-win/     -> artifacts/local/windows-debug/
-  publish/debug-android/ -> artifacts/local/android-debug/
+  publish/debug-win/     -> artifacts/build/windows/Debug/
+  publish/debug-android/ -> artifacts/build/android/Debug/
 
 Name conflicts in the destination: the incoming file is renamed with a _from_publish_<timestamp> suffix
 before move. Dry-run lists actions without moving.
@@ -40,9 +40,9 @@ if (-not (Test-Path -LiteralPath $publishRoot)) {
 
 $destLogs = Get-ArtifactLogsRoot
 $destReleases = Get-ArtifactReleasesRoot
-$destLocal = Join-Path (Get-ArtifactsRoot) 'local'
-$destWinDebug = Join-Path $destLocal 'windows-debug'
-$destAndroidDebug = Join-Path $destLocal 'android-debug'
+$destWinDebug = Get-ArtifactBuildWindowsDir -Configuration Debug
+$destAndroidDebug = Get-ArtifactBuildAndroidDir -Configuration Debug
+$miscRoot = Join-Path (Get-ArtifactsRoot) 'local'
 
 function Ensure-Dir {
     param([string]$Path)
@@ -152,7 +152,7 @@ Write-Host "Migrating publish/ -> artifacts/ (DryRun=$DryRun)" -ForegroundColor 
 Ensure-Dir -Path (Get-ArtifactsRoot)
 Ensure-Dir -Path $destLogs
 Ensure-Dir -Path $destReleases
-Ensure-Dir -Path $destLocal
+Ensure-Dir -Path (Get-ArtifactBuildRoot)
 
 Move-FolderContents -SourceDir (Join-Path $publishRoot 'logs') -DestDir $destLogs -Label 'Logs'
 Move-FolderContents -SourceDir (Join-Path $publishRoot 'releases') -DestDir $destReleases -Label 'Releases'
@@ -164,8 +164,8 @@ $extras = @(Get-ChildItem -LiteralPath $publishRoot -Force -ErrorAction Silently
     $_.Name -notin @('logs', 'releases', 'debug-win', 'debug-android')
 })
 if ($extras.Count -gt 0) {
-    $misc = Join-Path $destLocal 'from-publish-misc'
-    Write-Host "`n=== Other items under publish/ -> local/from-publish-misc ===" -ForegroundColor Cyan
+    $misc = Join-Path $miscRoot 'from-publish-misc'
+    Write-Host "`n=== Other items under publish/ -> artifacts/local/from-publish-misc ===" -ForegroundColor Cyan
     foreach ($ex in $extras) {
         $target = Join-Path $misc $ex.Name
         Write-Host ("  {0} -> {1}" -f $ex.FullName, $target)

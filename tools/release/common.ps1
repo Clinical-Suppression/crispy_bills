@@ -76,7 +76,15 @@ function Get-WorkspaceRoot {
     return $resolved.Path
 }
 
-<# .SYNOPSIS Root folder for wizard/publish automation output (logs, versioned release drops). Gitignored. Not the same as dotnet publish -o. #>
+<# .SYNOPSIS Root for automation output (logs, dev build mirrors, CI publish staging, versioned releases). Gitignored.
+
+Layout (all under <repo>/artifacts/):
+  logs/                      — wizard JSON, manifests, release notes, build.lock, harness
+  build/windows/<Config>/    — mirror of CrispyBills bin output after build.ps1
+  build/android/<Config>/    — mirror of MAUI Android bin output after build.ps1
+  releases/<version>/      — shipping exe/apk from release.ps1 (windows/ + mobile/)
+  publish/ci/               — dotnet publish -o targets for GitHub Actions (win-x64, net9.0-android)
+#>
 function Get-ArtifactsRoot {
     return Join-Path (Get-WorkspaceRoot) 'artifacts'
 }
@@ -89,6 +97,35 @@ function Get-ArtifactLogsRoot {
 <# .SYNOPSIS Versioned release build output root (per semver or wizard run id). #>
 function Get-ArtifactReleasesRoot {
     return Join-Path (Get-ArtifactsRoot) 'releases'
+}
+
+<# .SYNOPSIS Mirrored compile output from build.ps1 (not dotnet publish). #>
+function Get-ArtifactBuildRoot {
+    return Join-Path (Get-ArtifactsRoot) 'build'
+}
+
+<# .SYNOPSIS Mirrored WPF bin output: artifacts/build/windows/<Configuration> #>
+function Get-ArtifactBuildWindowsDir {
+    param([string]$Configuration = 'Debug')
+
+    return Join-Path (Join-Path (Get-ArtifactBuildRoot) 'windows') $Configuration
+}
+
+<# .SYNOPSIS Mirrored Android bin output: artifacts/build/android/<Configuration> #>
+function Get-ArtifactBuildAndroidDir {
+    param([string]$Configuration = 'Debug')
+
+    return Join-Path (Join-Path (Get-ArtifactBuildRoot) 'android') $Configuration
+}
+
+<# .SYNOPSIS Staged dotnet publish outputs (CI, or ad-hoc publish -o under repo). #>
+function Get-ArtifactPublishRoot {
+    return Join-Path (Get-ArtifactsRoot) 'publish'
+}
+
+<# .SYNOPSIS CI workflow publish output root (release-build.yml). #>
+function Get-ArtifactPublishCiRoot {
+    return Join-Path (Get-ArtifactPublishRoot) 'ci'
 }
 
 <# .SYNOPSIS First non-empty path from a scalar or array; $null if none. #>
@@ -317,31 +354,54 @@ function Get-JavaAndAndroidSdk {
     }
 }
 
-<# .SYNOPSIS Run git with stderr merged into the output stream.
+<# .SYNOPSIS Run git and return stdout text; stderr is captured separately so LF/CRLF
+warnings never enter PowerShell's error stream (avoids spurious terminating errors on PS 7+).
 
-PowerShell 7.4+ sets $PSNativeCommandUseErrorActionPreference such that native
-commands writing to stderr can throw when $ErrorActionPreference is Stop. Git
-emits LF/CRLF normalization warnings to stderr even on success; suppressing
-that behavior avoids spurious failures (see Invoke-GitMergedOutput).
+On non-zero exit, returns stdout and stderr combined for callers that throw (see Get-GitOutput).
 #>
 function Invoke-GitMergedOutput {
     param(
         [Parameter(Mandatory = $true)][string[]]$Arguments
     )
 
-    $prevNative = $null
     if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
-        $prevNative = $PSNativeCommandUseErrorActionPreference
         $PSNativeCommandUseErrorActionPreference = $false
     }
 
+    $gitApp = Get-Command git -CommandType Application -ErrorAction SilentlyContinue
+    if (-not $gitApp) {
+        $gitApp = Get-Command git -ErrorAction Stop
+    }
+
+    $gitArgs = @('-c', 'core.autocrlf=false') + $Arguments
+    $stdoutPath = [System.IO.Path]::GetTempFileName()
+    $stderrPath = [System.IO.Path]::GetTempFileName()
+    $cwd = (Get-Location).Path
+    # Single quoted argument string — Start-Process + array is unreliable for multi-word -m values on Windows.
+    $quotedArguments = @($gitArgs | ForEach-Object { ConvertTo-CommandLineArgument -Value ([string]$_) }) -join ' '
+
     try {
-        return & git @Arguments 2>&1
+        $proc = Start-Process -FilePath $gitApp.Source -ArgumentList $quotedArguments -WorkingDirectory $cwd `
+            -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        $code = 0
+        if ($null -ne $proc.ExitCode) { $code = [int]$proc.ExitCode }
+        $global:LASTEXITCODE = $code
+
+        $stdoutText = if (Test-Path -LiteralPath $stdoutPath) { (Get-Content -LiteralPath $stdoutPath -Raw -ErrorAction SilentlyContinue) } else { '' }
+        if ($null -eq $stdoutText) { $stdoutText = '' }
+        $stderrText = if (Test-Path -LiteralPath $stderrPath) { (Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue) } else { '' }
+        if ($null -eq $stderrText) { $stderrText = '' }
+
+        if ($code -ne 0) {
+            $parts = @($stdoutText, $stderrText) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+            return ($parts -join "`n")
+        }
+
+        return $stdoutText
     }
     finally {
-        if ($null -ne $prevNative) {
-            $PSNativeCommandUseErrorActionPreference = $prevNative
-        }
+        Remove-Item -LiteralPath $stdoutPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -376,6 +436,53 @@ function Ensure-Directory {
 
     if (-not (Test-Path $Path)) {
         New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    }
+}
+
+<# .SYNOPSIS Replace $DestDir with a recursive copy of $SourceDir (fresh mirror). #>
+function Sync-DirectoryMirror {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceDir,
+        [Parameter(Mandatory = $true)][string]$DestDir,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    if (-not (Test-Path -LiteralPath $SourceDir)) {
+        Write-Warning "Skipping artifact mirror ($Label): missing source $SourceDir"
+        return
+    }
+
+    $parent = Split-Path -Parent $DestDir
+    if (-not [string]::IsNullOrWhiteSpace($parent)) {
+        Ensure-Directory -Path $parent
+    }
+
+    if (Test-Path -LiteralPath $DestDir) {
+        Remove-Item -LiteralPath $DestDir -Recurse -Force -ErrorAction Stop
+    }
+
+    Copy-Item -LiteralPath $SourceDir -Destination $DestDir -Recurse -Force -ErrorAction Stop
+    Write-Host "Artifacts: $Label → $DestDir" -ForegroundColor Cyan
+}
+
+<# .SYNOPSIS After dotnet build/msbuild, mirror bin folders into artifacts/build. #>
+function Sync-BuildOutputsToArtifacts {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet('windows', 'mobile', 'both')][string]$Target,
+        [string]$Configuration = 'Debug'
+    )
+
+    $root = Get-WorkspaceRoot
+    # CrispyBills.csproj lives at repo root; output is bin\<Configuration>\net8.0-windows (not CrispyBills\bin\...).
+    $windowsBin = Join-Path $root "bin\$Configuration\net8.0-windows"
+    $androidBin = Join-Path $root "CrispyBills.Mobile.Android\bin\$Configuration\net9.0-android"
+
+    if ($Target -in @('windows', 'both')) {
+        Sync-DirectoryMirror -SourceDir $windowsBin -DestDir (Get-ArtifactBuildWindowsDir -Configuration $Configuration) -Label 'Windows build'
+    }
+
+    if ($Target -in @('mobile', 'both')) {
+        Sync-DirectoryMirror -SourceDir $androidBin -DestDir (Get-ArtifactBuildAndroidDir -Configuration $Configuration) -Label 'Android build'
     }
 }
 
