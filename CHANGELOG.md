@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this project will be documented in this file.
 
@@ -100,8 +100,8 @@ All notable changes to this project will be documented in this file.
 - fix(release): pass named parameters and avoid undefined (8ff0072)
 
 ### Documentation
-- docs: complete documentation sweep — add summaries, headers, python docstrings, and template READMEs (2a9b8b7)
-- docs: documentation pass — add summaries and release helper comments (7a3a6ad)
+- docs: complete documentation sweep â€” add summaries, headers, python docstrings, and template READMEs (2a9b8b7)
+- docs: documentation pass â€” add summaries and release helper comments (7a3a6ad)
 
 ## 1.6.0 - 2026-03-22
 
@@ -110,3 +110,31 @@ All notable changes to this project will be documented in this file.
 
 ### Features
 - feat: fixes to build/release/publish wizard (546dd20)
+
+## 1.7.0 - 2026-03-28
+
+### Documentation
+- docs: update documentation based on recent changes (ecc8c13)
+- docs: update documentation based on recent changes (f8207c1)
+- docs: update documentation based on recent changes (a84d628)
+- docs: update documentation based on recent changes (49b1d32)
+- docs: docs: update documentation based on recent changes (e3b5b5b)
+
+### Tests
+- test: add/update tests for changed behavior (3928d6e)
+- test: add/update tests for changed behavior (8dc8c5e)
+- test: add/update tests for changed behavior (6e30f88)
+
+### Features
+- feat: implement new behavior and improvements (d8c33cf)
+- feat: implement new behavior and improvements (480a8d5)
+- feat: implement new behavior and improvements (fa53a5e)
+- feat: feat: implement new behavior and improvements (efca9f5)
+
+### Chores
+- chore: implement new behavior and improvements (b4f9358)
+- chore: implement new behavior and improvements (9f4fb13)
+
+### Fixes
+- fix: various UX/Ui improvements and bugfixes (b40ea46)
+
