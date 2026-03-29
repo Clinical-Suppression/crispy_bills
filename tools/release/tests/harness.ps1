@@ -60,7 +60,7 @@ function Get-Classification {
 
 $releaseRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $repoRoot = (Resolve-Path (Join-Path $releaseRoot '..\..')).Path
-$runRoot = Join-Path $repoRoot 'publish\logs\wizard-tests'
+$runRoot = Join-Path $repoRoot 'artifacts\logs\wizard-tests'
 Ensure-Directory -Path $runRoot
 
 $timestamp = (Get-Date).ToString('yyyyMMdd-HHmmss')

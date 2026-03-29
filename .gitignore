@@ -1,6 +1,9 @@
 # Build outputs
 bin/
 obj/
+# Local release wizard output (logs, versioned exe/apk drops). CI workflow uses artifacts/ci/...
+artifacts/
+# Legacy wizard output location (pre-artifacts/); kept ignored so old folders are not committed
 publish/
 
 # Visual Studio / VS Code

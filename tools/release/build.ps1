@@ -35,11 +35,12 @@ Reset-TaskDiagnostics
 $root = Get-WorkspaceRoot
 $windowsProject = Join-Path $root 'CrispyBills.csproj'
 $androidProject = Join-Path $root 'CrispyBills.Mobile.Android\CrispyBills.Mobile.Android.csproj'
-$buildLockPath = Join-Path $root 'publish\logs\build.lock'
+$artifactLogsRoot = Get-ArtifactLogsRoot
+$buildLockPath = Join-Path $artifactLogsRoot 'build.lock'
 $lockAcquired = $false
 
 function Acquire-BuildLock {
-    Ensure-Directory -Path (Join-Path $root 'publish\logs')
+    Ensure-Directory -Path (Get-ArtifactLogsRoot)
 
     $lockContent = "pid=$PID`ntarget=$Target`nconfiguration=$Configuration`ntime=$([DateTime]::UtcNow.ToString('o'))"
     try {

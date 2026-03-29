@@ -401,7 +401,7 @@ function Select-CommitTypeAndDescription {
 }
 
 $root = Get-WorkspaceRoot
-$logsRoot = Join-Path $root 'publish\logs'
+$logsRoot = Get-ArtifactLogsRoot
 Ensure-Directory -Path $logsRoot
 
 # Ensure local tag view matches origin before semantic version calculation.

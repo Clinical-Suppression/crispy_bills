@@ -12,7 +12,7 @@ Primary scenarios executed (isolated `preflight.ps1` selection):
 - `prompt-05` (`StubMode=prompt`, timeout 8s)
 - `fail-05` (`StubMode=fail`, timeout 20s)
 
-Artifacts are under `publish/logs/wizard-tests/<scenario>-<timestamp>/`.
+Artifacts are under `artifacts/logs/wizard-tests/<scenario>-<timestamp>/`.
 
 Additional thorough suite executed:
 

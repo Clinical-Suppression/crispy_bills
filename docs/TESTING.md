@@ -97,7 +97,7 @@ Verify:
 1. Preflight reports auth, remote, and branch checks passed.
 2. Artifact paths are printed for both Windows EXE and Android APK.
 3. Publish task diagnostics summary appears with warning/error counts.
-4. Artifact manifest file exists under publish/logs.
+4. Artifact manifest file exists under artifacts/logs.
 
 Then run:
 
@@ -109,7 +109,7 @@ Post-publish checks:
 
 1. A new release tag exists on origin.
 2. GitHub release exists for that tag.
-3. publish/logs contains release notes, publish summary, and artifact manifest files.
+3. artifacts/logs contains release notes, publish summary, and artifact manifest files.
 4. If publish fails, terminal output includes full multi-line root-failure details.
 
 If publish partially succeeds (remote push completed but release is missing), use the recovery flow in [docs/RELEASE_AUTOMATION_PLAN.md](RELEASE_AUTOMATION_PLAN.md).
@@ -125,7 +125,7 @@ Automated checks for `tools/release/wizard.ps1` live beside the script.
 Invoke-Pester -Path "tools\release\wizard.tests.ps1"
 ```
 
-**Harness** — [tools/release/tests/harness.ps1](../tools/release/tests/harness.ps1) runs a copy of the wizard against stubbed release scripts under `publish\logs\wizard-tests\`, with scripted stdin and a timeout watchdog (exit `124` if the run exceeds `-TimeoutSeconds`). Use `-StubMode` (`heartbeat`, `quiet`, `prompt`, `fail`) to vary the `preflight.ps1` stub; use `-NoCommit` for the no-commit stdin path. See [tools/release/README.md](../tools/release/README.md) for parameter summary.
+**Harness** — [tools/release/tests/harness.ps1](../tools/release/tests/harness.ps1) runs a copy of the wizard against stubbed release scripts under `artifacts\logs\wizard-tests\`, with scripted stdin and a timeout watchdog (exit `124` if the run exceeds `-TimeoutSeconds`). Use `-StubMode` (`heartbeat`, `quiet`, `prompt`, `fail`) to vary the `preflight.ps1` stub; use `-NoCommit` for the no-commit stdin path. See [tools/release/README.md](../tools/release/README.md) for parameter summary.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "tools\release\tests\harness.ps1" -StubMode heartbeat -TimeoutSeconds 60

@@ -54,7 +54,7 @@ Scripts are under tools/release.
 8. Create tag.
 9. Push branch and tag atomically in one git push operation.
 10. Create GitHub release and upload artifacts.
-11. Write publish summary logs under publish/logs.
+11. Write publish summary logs under artifacts/logs.
 
 ## Safety Features
 
@@ -101,8 +101,8 @@ If publish fails after remote push but before release completion:
 2. git checkout main
 3. git pull --ff-only
 4. If the release tag is missing, create and push it pointing to the pushed release commit.
-5. Create the GitHub release for that tag using the generated release notes file in publish/logs.
-6. Upload generated assets from `publish/releases/<version>/...` if they are missing on the release.
+5. Create the GitHub release for that tag using the generated release notes file in artifacts/logs.
+6. Upload generated assets from `artifacts/releases/<version>/...` if they are missing on the release (legacy trees may still use `publish/releases/...`).
 
 When invoked from the release wizard, this recovery script is run first in advisory `-DryRun` mode. A warning from this check should be investigated, but it is not treated as a blocking publish failure by itself.
 

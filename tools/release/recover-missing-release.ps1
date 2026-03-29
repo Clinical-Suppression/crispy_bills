@@ -70,24 +70,25 @@ function Resolve-ArtifactPaths {
     }
 
     $version = $ReleaseTag.Substring(1)
-    $releaseRoot = Join-Path $WorkspaceRoot (Join-Path 'publish\releases' $version)
-
-    $windowsExe = Join-Path $releaseRoot (Join-Path 'windows' ("crispybills-" + $ReleaseTag + '-win-x64.exe'))
-    $androidApk = Join-Path $releaseRoot (Join-Path 'mobile' ("crispybills-" + $ReleaseTag + '-android.apk'))
+    $releaseRootNew = Join-Path (Join-Path $WorkspaceRoot 'artifacts\releases') $version
+    $releaseRootLegacy = Join-Path (Join-Path $WorkspaceRoot 'publish\releases') $version
 
     $resolved = New-Object System.Collections.Generic.List[string]
-    if (Test-Path $windowsExe) { $resolved.Add($windowsExe) }
-    if (Test-Path $androidApk) { $resolved.Add($androidApk) }
-
-    if ($resolved.Count -eq 0) {
-        throw "No known release artifacts were found for $ReleaseTag under $releaseRoot"
+    foreach ($relRoot in @($releaseRootNew, $releaseRootLegacy)) {
+        $windowsExe = Join-Path (Join-Path $relRoot 'windows') ("crispybills-" + $ReleaseTag + '-win-x64.exe')
+        $androidApk = Join-Path (Join-Path $relRoot 'mobile') ("crispybills-" + $ReleaseTag + '-android.apk')
+        if (Test-Path -LiteralPath $windowsExe) { $resolved.Add($windowsExe) }
+        if (Test-Path -LiteralPath $androidApk) { $resolved.Add($androidApk) }
     }
 
-    return @($resolved)
+    if ($resolved.Count -eq 0) {
+        throw "No known release artifacts were found for $ReleaseTag under artifacts/releases/$version or publish/releases/$version (legacy)"
+    }
+
+    return @($resolved | Sort-Object -Unique)
 }
 
 $root = Get-WorkspaceRoot
-$logsRoot = Join-Path $root 'publish\logs'
 
 $gh = Get-Command gh -ErrorAction SilentlyContinue
 if (-not $gh) {
@@ -111,9 +112,16 @@ if (Test-GhReleaseExists -GhCommand $gh.Source -ReleaseTag $Tag -WorkingDirector
     return
 }
 
-$notesPath = Join-Path $logsRoot ("release-notes-" + $Tag + '.md')
+$notesFileName = "release-notes-" + $Tag + '.md'
+$notesPath = Join-Path (Join-Path $root 'artifacts\logs') $notesFileName
 if (-not (Test-Path $notesPath)) {
-    throw "Release notes file not found for ${Tag}: $notesPath"
+    $legacyNotes = Join-Path (Join-Path $root 'publish\logs') $notesFileName
+    if (Test-Path $legacyNotes) {
+        $notesPath = $legacyNotes
+    }
+    else {
+        throw "Release notes file not found for ${Tag}: tried artifacts/logs and publish/logs"
+    }
 }
 
 $artifacts = Resolve-ArtifactPaths -WorkspaceRoot $root -ReleaseTag $Tag

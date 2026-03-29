@@ -6,6 +6,12 @@ Shared helpers for release tooling (wizard, version, preflight, publish). No int
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# PS 7.4+: stderr from native executables can become terminating errors when $ErrorActionPreference is Stop.
+# Git prints LF/CRLF normalization hints to stderr even on success; keep native stderr non-terminating for this session.
+if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
+
 $script:TaskWarningCount = 0
 $script:TaskErrorCount = 0
 
@@ -68,6 +74,21 @@ function Get-WorkspaceRoot {
         $resolved = $resolved[0]
     }
     return $resolved.Path
+}
+
+<# .SYNOPSIS Root folder for wizard/publish automation output (logs, versioned release drops). Gitignored. Not the same as dotnet publish -o. #>
+function Get-ArtifactsRoot {
+    return Join-Path (Get-WorkspaceRoot) 'artifacts'
+}
+
+<# .SYNOPSIS Logs under artifacts (wizard JSON, release notes, publish summaries, binlogs). #>
+function Get-ArtifactLogsRoot {
+    return Join-Path (Get-ArtifactsRoot) 'logs'
+}
+
+<# .SYNOPSIS Versioned release build output root (per semver or wizard run id). #>
+function Get-ArtifactReleasesRoot {
+    return Join-Path (Get-ArtifactsRoot) 'releases'
 }
 
 <# .SYNOPSIS First non-empty path from a scalar or array; $null if none. #>
@@ -358,15 +379,15 @@ function Ensure-Directory {
     }
 }
 
-<# .SYNOPSIS Paths for a release version (creates publish dirs as needed). #>
+<# .SYNOPSIS Paths for a release version (creates artifacts/logs and artifacts/releases/<Version> as needed). #>
 function Get-ReleasePaths {
     param(
         [Parameter(Mandatory = $true)][string]$Version
     )
 
     $root = Get-WorkspaceRoot
-    $releaseRoot = Join-Path $root (Join-Path 'publish\releases' $Version)
-    $logsRoot = Join-Path $root 'publish\logs'
+    $releaseRoot = Join-Path (Get-ArtifactReleasesRoot) $Version
+    $logsRoot = Get-ArtifactLogsRoot
 
     Ensure-Directory -Path $releaseRoot
     Ensure-Directory -Path $logsRoot
@@ -516,7 +537,7 @@ function Write-WizardSummary {
     Write-Host ("Run status: {0} | Duration: {1} | RunId: {2}" -f $RunState.Status, $overallDuration, $RunState.RunId) -ForegroundColor Cyan
 }
 
-<# .SYNOPSIS Write wizard run-state JSON under publish/logs; return path. #>
+<# .SYNOPSIS Write wizard run-state JSON under artifacts/logs; return path. #>
 function Write-WizardProgressJson {
     param([Parameter(Mandatory = $true)]$RunState)
 

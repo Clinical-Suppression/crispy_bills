@@ -1250,7 +1250,12 @@ try {
                         $autoMsg = "${recommendedType}: ${recommendedMessage}"
                     }
                     Push-Location (Get-WorkspaceRoot)
-                    try { & git add -A; & git commit -m $autoMsg }
+                    try {
+                        $null = Invoke-GitMergedOutput -Arguments @('add', '-A')
+                        if ($LASTEXITCODE -ne 0) { throw 'git add -A failed.' }
+                        $null = Invoke-GitMergedOutput -Arguments @('commit', '-m', $autoMsg)
+                        if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
+                    }
                     finally { Pop-Location }
                 }
                 else {
@@ -1275,7 +1280,12 @@ try {
 
                     if ($msg -and $msg -ne 'SKIP') {
                         Push-Location (Get-WorkspaceRoot)
-                        try { & git add -A; & git commit -m $msg }
+                        try {
+                            $null = Invoke-GitMergedOutput -Arguments @('add', '-A')
+                            if ($LASTEXITCODE -ne 0) { throw 'git add -A failed.' }
+                            $null = Invoke-GitMergedOutput -Arguments @('commit', '-m', $msg)
+                            if ($LASTEXITCODE -ne 0) { throw 'git commit failed.' }
+                        }
                         finally { Pop-Location }
                     }
                 }

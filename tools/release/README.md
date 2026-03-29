@@ -24,6 +24,14 @@ Wizard parameters (non-exhaustive; see `wizard.ps1` for the full `param` block)
 - **Publish / major version**: `-ApproveMajorVersion` (required when a real publish would bump major and automation cannot prompt).
 - **Responses automation**: `-ResponsesFile` (JSON consumed by `prompt-helpers.ps1` when present), `-NonInteractive`, `-RequireNonInteractiveReady` (validates task + dry-run inputs for CI).
 
+Local artifact folders (repo root; gitignored)
+
+- **`artifacts/logs/`** — wizard progress JSON, publish summaries, release notes, manifests, `build.lock`, harness runs under `wizard-tests/`.
+- **`artifacts/releases/<version>/windows`** and **`.../mobile`** — outputs from `release.ps1` / publish flow (versioned exe + apk).
+- **`artifacts/ci/`** — GitHub Actions `release-build.yml` publishes desktop/Android builds here (separate from versioned releases).
+
+Older checkouts may still have a legacy **`publish/`** tree; current scripts write to **`artifacts/`** only. `recover-missing-release.ps1` still looks under **`publish/releases`** and **`publish/logs`** when recovering from an old layout.
+
 Progress and diagnostics
 
 - The wizard now tracks each selected task through explicit states:
@@ -41,7 +49,7 @@ Progress and diagnostics
   - The activity bar is intentionally liveness-oriented and caps before completion
     until the task exits.
 - By default, the wizard also writes a machine-readable run artifact:
-  - `publish/logs/wizard-progress-<timestamp>.json`
+  - `artifacts/logs/wizard-progress-<timestamp>.json`
   - This includes run metadata (`RunId`, mode, status, total duration) and full per-step timeline.
 - Progress redraws are in-place console updates only and are not appended into
   wizard JSON artifacts or release logs.
@@ -56,7 +64,7 @@ Testing
   Invoke-Pester -Path "tools\release\wizard.tests.ps1"
   ```
 
-- **Harness** (`tools/release/tests/harness.ps1`): copies `wizard.ps1` and `common.ps1` into an isolated work directory under `publish/logs/wizard-tests/`, stubs release scripts, and runs the wizard with scripted stdin to exercise end-to-end selection and timeout behavior. Parameters:
+- **Harness** (`tools/release/tests/harness.ps1`): copies `wizard.ps1` and `common.ps1` into an isolated work directory under `artifacts/logs/wizard-tests/`, stubs release scripts, and runs the wizard with scripted stdin to exercise end-to-end selection and timeout behavior. Parameters:
 
   - `-ScenarioId` (default `heartbeat-01`) — folder name suffix for the run.
   - `-StubMode` — `heartbeat` | `quiet` | `prompt` | `fail` (controls the stub used for `preflight.ps1`).
@@ -77,5 +85,5 @@ Notes
 - The wizard will run `conventional-commit.ps1` if present; otherwise it will
   prompt for a manual commit message.
 - On failure, review the summary entry for the failed step and then inspect
-  `publish/logs` artifacts plus script output for root cause details.
+  `artifacts/logs` artifacts plus script output for root cause details.
 - When publish tasks are selected, the wizard runs `recover-missing-release.ps1` once in advisory `-DryRun` mode before the real steps.
