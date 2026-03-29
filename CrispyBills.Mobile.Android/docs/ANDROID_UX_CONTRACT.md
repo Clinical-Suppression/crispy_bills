@@ -5,8 +5,8 @@ This document captures the expected Android behavior for Crispy Bills mobile. Tr
 ## Main (home)
 
 - Single vertical scroll: header, filters, bill list; bottom Summary / Notes / Settings / Help stays pinned.
-- **Swipe gestures (MAUI `SwipeView`):** finger moves **left** → `RightItems` (Delete); finger moves **right** → `LeftItems` (Paid / Unpaid). Copy and layout must stay aligned with this. A **higher `SwipeView.Threshold`** (minimum swipe distance before actions engage) reduces accidental triggers while scrolling vertically.
-- **Double-tap** a bill row (on the swipe content) to open the bill editor. **Double-tap** the income card to edit income when set; **single-tap** when income is empty opens the income entry flow.
+- **Swipe gestures (MAUI `SwipeView`):** finger moves **left** → `RightItems` (Delete); finger moves **right** → `LeftItems` (Paid / Unpaid). Copy and layout must stay aligned with this. Bill rows use **`SwipeView.Threshold` = 300** (MAUI device-independent units, not raw screen pixels): minimum horizontal distance before paid/delete **`Execute`** actions run. A higher threshold plus correct tap placement reduces accidental swipe vs vertical scroll and double-tap.
+- **Double-tap** a bill row on the **swipe content** (inner padded `Border` inside the `SwipeView`, not the outer card chrome) to open the bill editor. Placing the `TapGestureRecognizer` on a parent `Border` around the `SwipeView` caused Android to arbitrate parent tap vs child pan poorly, so swipe often won over double-tap; the inner placement matches the conventional MAUI pattern. **Double-tap** the income card to edit income when set; **single-tap** when income is empty opens the income entry flow.
 - Light and dark themes: readable text, no black system bars, sufficient contrast on cards and semantic colors (including danger/success). Bill row status tints use `AppThemeHelper.IsEffectiveDarkTheme()` so **Unspecified** (follow system) matches the visible UI after cold start and theme changes.
 - **Empty states:** distinguish “no bills this month” from “bills exist but filters/search hide them.”
 
@@ -25,6 +25,7 @@ This document captures the expected Android behavior for Crispy Bills mobile. Tr
 
 - First navigation to dependent screens should not run against a half-loaded year; initial load is **serialized** before app-lock modals and before pushing data-heavy pages from cold start.
 - DB file backup/copy should not race active writes; coordinate with the same lock used for year load/save.
+- **Billing invariants (`BillingService`):** monthly recurring copies share the same `Id` across months; weekly/bi-weekly uses an anchor `Id` and child rows with new `Guid` + `RecurrenceGroupId`. `EnsureRecurringCatchUpAsync` fills missing future months per `ShouldCreateRecurringOccurrence`. Current calendar year loads may run chained unpaid carryover (`EnsureAutomaticMonthBoundaryCarryoversUnlocked`) using the same rules as debug rollover; carry rows are non-recurring and deduped by `IsCarryoverDuplicate`. Debug **delete year** with no remaining DBs must not recreate the deleted year via `LoadYearCoreAsync` (use empty in-memory state). Debug **delete month** strips forward monthly copies by `Id` and forward weekly groups via `RemoveForwardRecurringInstancesForDeletedMonth`. Do not change these without parity tests.
 
 ## Secondary pages
 

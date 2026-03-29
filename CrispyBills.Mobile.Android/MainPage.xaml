@@ -91,7 +91,7 @@
                             <!-- Swipe hint + action pills -->
                             <VerticalStackLayout Spacing="6">
                                 <!-- MAUI SwipeView: swipe content left reveals RightItems (Delete); swipe right reveals LeftItems (Paid/Unpaid). -->
-                                <Label Text="Tip: Swipe left to delete. Swipe right to mark as paid/unpaid. Double-tap a bill or the income card to edit."
+                                <Label Text="Tip: Swipe left/right with a deliberate drag to delete or toggle paid. Double-tap the bill row text area to edit (or double-tap the income card)."
                                        FontSize="12"
                                        TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}"
                                        LineBreakMode="WordWrap"
@@ -133,21 +133,21 @@
                 <CollectionView.EmptyView>
                     <VerticalStackLayout Padding="24,32" Spacing="16" HorizontalOptions="Center">
                         <Label x:Name="EmptyStateTitleLabel" Text="No bills yet" HorizontalOptions="Center" FontSize="18" TextColor="{AppThemeBinding Light={StaticResource EmptyText}, Dark={StaticResource Gray100}}" />
-                        <Label x:Name="EmptyStateSubtitleLabel" Text="Swipe left to delete. Swipe right to toggle paid/unpaid. Double-tap a bill to edit." HorizontalOptions="Center" FontSize="13" TextColor="{AppThemeBinding Light={StaticResource MutedLight}, Dark={StaticResource MutedTextOnDark}}" HorizontalTextAlignment="Center" LineBreakMode="WordWrap" />
+                        <Label x:Name="EmptyStateSubtitleLabel" Text="Swipe left/right with a deliberate drag to delete or toggle paid/unpaid. Double-tap a bill row to edit." HorizontalOptions="Center" FontSize="13" TextColor="{AppThemeBinding Light={StaticResource MutedLight}, Dark={StaticResource MutedTextOnDark}}" HorizontalTextAlignment="Center" LineBreakMode="WordWrap" />
                         <Button x:Name="EmptyAddBillsButton" Text="Add your first bill(s)" Clicked="OnAddClicked" HorizontalOptions="Center" Padding="24,14" />
                     </VerticalStackLayout>
                 </CollectionView.EmptyView>
 
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="models:BillListItem">
-                        <!-- Double-tap row to edit; SwipeView inside for swipe actions. -->
+                        <!-- Double-tap on SwipeView content (inner Border) to edit—avoids parent/child gesture arbitration with SwipeView. Threshold in MAUI DI units. -->
                         <Border StrokeThickness="0"
                                 BackgroundColor="{Binding CardRowBackground}"
                                 StrokeShape="RoundRectangle 14"
                                 Padding="0"
                                 Margin="14,0,14,10">
-                            <!-- ~160dp: minimum swipe distance before paid/delete actions engage (reduces accidental triggers vs vertical scroll). -->
-                            <SwipeView Threshold="160">
+                            <!-- 300: minimum horizontal drag before paid/delete Execute; reduces accidental swipe vs double-tap/scroll. -->
+                            <SwipeView Threshold="300">
                                 <!-- Revealed when user swipes content to the right (finger moves right). -->
                                 <SwipeView.LeftItems>
                                     <SwipeItems Mode="Execute">

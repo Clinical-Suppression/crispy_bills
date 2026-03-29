@@ -33,7 +33,7 @@
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
-            <Label Text="Bill rows: swipe left on a row to delete (after a short drag). Swipe right to toggle paid or unpaid. Double-tap a row to edit that bill."
+            <Label Text="Bill rows: swipe left to delete or right to toggle paid or unpaid—you need a deliberate horizontal drag before the action runs. Double-tap the row content to edit that bill."
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />

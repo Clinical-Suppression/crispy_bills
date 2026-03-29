@@ -497,7 +497,7 @@ public partial class MainPage : ContentPage
 		if (monthEmpty)
 		{
 			EmptyStateTitleLabel.Text = "No bills yet";
-			EmptyStateSubtitleLabel.Text = "Swipe left to delete. Swipe right to toggle paid/unpaid. Double-tap a bill to edit.";
+			EmptyStateSubtitleLabel.Text = "Swipe left/right with a deliberate drag to delete or toggle paid/unpaid. Double-tap a bill row to edit.";
 			EmptyAddBillsButton.IsVisible = true;
 		}
 		else
