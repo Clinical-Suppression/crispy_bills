@@ -6,11 +6,14 @@ namespace CrispyBills.Mobile.ParityTests;
 
 public sealed class BillingServiceParityTests
 {
+    /// <summary>January 2026 so automatic month-boundary rollover (same calendar year) does not run (today.Month is 1).</summary>
+    private static readonly Func<DateTime> TestTodayJan2026 = () => new DateTime(2026, 1, 10);
+
     [Fact]
     public async Task SetIncomeAsync_AppliesToSelectedAndFutureMonthsOnly()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.SetIncomeAsync(5, 1234.56m);
@@ -24,7 +27,7 @@ public sealed class BillingServiceParityTests
     public async Task AddBillAsync_Recurring_ClampsFutureDueDatesByMonth()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.AddBillAsync(1, new BillItem
@@ -36,29 +39,16 @@ public sealed class BillingServiceParityTests
             IsRecurring = true
         });
 
-        Assert.Single(service.GetBills(1));
-
-        // Later months are only materialized once that calendar month has begun locally.
-        if (DateTime.Today >= new DateTime(2026, 2, 1))
-        {
-            var febBill = service.GetBills(2).Single();
-            Assert.Equal(new DateTime(2026, 2, 28), febBill.DueDate.Date);
-        }
-
-        if (DateTime.Today >= new DateTime(2026, 4, 1))
-        {
-            var aprBill = service.GetBills(4).Single();
-            Assert.Equal(new DateTime(2026, 4, 30), aprBill.DueDate.Date);
-        }
+        var janBill = service.GetBills(1).Single();
+        Assert.Equal(new DateTime(2026, 1, 31), janBill.DueDate.Date);
 
         for (var m = 2; m <= 12; m++)
         {
-            foreach (var b in service.GetBills(m))
-            {
-                Assert.Equal(2026, b.DueDate.Year);
-                Assert.Equal(m, b.DueDate.Month);
-                Assert.True(b.DueDate.Day <= DateTime.DaysInMonth(2026, m));
-            }
+            var b = service.GetBills(m).Single();
+            Assert.Equal(janBill.Id, b.Id);
+            Assert.False(b.IsPaid);
+            var expectedDay = Math.Min(31, DateTime.DaysInMonth(2026, m));
+            Assert.Equal(new DateTime(2026, m, expectedDay), b.DueDate.Date);
         }
     }
 
@@ -66,7 +56,7 @@ public sealed class BillingServiceParityTests
     public async Task ImportStructuredCsvForYearAsync_Merge_DoesNotDuplicateExistingEquivalentBill()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.AddBillAsync(1, new BillItem
@@ -108,7 +98,7 @@ public sealed class BillingServiceParityTests
     public async Task CreateNewYearFromDecemberAsync_CarriesExpectedTemplatesAndUnpaidItems()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.SetIncomeAsync(12, 3000m);
@@ -168,7 +158,7 @@ public sealed class BillingServiceParityTests
     {
         var repo = new InMemoryBillingRepository();
 
-        var seedService = new BillingService(repo);
+        var seedService = new BillingService(repo, TestTodayJan2026);
         await seedService.LoadYearAsync(2027);
         await seedService.AddBillAsync(1, new BillItem
         {
@@ -179,7 +169,7 @@ public sealed class BillingServiceParityTests
             IsRecurring = false
         });
 
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         var created = await service.CreateNewYearFromDecemberAsync();
@@ -194,7 +184,7 @@ public sealed class BillingServiceParityTests
     public async Task ImportStructuredCsvForYearAsync_TargetYearDifferentFromCurrentYear_SavesToTargetAndKeepsCurrentContext()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.AddBillAsync(1, new BillItem
@@ -220,11 +210,11 @@ public sealed class BillingServiceParityTests
         Assert.Contains(2027, repo.SaveYears);
         Assert.DoesNotContain(2026, repo.SaveYears.Where(x => x == 2026).Skip(1));
 
-        var verify2026 = new BillingService(repo);
+        var verify2026 = new BillingService(repo, TestTodayJan2026);
         await verify2026.LoadYearAsync(2026);
         Assert.Contains(verify2026.GetBills(1), b => b.Name == "Current Year Bill");
 
-        var verify2027 = new BillingService(repo);
+        var verify2027 = new BillingService(repo, TestTodayJan2026);
         await verify2027.LoadYearAsync(2027);
         Assert.Contains(verify2027.GetBills(1), b => b.Name == "Imported 2027");
         Assert.Equal(1200m, verify2027.GetIncome(1));
@@ -234,7 +224,7 @@ public sealed class BillingServiceParityTests
     public async Task ImportStructuredCsvForYearAsync_MergeIntoDifferentYear_DoesNotMutateLoadedYear()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.AddBillAsync(2, new BillItem
@@ -260,7 +250,7 @@ public sealed class BillingServiceParityTests
         Assert.Contains(service.GetBills(2), b => b.Name == "Current-2026");
         Assert.DoesNotContain(service.GetBills(2), b => b.Name == "Merged-2027");
 
-        var verify2027 = new BillingService(repo);
+        var verify2027 = new BillingService(repo, TestTodayJan2026);
         await verify2027.LoadYearAsync(2027);
         Assert.Contains(verify2027.GetBills(2), b => b.Name == "Merged-2027");
         Assert.Equal(1800m, verify2027.GetIncome(2));
@@ -270,7 +260,7 @@ public sealed class BillingServiceParityTests
     public async Task DeleteYearAsync_WhenOnlyYearOnDisk_LeavesNoPersistedYearAndEmptyInMemoryState()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
         await service.AddBillAsync(1, new BillItem
         {
@@ -320,7 +310,7 @@ public sealed class BillingServiceParityTests
         });
         repo.SetYearDataForTests(2026, yearData);
 
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         service.SetDebugDestructiveDeletesEnabled(true);
@@ -329,6 +319,36 @@ public sealed class BillingServiceParityTests
 
         Assert.Empty(service.GetBills(3));
         Assert.Empty(service.GetBills(4));
+    }
+
+    [Fact]
+    public async Task LoadYearAsync_CurrentYear_ChainsAutomaticMonthBoundaryCarryover_ForUnpaidOneTime()
+    {
+        var repo = new InMemoryBillingRepository();
+        var yearData = new YearData();
+        yearData.BillsByMonth[1].Add(new BillItem
+        {
+            Id = Guid.NewGuid(),
+            Name = "Water",
+            Amount = 40m,
+            Category = "Utilities",
+            DueDate = new DateTime(2026, 1, 20),
+            IsRecurring = false,
+            Year = 2026,
+            Month = 1,
+            IsPaid = false
+        });
+        repo.SetYearDataForTests(2026, yearData);
+
+        var service = new BillingService(repo, () => new DateTime(2026, 3, 15));
+        await service.LoadYearAsync(2026);
+
+        Assert.Contains(service.GetBills(2), b => b.Name == "Water - January" && !b.IsRecurring);
+        Assert.Contains(service.GetBills(3), b => b.Name == "Water - February" && !b.IsRecurring);
+
+        await service.LoadYearAsync(2026);
+        Assert.Equal(1, service.GetBills(2).Count(b => b.Name == "Water - January"));
+        Assert.Equal(1, service.GetBills(3).Count(b => b.Name == "Water - February"));
     }
 
     private sealed class InMemoryBillingRepository : IBillingRepository

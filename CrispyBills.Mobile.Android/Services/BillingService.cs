@@ -16,8 +16,9 @@ namespace CrispyBills.Mobile.Android.Services;
 /// Loads/saves year data via an <see cref="IBillingRepository"/>, provides business
 /// operations such as creating drafts, adding/updating bills, and generating reports.
 /// </summary>
-public sealed partial class BillingService(IBillingRepository repository)
+public sealed partial class BillingService(IBillingRepository repository, Func<DateTime>? todayProvider = null)
 {
+    private readonly Func<DateTime> _today = todayProvider ?? (() => DateTime.Today);
     private readonly SemaphoreSlim _stateSemaphore = new(1, 1);
     private const string ArchivedYearsMetaKey = "ArchivedYears";
     private const string IncomeProfilesMetaKey = "IncomeProfiles";
@@ -588,11 +589,6 @@ public sealed partial class BillingService(IBillingRepository repository)
             current.RecurrenceFrequency = RecurrenceFrequency.MonthlyInterval;
             for (var target = month + 1; target <= 12; target++)
             {
-                if (!CalendarMonthHasBegunLocally(CurrentYear, target))
-                {
-                    continue;
-                }
-
                 if (!ShouldCreateRecurringOccurrence(current, month, target, CurrentYear))
                 {
                     continue;
@@ -735,11 +731,6 @@ public sealed partial class BillingService(IBillingRepository repository)
                 {
                     for (var futureMonth = month + 1; futureMonth <= 12; futureMonth++)
                     {
-                        if (!CalendarMonthHasBegunLocally(CurrentYear, futureMonth))
-                        {
-                            continue;
-                        }
-
                         if (!ShouldCreateRecurringOccurrence(anchor, month, futureMonth, CurrentYear))
                         {
                             continue;
@@ -785,11 +776,6 @@ public sealed partial class BillingService(IBillingRepository repository)
                     var existing = futureList.FirstOrDefault(x => x.Id == id);
                     if (existing is null)
                     {
-                        if (!CalendarMonthHasBegunLocally(CurrentYear, futureMonth))
-                        {
-                            continue;
-                        }
-
                         existing = target.Clone();
                         existing.Month = futureMonth;
                         existing.Year = CurrentYear;
@@ -885,81 +871,9 @@ public sealed partial class BillingService(IBillingRepository repository)
         await _stateSemaphore.WaitAsync();
         try
         {
-            var sourceMonthName = MonthNames.Name(month);
-            var targetMonth = month + 1;
-            var targetList = _currentData.BillsByMonth[targetMonth];
-
-            foreach (var bill in _currentData.BillsByMonth[month].Where(x => !x.IsPaid).ToList())
+            if (!ApplyRolloverUnpaidFromMonthToNextUnlocked(month))
             {
-                if (bill.RecurrenceGroupId.HasValue && !bill.IsRecurring)
-                {
-                    continue;
-                }
-
-                var baseName = StripCarryoverNameSuffix(bill.Name);
-                var carryName = $"{baseName} - {sourceMonthName}";
-                var duePreserved = bill.DueDate;
-
-                if (bill.IsRecurring && IsWeekBased(bill.RecurrenceFrequency))
-                {
-                    if (IsCarryoverDuplicate(targetList, carryName, duePreserved, bill.Amount))
-                    {
-                        continue;
-                    }
-
-                    var copy = bill.Clone();
-                    copy.Id = Guid.NewGuid();
-                    copy.Month = targetMonth;
-                    copy.Year = CurrentYear;
-                    copy.IsRecurring = false;
-                    copy.RecurrenceFrequency = RecurrenceFrequency.None;
-                    copy.RecurrenceGroupId = null;
-                    copy.IsPaid = false;
-                    copy.Name = carryName;
-                    copy.DueDate = duePreserved;
-                    targetList.Add(copy);
-                    continue;
-                }
-
-                if (!bill.IsRecurring)
-                {
-                    if (IsCarryoverDuplicate(targetList, carryName, duePreserved, bill.Amount))
-                    {
-                        continue;
-                    }
-
-                    var rollover = bill.Clone();
-                    rollover.Id = Guid.NewGuid();
-                    rollover.Month = targetMonth;
-                    rollover.Year = CurrentYear;
-                    rollover.IsRecurring = false;
-                    rollover.RecurrenceFrequency = RecurrenceFrequency.None;
-                    rollover.RecurrenceGroupId = null;
-                    rollover.IsPaid = false;
-                    rollover.Name = carryName;
-                    rollover.DueDate = duePreserved;
-                    targetList.Add(rollover);
-                    continue;
-                }
-
-                AddOrReplaceMonthlyRecurringNextMonth(bill, targetMonth, targetList);
-
-                if (IsCarryoverDuplicate(targetList, carryName, duePreserved, bill.Amount))
-                {
-                    continue;
-                }
-
-                var overdueCarry = bill.Clone();
-                overdueCarry.Id = Guid.NewGuid();
-                overdueCarry.Month = targetMonth;
-                overdueCarry.Year = CurrentYear;
-                overdueCarry.IsRecurring = false;
-                overdueCarry.RecurrenceFrequency = RecurrenceFrequency.None;
-                overdueCarry.RecurrenceGroupId = null;
-                overdueCarry.IsPaid = false;
-                overdueCarry.Name = carryName;
-                overdueCarry.DueDate = duePreserved;
-                targetList.Add(overdueCarry);
+                return;
             }
 
             await SaveAsync();
@@ -970,11 +884,108 @@ public sealed partial class BillingService(IBillingRepository repository)
         }
     }
 
-    private void AddOrReplaceMonthlyRecurringNextMonth(BillItem bill, int targetMonth, List<BillItem> targetList)
+    /// <summary>Applies the same unpaid-forward rules as <see cref="RolloverUnpaidAsync"/> without taking <see cref="_stateSemaphore"/>.</summary>
+    /// <returns>True if any rows were added to the following month.</returns>
+    private bool ApplyRolloverUnpaidFromMonthToNextUnlocked(int month)
+    {
+        if (month >= 12)
+        {
+            return false;
+        }
+
+        var sourceMonthName = MonthNames.Name(month);
+        var targetMonth = month + 1;
+        var targetList = _currentData.BillsByMonth[targetMonth];
+        var changed = false;
+
+        foreach (var bill in _currentData.BillsByMonth[month].Where(x => !x.IsPaid).ToList())
+        {
+            if (bill.RecurrenceGroupId.HasValue && !bill.IsRecurring)
+            {
+                continue;
+            }
+
+            var baseName = StripCarryoverNameSuffix(bill.Name);
+            var carryName = $"{baseName} - {sourceMonthName}";
+            var duePreserved = bill.DueDate;
+
+            if (bill.IsRecurring && IsWeekBased(bill.RecurrenceFrequency))
+            {
+                if (IsCarryoverDuplicate(targetList, carryName, duePreserved, bill.Amount))
+                {
+                    continue;
+                }
+
+                var copy = bill.Clone();
+                copy.Id = Guid.NewGuid();
+                copy.Month = targetMonth;
+                copy.Year = CurrentYear;
+                copy.IsRecurring = false;
+                copy.RecurrenceFrequency = RecurrenceFrequency.None;
+                copy.RecurrenceGroupId = null;
+                copy.IsPaid = false;
+                copy.Name = carryName;
+                copy.DueDate = duePreserved;
+                targetList.Add(copy);
+                changed = true;
+                continue;
+            }
+
+            if (!bill.IsRecurring)
+            {
+                if (IsCarryoverDuplicate(targetList, carryName, duePreserved, bill.Amount))
+                {
+                    continue;
+                }
+
+                var rollover = bill.Clone();
+                rollover.Id = Guid.NewGuid();
+                rollover.Month = targetMonth;
+                rollover.Year = CurrentYear;
+                rollover.IsRecurring = false;
+                rollover.RecurrenceFrequency = RecurrenceFrequency.None;
+                rollover.RecurrenceGroupId = null;
+                rollover.IsPaid = false;
+                rollover.Name = carryName;
+                rollover.DueDate = duePreserved;
+                targetList.Add(rollover);
+                changed = true;
+                continue;
+            }
+
+            if (AddOrReplaceMonthlyRecurringNextMonth(bill, targetMonth, targetList))
+            {
+                changed = true;
+            }
+
+            if (IsCarryoverDuplicate(targetList, carryName, duePreserved, bill.Amount))
+            {
+                continue;
+            }
+
+            var overdueCarry = bill.Clone();
+            overdueCarry.Id = Guid.NewGuid();
+            overdueCarry.Month = targetMonth;
+            overdueCarry.Year = CurrentYear;
+            overdueCarry.IsRecurring = false;
+            overdueCarry.RecurrenceFrequency = RecurrenceFrequency.None;
+            overdueCarry.RecurrenceGroupId = null;
+            overdueCarry.IsPaid = false;
+            overdueCarry.Name = carryName;
+            overdueCarry.DueDate = duePreserved;
+            targetList.Add(overdueCarry);
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    /// <returns>True if a new recurring row was added.</returns>
+    private bool AddOrReplaceMonthlyRecurringNextMonth(BillItem bill, int targetMonth, List<BillItem> targetList)
     {
         if (targetList.Any(x => x.Id == bill.Id && x.IsRecurring))
         {
-            return;
+            return false;
         }
 
         var baseDay = Math.Min(bill.DueDate.Day, DateTime.DaysInMonth(CurrentYear, targetMonth));
@@ -989,6 +1000,7 @@ public sealed partial class BillingService(IBillingRepository repository)
             ? RecurrenceFrequency.MonthlyInterval
             : bill.RecurrenceFrequency;
         targetList.Add(next);
+        return true;
     }
 
     private static string StripCarryoverNameSuffix(string name)
@@ -1975,11 +1987,6 @@ public sealed partial class BillingService(IBillingRepository repository)
                 var dueDay = recurring.DueDate.Day;
                 for (var targetMonth = month + 1; targetMonth <= 12; targetMonth++)
                 {
-                    if (!CalendarMonthHasBegunLocally(CurrentYear, targetMonth))
-                    {
-                        continue;
-                    }
-
                     if (!ShouldCreateRecurringOccurrence(recurring, month, targetMonth, CurrentYear))
                     {
                         continue;
@@ -2002,6 +2009,34 @@ public sealed partial class BillingService(IBillingRepository repository)
         }
 
         if (changed)
+        {
+            await SaveAsync();
+        }
+    }
+
+    /// <summary>
+    /// When the loaded year matches the real calendar year, rolls unpaid bills from each completed month
+    /// into the next (chained). Caller must already hold <see cref="_stateSemaphore"/>.
+    /// </summary>
+    private async Task EnsureAutomaticMonthBoundaryCarryoversUnlocked()
+    {
+        var today = _today();
+        if (CurrentYear != today.Year)
+        {
+            return;
+        }
+
+        var todayMonth = today.Month;
+        var any = false;
+        for (var sourceMonth = 1; sourceMonth < todayMonth; sourceMonth++)
+        {
+            if (ApplyRolloverUnpaidFromMonthToNextUnlocked(sourceMonth))
+            {
+                any = true;
+            }
+        }
+
+        if (any)
         {
             await SaveAsync();
         }
@@ -2226,15 +2261,6 @@ public sealed partial class BillingService(IBillingRepository repository)
         return new DateTime(year, month, day);
     }
 
-    /// <summary>
-    /// True when the local calendar date is on or after the first day of <paramref name="month"/> in <paramref name="year"/>.
-    /// Used to avoid materializing recurring bill rows for months that have not started yet (import/load catch-up).
-    /// </summary>
-    private static bool CalendarMonthHasBegunLocally(int year, int month)
-    {
-        return DateTime.Today >= new DateTime(year, month, 1);
-    }
-
     private static void Apply(BillItem target, BillItem source, int month, int baseDay)
     {
         target.Name = source.Name.Trim();
@@ -2398,10 +2424,6 @@ public sealed partial class BillingService(IBillingRepository repository)
             }
 
             var m = d.Month;
-            if (!CalendarMonthHasBegunLocally(year, m))
-            {
-                continue;
-            }
 
             if (HasSeriesOccurrenceOnDate(m, groupId, d, data))
             {
@@ -2526,6 +2548,7 @@ public sealed partial class BillingService(IBillingRepository repository)
         _currentData = await _repository.LoadYearAsync(year);
         NormalizeForYear(CurrentYear);
         await EnsureRecurringCatchUpAsync();
+        await EnsureAutomaticMonthBoundaryCarryoversUnlocked();
     }
 
     private sealed class IncomeProfileMeta

@@ -49,7 +49,7 @@
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
-            <Label Text="Recurring rows for later months are created when each calendar month begins in your local time zone (the app does not pre-fill months that have not started yet). Opening the app or loading the year after a new month starts will add those line items."
+            <Label Text="Recurring bills are copied forward through the rest of the year you are working in, according to your repeat rules (for example monthly on the same day of month, or weekly occurrences). That happens when you add or edit a bill, when you import data, and when the year loads. If you are viewing the current calendar year, unpaid items from months that have already passed in real time are copied into the next month using the same naming as manual rollover (for example, “Name - January”). Loading the year again will not duplicate those carry rows if they already exist."
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
@@ -85,7 +85,7 @@
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />
-            <Label Text="Rollover Unpaid (debug) is a maintenance tool, not part of normal month changes. It is hidden until you enable destructive debug options in Settings. Use it only if you understand it may duplicate or move unpaid rows for testing or repair."
+            <Label Text="Automatic carryover when you load the current year mirrors that rollover logic for normal use. Rollover Unpaid (debug) is an extra maintenance action for testing or repair; it is hidden until you enable destructive debug options in Settings. Use the debug tool only if you understand it may duplicate or move unpaid rows."
                    FontSize="14"
                    LineBreakMode="WordWrap"
                    TextColor="{AppThemeBinding Light={StaticResource MutedText}, Dark={StaticResource MutedTextOnDark}}" />

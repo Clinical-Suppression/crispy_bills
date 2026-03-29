@@ -9,13 +9,15 @@ namespace CrispyBills.Mobile.ParityTests;
 
 public sealed class BillingServiceReliabilityTests
 {
+    private static readonly Func<DateTime> TestTodayJan2026 = () => new DateTime(2026, 1, 10);
+
     [Fact]
     public async Task LoadYearAsync_InvalidGuid_SkipsRowAndLogs()
     {
         var repo = new InMemoryBillingRepository();
         // Simulate a row with an invalid GUID
         repo.AddRawBillRow("not-a-guid", "Rent", 1200m, "2026-01-01", false, "Housing", false);
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
         // Should not throw, and bill should not be present
         Assert.Empty(service.GetBills(1));
@@ -26,7 +28,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task ImportStructuredCsvForYearAsync_MalformedRow_LogsAndSkips()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
         // Simulate malformed CSV (missing amount)
         string[] lines = ["Name,Amount,Category,DueDate,IsPaid", "BadRow,,,2026-01-01,true"];
@@ -40,7 +42,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task LoadYearAsync_Concurrent_NoDataCorruption()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         var t1 = service.LoadYearAsync(2026);
         var t2 = service.LoadYearAsync(2027);
         await Task.WhenAll(t1, t2);
@@ -52,7 +54,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task PublicMonthApis_InvalidMonth_ThrowArgumentOutOfRange()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         Assert.Throws<ArgumentOutOfRangeException>(() => service.GetBills(0));
@@ -67,7 +69,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task ImportStructuredCsvForYearAsync_ReportsImportedAndSkippedCounts()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         var lines = new[]
@@ -94,7 +96,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task MutatingOperations_Concurrent_DoNotThrow()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         var add1 = service.AddBillAsync(1, new BillItem
@@ -120,7 +122,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task DeleteYearAsync_CurrentYearFallsBackToAnotherYear()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
         await service.AddBillAsync(1, new BillItem
         {
@@ -150,7 +152,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task SetIncomeAsync_CurrentAndFutureOnly_StoresEntryPayPeriod()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.SetIncomeAsync(1, 1200m, BillingService.IncomePayPeriodMonthly);
@@ -172,7 +174,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task AddBillAsync_WeeklyRecurring_CreatesExpectedMonthlyWeekLabels()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.AddBillAsync(2, new BillItem
@@ -200,7 +202,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task TogglePaidAsync_WeeklyOccurrence_OnlyChangesSelectedOccurrence()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.AddBillAsync(2, new BillItem
@@ -229,7 +231,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task UpdateBillAsync_WeeklyChild_OnlyChangesCurrentAndFutureOccurrences()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.AddBillAsync(2, new BillItem
@@ -263,7 +265,7 @@ public sealed class BillingServiceReliabilityTests
     public async Task SoonThreshold_RoundTripsAndSkipsPaidOrPastDueBills()
     {
         var repo = new InMemoryBillingRepository();
-        var service = new BillingService(repo);
+        var service = new BillingService(repo, TestTodayJan2026);
         await service.LoadYearAsync(2026);
 
         await service.SetSoonThresholdAsync(2, BillingService.SoonThresholdUnitWeeks);
